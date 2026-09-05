@@ -6,9 +6,10 @@ import type { TokenVerifier } from './token-verifier';
 /**
  * Verifies a Supabase access token by asking Supabase Auth who it belongs to.
  *
- * One network round-trip per verification, which is why this sits behind the
- * `TokenVerifier` interface: a cache and local JWKS verification can replace
- * it without any caller changing.
+ * One network round-trip per verification, which is why nothing injects this
+ * class directly. `AuthModule` binds `TOKEN_VERIFIER` to a `CachedTokenVerifier`
+ * wrapped around it, and local JWKS verification can replace the inner call the
+ * same way — without any caller changing.
  */
 @Injectable()
 export class SupabaseTokenVerifier implements TokenVerifier {

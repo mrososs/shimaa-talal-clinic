@@ -27,6 +27,7 @@ export * from './lib/supabase/supabase.service';
 export * from './lib/auth/auth.module';
 export * from './lib/auth/authenticated-request';
 export * from './lib/auth/authenticated-user';
+export * from './lib/auth/cached-token.verifier';
 export * from './lib/auth/current-user.decorator';
 export * from './lib/auth/public.decorator';
 export * from './lib/auth/supabase-auth.guard';
