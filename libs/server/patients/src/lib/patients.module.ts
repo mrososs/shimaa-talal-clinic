@@ -5,6 +5,10 @@ import { ChildService } from './child.service';
 import { ClaimCodeService } from './claim-code.service';
 import { GuardianOwnershipService } from './guardian-ownership.service';
 import { GuardianService } from './guardian.service';
+import {
+  ClinicChildrenController,
+  ClinicGuardiansController,
+} from './api/clinic-guardians.controller';
 import { MeController } from './api/me.controller';
 import { PatientsGuardianResolver } from './patients-guardian.resolver';
 
@@ -33,7 +37,11 @@ import { PatientsGuardianResolver } from './patients-guardian.resolver';
   // endpoints need the clinic's phone region and policy, and reading another
   // library's table directly is the coupling the boundaries exist to prevent.
   imports: [ServerCoreModule, ClinicModule],
-  controllers: [MeController],
+  controllers: [
+    MeController,
+    ClinicGuardiansController,
+    ClinicChildrenController,
+  ],
   providers: [
     GuardianService,
     ChildService,

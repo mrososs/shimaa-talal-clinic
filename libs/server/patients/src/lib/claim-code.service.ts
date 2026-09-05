@@ -5,7 +5,7 @@ import {
   ServerConfigService,
   type SqlExecutor,
 } from '@clinic/server-core';
-import type { Guardian, IsoInstant } from '@clinic/contracts';
+import type { Guardian, IssuedClaimCode } from '@clinic/contracts';
 import type { PhoneRegion } from '@clinic/phone';
 import { GuardianService } from './guardian.service';
 import { PatientsError, PatientsErrorCode } from './patients.errors';
@@ -18,12 +18,6 @@ export const CLAIM_CODE_TTL_MINUTES = 15;
 
 /** Wrong guesses before the code stops working. 10^6 space, so this is ample. */
 export const CLAIM_CODE_MAX_ATTEMPTS = 5;
-
-export interface IssuedClaimCode {
-  /** Returned once, to the staff member. Never stored, never retrievable. */
-  code: string;
-  expiresAt: IsoInstant;
-}
 
 export interface ClaimInput {
   clinicId: string;

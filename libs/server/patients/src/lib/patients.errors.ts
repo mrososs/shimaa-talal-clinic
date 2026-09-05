@@ -39,6 +39,14 @@ export class PatientsError extends Error {
     readonly code: PatientsErrorCode,
     message: string,
     cause?: unknown,
+    /**
+     * Extra the client can act on — never anything about the failure itself.
+     *
+     * `cause` holds the driver error and stays server-side; this is a
+     * deliberately constructed payload, so nothing can carry a constraint name
+     * or a query into a response by accident.
+     */
+    readonly details?: unknown,
   ) {
     super(message, { cause });
     this.name = 'PatientsError';

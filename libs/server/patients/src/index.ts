@@ -26,7 +26,7 @@ export type {
 export { GuardianOwnershipService } from './lib/guardian-ownership.service';
 
 export { ClaimCodeService } from './lib/claim-code.service';
-export type { ClaimInput, IssuedClaimCode } from './lib/claim-code.service';
+export type { ClaimInput } from './lib/claim-code.service';
 export {
   CLAIM_CODE_MAX_ATTEMPTS,
   CLAIM_CODE_TTL_MINUTES,

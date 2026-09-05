@@ -22,6 +22,7 @@ export * from './lib/api/health';
 export * from './lib/api/me';
 export * from './lib/api/pagination';
 export * from './lib/api/queue-views';
+export * from './lib/api/staff-identity';
 
 export * from './lib/domain/appointment';
 export * from './lib/domain/appointment-status';

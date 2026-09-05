@@ -48,9 +48,11 @@ export class PatientsExceptionFilter implements ExceptionFilter {
     const status =
       STATUS_BY_CODE[exception.code] ?? HttpStatus.INTERNAL_SERVER_ERROR;
 
-    // The message is written for a person and carries no identifiers; `details`
-    // is deliberately omitted, since a domain error has nothing to add that the
-    // code does not already say.
-    response.status(status).json(apiFailure(exception.code, exception.message));
+    // The message is written for a person. `details` appears only when the
+    // domain deliberately attached something the client can act on — never the
+    // `cause`, which holds the driver error and stays on the server.
+    response
+      .status(status)
+      .json(apiFailure(exception.code, exception.message, exception.details));
   }
 }
