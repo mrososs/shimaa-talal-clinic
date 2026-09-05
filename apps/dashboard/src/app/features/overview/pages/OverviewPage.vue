@@ -12,19 +12,6 @@ import { session } from '../../../runtime';
  */
 
 const identity = computed(() => session.state.identity);
-
-const todayLabel = computed(() => {
-  const clinic = identity.value?.clinic;
-  if (clinic === undefined) return '';
-  // The clinic's own date, formatted in its own calendar and language.
-  return new Intl.DateTimeFormat('ar-EG', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    timeZone: clinic.timezone,
-  }).format(new Date(`${clinic.today}T12:00:00Z`));
-});
 </script>
 
 <template>
@@ -32,15 +19,8 @@ const todayLabel = computed(() => {
     v-if="identity"
     class="dstack"
   >
-    <header>
-      <h1>
-        اليوم
-      </h1>
-      <p class="dmuted">
-        {{ todayLabel }}
-      </p>
-    </header>
-
+    <!-- The title and the date belong to the shell's top bar; a page that drew
+         its own would render them twice. -->
     <section class="dcard dcard--pad dstack">
       <h2 class="overview__heading">
         إعدادات العيادة

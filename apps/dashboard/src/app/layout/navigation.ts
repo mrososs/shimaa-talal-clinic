@@ -16,6 +16,14 @@ export interface NavigationLink {
 
 export const NAVIGATION: readonly NavigationLink[] = [
   { name: 'overview', label: 'اليوم' },
+  { name: 'appointments', label: 'المواعيد' },
+  {
+    name: 'reception-booking',
+    label: 'حجز جديد',
+    // Booking on a family's behalf is reception's job at the desk. The doctor
+    // can still approve, cancel and reschedule from the appointments screen.
+    roles: [ClinicMemberRole.Reception, ClinicMemberRole.Admin],
+  },
 ];
 
 export function navigationFor(

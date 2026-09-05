@@ -49,6 +49,15 @@ const configured =
   let childId: string;
   let foreignChildId: string;
 
+  /**
+   * Families a test created on the fly.
+   *
+   * Cleaned up in afterAll rather than inline, because cleanup written after
+   * the assertions never runs when an assertion fails — and the row it leaves
+   * behind then breaks a later suite instead of this one.
+   */
+  const createdGuardianIds: string[] = [];
+
   const tokens: Record<'parent' | 'reception' | 'foreign', string> = {} as never;
 
   async function account(label: string): Promise<string> {
@@ -263,16 +272,32 @@ const configured =
     if (app !== undefined) await app.close();
     if (db !== undefined) {
       const clinics = [clinicId, otherClinicId];
+      const throwaway = [...createdGuardianIds, guardianId];
       await db.database.query(
-        `delete from clinic.guardian_children where guardian_id = $1`,
-        [guardianId],
+        `delete from clinic.appointment_events
+          where appointment_id in (
+            select id from clinic.appointments where guardian_id = any($1))`,
+        [throwaway],
+      );
+      await db.database.query(
+        `delete from clinic.appointments where guardian_id = any($1)`,
+        [throwaway],
+      );
+      const extraLinks = await db.database.query<{ child_id: string }>(
+        `delete from clinic.guardian_children where guardian_id = any($1)
+          returning child_id`,
+        [throwaway],
+      );
+      await db.database.query(
+        `delete from clinic.children where id = any($1)`,
+        [extraLinks.rows.map((row) => row.child_id)],
       );
       await db.database.query(
         `delete from clinic.children where id = any($1)`,
         [[childId, foreignChildId]],
       );
-      await db.database.query(`delete from clinic.guardians where id = $1`, [
-        guardianId,
+      await db.database.query(`delete from clinic.guardians where id = any($1)`, [
+        throwaway,
       ]);
       await db.database.query(
         `delete from clinic.clinic_members where auth_user_id = any($1)`,
@@ -472,6 +497,7 @@ const configured =
          values ($1, 'No App Family', $2) returning id`,
         [clinicId, `+2011${String(Date.now()).slice(-7)}`],
       );
+      createdGuardianIds.push(walkIn.rows[0].id);
       const theirChild = await db.database.query<{ id: string }>(
         `insert into clinic.children (clinic_id, full_name) values ($1, 'Omar')
          returning id`,
@@ -499,29 +525,6 @@ const configured =
       expect(response.status).toBe(201);
       expect(data<{ status: string }>(response.body).status).toBe('confirmed');
 
-      // The appointment references the child, and appointments are never
-      // cascade-deleted — a visit history that outlives its patient record is
-      // worse than a stale row. So it goes first.
-      await db.database.query(
-        `delete from clinic.appointment_events
-          where appointment_id in (
-            select id from clinic.appointments where guardian_id = $1)`,
-        [walkIn.rows[0].id],
-      );
-      await db.database.query(
-        `delete from clinic.appointments where guardian_id = $1`,
-        [walkIn.rows[0].id],
-      );
-      await db.database.query(
-        `delete from clinic.guardian_children where guardian_id = $1`,
-        [walkIn.rows[0].id],
-      );
-      await db.database.query(`delete from clinic.children where id = $1`, [
-        theirChild.rows[0].id,
-      ]);
-      await db.database.query(`delete from clinic.guardians where id = $1`, [
-        walkIn.rows[0].id,
-      ]);
     });
 
     it('approves a request, and the parent sees it confirmed', async () => {

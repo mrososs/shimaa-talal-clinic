@@ -3,16 +3,22 @@ import {
   createWebHistory,
   type RouteRecordRaw,
 } from 'vue-router';
+import { ClinicMemberRole } from '@clinic/contracts';
 import AppShell from '../layout/AppShell.vue';
 import { session } from '../runtime';
-import { createAuthGuard, ROUTE_META_PUBLIC } from './auth-guard';
+import {
+  createAuthGuard,
+  ROUTE_META_PUBLIC,
+  ROUTE_META_ROLES,
+} from './auth-guard';
 
 /**
  * Two branches: the sign-in screen, and everything inside the shell.
  *
  * The shell is a layout route rather than a component each page imports, so the
- * "no clinic access" and "cannot reach the server" states are rendered once,
- * around the router view, instead of by every screen remembering to.
+ * top bar and the "no clinic access" state are rendered once, around the router
+ * view, instead of by every screen remembering to. Each route carries the title
+ * that bar shows — a screen cannot forget to name itself.
  */
 export const routes: RouteRecordRaw[] = [
   {
@@ -29,6 +35,28 @@ export const routes: RouteRecordRaw[] = [
         path: '',
         name: 'overview',
         component: () => import('../features/overview/pages/OverviewPage.vue'),
+        meta: { title: 'اليوم', subtitle: 'نظرة عامة على يوم العيادة' },
+      },
+      {
+        path: 'appointments',
+        name: 'appointments',
+        component: () =>
+          import('../features/appointments/pages/AppointmentsPage.vue'),
+        meta: { title: 'المواعيد', subtitle: 'الطلبات والحجوزات' },
+      },
+      {
+        path: 'booking',
+        name: 'reception-booking',
+        component: () =>
+          import('../features/booking/pages/ReceptionBookingPage.vue'),
+        meta: {
+          title: 'حجز جديد',
+          subtitle: 'ابحثي عن العائلة أو أنشئي ملفاً جديداً',
+          [ROUTE_META_ROLES]: [
+            ClinicMemberRole.Reception,
+            ClinicMemberRole.Admin,
+          ],
+        },
       },
     ],
   },

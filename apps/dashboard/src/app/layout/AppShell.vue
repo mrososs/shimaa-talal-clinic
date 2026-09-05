@@ -1,19 +1,24 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { RouterLink, RouterView, useRouter } from 'vue-router';
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
 import { session } from '../runtime';
 import { navigationFor } from './navigation';
 
 /**
- * The frame every staff screen renders inside: identity, navigation, sign-out.
+ * The frame every staff screen renders inside.
  *
- * It also owns the two states that are not screens — an account with no clinic
+ * Three regions, from the design: a sidebar on the reading-start side, a top
+ * bar that names where you are, and the scrolling content. The sidebar and the
+ * top bar are the shell's job precisely so a screen never has to restate them —
+ * a page that drew its own header would drift from the others.
+ *
+ * It also owns the two states that are not screens: an account with no clinic
  * membership, and an identity that could not be loaded. Both are reachable by
- * signing in correctly, so neither is an error page; they are what this shell
- * shows instead of a sidebar.
+ * signing in correctly, so neither is an error page.
  */
 
 const router = useRouter();
+const route = useRoute();
 const state = session.state;
 const signingOut = ref(false);
 
@@ -30,6 +35,24 @@ const ROLE_LABELS: Record<string, string> = {
 
 /** The clinic's initial, for the brand tile. */
 const brandInitial = computed(() => clinic.value?.name?.trim().at(0) ?? 'ع');
+
+/** What the top bar says. Read from the route so a screen cannot forget it. */
+const heading = computed(() => ({
+  title: (route.meta['title'] as string | undefined) ?? '',
+  subtitle: route.meta['subtitle'] as string | undefined,
+}));
+
+/** Today, in the clinic's own zone — never the browser's. */
+const todayLabel = computed(() => {
+  const value = clinic.value;
+  if (value === null) return '';
+  return new Intl.DateTimeFormat('ar-EG', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    timeZone: value.timezone,
+  }).format(new Date(`${value.today}T12:00:00Z`));
+});
 
 async function signOut(): Promise<void> {
   signingOut.value = true;
@@ -64,11 +87,17 @@ async function signOut(): Promise<void> {
       </div>
 
       <nav class="dash-nav">
+        <!--
+          Matched by name rather than with `active-class`. That matches
+          inclusively, so the index route ('' under '/') lights up on every
+          child page and two links read as current at once.
+        -->
         <router-link
           v-for="link in links"
           :key="link.name"
           class="dash-navbtn"
-          active-class="dash-navbtn--active"
+          :class="{ 'dash-navbtn--active': route.name === link.name }"
+          :aria-current="route.name === link.name ? 'page' : undefined"
           :to="{ name: link.name }"
         >
           {{ link.label }}
@@ -124,16 +153,25 @@ async function signOut(): Promise<void> {
         </div>
       </section>
 
-      <!--
-        The scroll container, and the only place page padding is defined. A
-        screen that set its own would drift from every other one.
-      -->
-      <div
-        v-else
-        class="dash-content"
-      >
-        <router-view />
-      </div>
+      <template v-else>
+        <header class="dash-top">
+          <div class="dash-top__title">
+            <h1>{{ heading.title }}</h1>
+            <p v-if="heading.subtitle">
+              {{ heading.subtitle }}
+            </p>
+          </div>
+          <span class="dpill dash-top__today">{{ todayLabel }}</span>
+        </header>
+
+        <!--
+          The scroll container, and the only place page padding is defined. A
+          screen that set its own would drift from every other one.
+        -->
+        <div class="dash-content">
+          <router-view />
+        </div>
+      </template>
     </main>
   </div>
 </template>
@@ -150,7 +188,11 @@ async function signOut(): Promise<void> {
   max-width: 460px;
 }
 
-@media (max-width: 720px) {
+.dash-top__today {
+  margin-inline-start: auto;
+}
+
+@media (max-width: 860px) {
   .dash {
     flex-direction: column;
   }
@@ -164,6 +206,10 @@ async function signOut(): Promise<void> {
   .dash-nav {
     flex-direction: row;
     flex-wrap: wrap;
+  }
+
+  .dash-content {
+    padding: 18px;
   }
 }
 </style>
