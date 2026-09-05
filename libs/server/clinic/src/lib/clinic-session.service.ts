@@ -322,7 +322,11 @@ export class ClinicSessionService {
                                 when $3 = 'arrived' then null
                                 else $5::text
                               end,
-              presence_updated_at = now()
+              presence_updated_at = now(),
+              -- Same reason as every other session write: this is the one
+              -- field a waiting family checks most, and a poll that was told
+              -- "unchanged" would never show it.
+              revision = revision + 1
         where id = $1 and clinic_id = $2
         returning ${SESSION_COLUMNS}`,
       [
@@ -347,7 +351,8 @@ export class ClinicSessionService {
   ): Promise<ClinicSession> {
     const result = await db.query<SessionRow>(
       `update clinic.clinic_sessions
-          set avg_consult_minutes = $3
+          set avg_consult_minutes = $3,
+              revision = revision + 1
         where id = $1 and clinic_id = $2
         returning ${SESSION_COLUMNS}`,
       [sessionId, clinicId, avgConsultMinutes],
@@ -398,8 +403,12 @@ export class ClinicSessionService {
     db: SqlExecutor,
   ): Promise<ClinicSession> {
     const result = await db.query<SessionRow>(
+      // The revision moves with the status, in the same statement. It is the
+      // token every poller compares against, and a pause that did not move it
+      // would leave both apps telling people the queue was still running.
       `update clinic.clinic_sessions
-          ${assignment}
+          ${assignment},
+              revision = revision + 1
         where id = $1 and clinic_id = $2 and status = any($3)
         returning ${SESSION_COLUMNS}`,
       [sessionId, clinicId, from],
