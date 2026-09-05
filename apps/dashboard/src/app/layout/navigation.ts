@@ -17,6 +17,9 @@ export interface NavigationLink {
 export const NAVIGATION: readonly NavigationLink[] = [
   { name: 'overview', label: 'اليوم' },
   { name: 'appointments', label: 'المواعيد' },
+  // Every role runs the queue. What each may *do* with it differs, and the API
+  // enforces that difference on each command rather than by hiding the board.
+  { name: 'queue', label: 'الطابور المباشر' },
   {
     name: 'reception-booking',
     label: 'حجز جديد',

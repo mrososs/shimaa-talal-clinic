@@ -234,7 +234,7 @@ onMounted(() => {
               <button
                 v-if="
                   appointment.status === 'confirmed' ||
-                  appointment.status === 'checked_in'
+                    appointment.status === 'checked_in'
                 "
                 class="dbtn dbtn--ghost dbtn--sm"
                 :disabled="working === appointment.id"

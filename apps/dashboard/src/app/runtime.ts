@@ -7,6 +7,7 @@ import { getClientConfig, isSupabaseConfigured } from '@clinic/client-config';
 import { createSessionStore, type SessionStore } from '@clinic/client-session';
 import type { ClinicMeResponse } from '@clinic/contracts';
 import { createClinicApi, type ClinicApi } from './features/clinic/clinic.api';
+import { createQueueApi, type QueueApi } from './features/queue/queue.api';
 
 /**
  * Composition root for everything this app talks to.
@@ -30,6 +31,7 @@ export const apiClient: ApiClient = createApiClient({
 });
 
 export const clinicApi: ClinicApi = createClinicApi(apiClient);
+export const queueApi: QueueApi = createQueueApi(apiClient);
 
 /**
  * The staff session: the account, and the membership that makes it staff.

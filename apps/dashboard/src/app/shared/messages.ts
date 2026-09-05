@@ -42,6 +42,29 @@ const API_MESSAGES: Record<string, string> = {
   claim_code_locked: 'محاولات كثيرة. اطلبي رمزاً جديداً من الاستقبال.',
   child_not_found: 'لم نعثر على هذا الطفل.',
   guardian_not_found: 'لم نعثر على هذا الملف.',
+
+  // Booking.
+  slot_unavailable: 'امتلأت هذه الفترة للتو. اختاري فترة أخرى.',
+  session_unavailable: 'هذه الفترة غير متاحة للحجز.',
+  window_in_past: 'هذه الفترة بدأت بالفعل.',
+  cancellation_too_late: 'فات موعد الإلغاء المسموح به.',
+  appointment_not_found: 'لم نعثر على هذا الموعد.',
+
+  // The day.
+  session_closed: 'أُغلق هذا اليوم — لا يمكن فتحه من جديد.',
+  session_not_found: 'لم نعثر على جلسة العيادة.',
+  no_schedule_for_date: 'لا توجد مواعيد عمل في هذا اليوم.',
+
+  // The queue. Each of these is something staff can act on, which is why they
+  // are worded as the next step rather than as a refusal.
+  queue_session_not_running: 'الطابور متوقف. استأنفي الجلسة أولاً.',
+  queue_empty: 'لا يوجد مرضى في الانتظار.',
+  queue_conflict: 'تغيّر الطابور للتو — حدَّثنا الشاشة.',
+  queue_invalid_transition: 'تغيّر وضع هذا المريض للتو — حدَّثنا الشاشة.',
+  queue_grace_not_expired: 'ما زالت مهلة الحضور سارية.',
+  queue_reason_required: 'يلزم ذكر السبب.',
+  queue_entry_not_found: 'لم نعثر على هذا المريض في الطابور.',
+  invalid_transition: 'هذا الإجراء غير ممكن في الوضع الحالي.',
 };
 
 export function apiMessage(error: unknown): string {

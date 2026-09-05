@@ -45,6 +45,15 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: 'المواعيد', subtitle: 'الطلبات والحجوزات' },
       },
       {
+        path: 'queue',
+        name: 'queue',
+        component: () => import('../features/queue/pages/QueueBoardPage.vue'),
+        meta: {
+          title: 'الطابور المباشر',
+          subtitle: 'من في العيادة الآن، ومن ينتظر',
+        },
+      },
+      {
         path: 'booking',
         name: 'reception-booking',
         component: () =>

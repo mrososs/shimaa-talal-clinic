@@ -21,6 +21,7 @@ describe('dashboard router', () => {
     expect(shell?.children?.map((child) => child.name)).toEqual([
       'overview',
       'appointments',
+      'queue',
       'reception-booking',
     ]);
   });
