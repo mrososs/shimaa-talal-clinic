@@ -134,25 +134,9 @@ export class AppointmentsController {
     });
   }
 
-  @Roles(UserRole.Guardian)
-  @Post('appointments/:appointmentId/cancel')
-  @HttpCode(HttpStatus.OK)
-  async cancel(
-    @CurrentUser() user: AuthenticatedUser,
-    @CurrentGuardian() guardian: GuardianContext,
-    @Param('appointmentId', new ParseUUIDPipe()) appointmentId: string,
-    @Body() body: CancelAppointmentDto,
-  ): Promise<Appointment> {
-    await this.requireOwn(guardian, appointmentId);
-
-    // The parent-specific path, because it carries the clinic's cutoff. Staff
-    // have no such limit — somebody has to be able to cancel when a family
-    // phones five minutes before.
-    return this.appointments.cancelAsParent(guardian.clinicId, appointmentId, {
-      authUserId: user.id,
-      reason: body.reason ?? null,
-    });
-  }
+  // Cancelling lives in @clinic/server-workflows: if the family has already
+  // checked in, their queue entry must go with the appointment, and Booking
+  // may not depend on Queue.
 
   @Roles(UserRole.Guardian)
   @Post('appointments/:appointmentId/reschedule')

@@ -161,23 +161,9 @@ export class ClinicAppointmentsController {
     );
   }
 
-  @Roles(UserRole.Reception, UserRole.Admin, UserRole.Doctor)
-  @Post('appointments/:appointmentId/cancel')
-  @HttpCode(HttpStatus.OK)
-  cancel(
-    @CurrentMember() member: ClinicMemberContext,
-    @Param('appointmentId', new ParseUUIDPipe()) appointmentId: string,
-    @Body() body: CancelAppointmentDto,
-  ): Promise<Appointment> {
-    // No cutoff for staff. A parent phoning ten minutes before is exactly when
-    // somebody has to be able to do this.
-    return this.appointments.transition(
-      member.clinicId,
-      appointmentId,
-      AppointmentStatus.Cancelled,
-      { memberId: member.id, reason: body.reason ?? null },
-    );
-  }
+  // Cancelling lives in @clinic/server-workflows: a checked-in family has a
+  // queue entry that must be cancelled in the same commit, and Booking may not
+  // depend on Queue.
 
   @Roles(UserRole.Reception, UserRole.Admin, UserRole.Doctor)
   @Post('appointments/:appointmentId/reschedule')

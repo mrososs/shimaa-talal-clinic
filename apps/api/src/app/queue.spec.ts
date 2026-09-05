@@ -1,0 +1,812 @@
+import { randomBytes } from 'node:crypto';
+import type { INestApplication } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import {
+  createTestDatabase,
+  testDatabaseUrl,
+  type TestDatabase,
+} from '@clinic/server-core';
+import { AppModule } from './app.module';
+import { configureApp } from './configure-app';
+
+/**
+ * The queue and the workflows above it, over real HTTP.
+ *
+ * What matters here is the join between two domains. Check-in has to create a
+ * queue entry AND move an appointment; cancelling has to remove the entry as
+ * well as the booking. Either half alone leaves the clinic with a patient on
+ * the board nobody expects, or a family waiting who is not on it.
+ *
+ * And what a parent can see: a count and their own row, never anyone else's.
+ */
+
+const url = testDatabaseUrl();
+const supabaseUrl = process.env['SUPABASE_URL'];
+const secretKey = process.env['SUPABASE_SECRET_KEY'];
+const publishableKey = process.env['SUPABASE_PUBLISHABLE_KEY'];
+const configured =
+  url !== null &&
+  supabaseUrl !== undefined &&
+  secretKey !== undefined &&
+  publishableKey !== undefined;
+
+(configured ? describe : describe.skip)('queue (HTTP)', () => {
+  let app: INestApplication;
+  let base: string;
+  let db: TestDatabase;
+  let admin: SupabaseClient;
+  let anon: SupabaseClient;
+
+  const tag = `q-${Date.now().toString(36)}`;
+  const createdUserIds: string[] = [];
+
+  /**
+   * Children a single test invented, cleaned up in `afterEach`.
+   *
+   * Not deleted inline after the assertions: cleanup written there never runs
+   * when an assertion fails, and the row it leaves behind then breaks a later
+   * suite instead of this one.
+   */
+  const strangerChildIds: string[] = [];
+  let clinicId: string;
+  let doctorMemberId: string;
+  let guardianId: string;
+  let childId: string;
+  let siblingId: string;
+  let sessionId: string;
+
+  const tokens: Record<'parent' | 'reception' | 'doctor', string> =
+    {} as never;
+
+  async function account(label: string): Promise<string> {
+    const email = `${tag}-${label}@example.test`;
+    const password = randomBytes(24).toString('base64url');
+    const created = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
+    if (created.error) throw created.error;
+    createdUserIds.push(created.data.user.id);
+
+    const session = await anon.auth.signInWithPassword({ email, password });
+    if (session.error) throw session.error;
+    tokens[label as keyof typeof tokens] = session.data.session.access_token;
+    return created.data.user.id;
+  }
+
+  async function call(
+    method: string,
+    path: string,
+    options: { token?: string; body?: unknown } = {},
+  ): Promise<{ status: number; body: Record<string, unknown> }> {
+    const response = await fetch(`${base}${path}`, {
+      method,
+      headers: {
+        ...(options.token === undefined
+          ? {}
+          : { Authorization: `Bearer ${options.token}` }),
+        ...(options.body === undefined
+          ? {}
+          : { 'Content-Type': 'application/json' }),
+      },
+      body:
+        options.body === undefined ? undefined : JSON.stringify(options.body),
+    });
+    return {
+      status: response.status,
+      body: (await response.json()) as Record<string, unknown>,
+    };
+  }
+
+  const data = <T>(body: Record<string, unknown>): T => body['data'] as T;
+  const errorCode = (body: Record<string, unknown>): string =>
+    (body['error'] as { code: string }).code;
+
+  interface Entry {
+    id: string;
+    ticketNumber: number;
+    status: string;
+    appointmentId: string | null;
+    isEmergency: boolean;
+  }
+
+  /** A confirmed appointment in today's session, ready to be checked in. */
+  async function bookedAppointment(child = childId): Promise<string> {
+    const result = await db.database.query<{ id: string }>(
+      `insert into clinic.appointments
+         (clinic_id, session_id, child_id, guardian_id, window_start,
+          window_end, seat_no, visit_type, status)
+       values ($1, $2, $3, $4, now() + interval '1 hour',
+               now() + interval '2 hours',
+               (select coalesce(max(seat_no), 0) + 1
+                  from clinic.appointments where session_id = $2),
+               'new_visit', 'confirmed')
+       returning id`,
+      [clinicId, sessionId, child, guardianId],
+    );
+    return result.rows[0].id;
+  }
+
+  const walkIn = (child = childId) =>
+    call('POST', '/clinic/queue/walk-in', {
+      token: tokens.reception,
+      body: { sessionId, childId: child, guardianId },
+    });
+
+  beforeAll(async () => {
+    db = createTestDatabase(url as string);
+    admin = createClient(supabaseUrl as string, secretKey as string, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    anon = createClient(supabaseUrl as string, publishableKey as string, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    const clinic = await db.database.query<{ id: string }>(
+      `insert into clinic.clinics
+         (name, slug, timezone, default_country_code, grace_period_minutes,
+          max_self_defers)
+       values ($1, $2, 'Africa/Cairo', 'EG', 10, 2)
+       returning id`,
+      [`Queue ${tag}`, tag],
+    );
+    clinicId = clinic.rows[0].id;
+
+    const parentUserId = await account('parent');
+    const receptionUserId = await account('reception');
+    const doctorUserId = await account('doctor');
+
+    const members = await db.database.query<{ id: string }>(
+      `insert into clinic.clinic_members
+         (clinic_id, auth_user_id, role, display_name)
+       values ($1, $2, 'reception', $4), ($1, $3, 'doctor', $4)
+       returning id`,
+      [clinicId, receptionUserId, doctorUserId, `${tag} staff`],
+    );
+    doctorMemberId = members.rows[1].id;
+
+    const guardian = await db.database.query<{ id: string }>(
+      `insert into clinic.guardians
+         (clinic_id, full_name, phone_e164, auth_user_id, claimed_at,
+          claimed_via)
+       values ($1, 'Queue Parent', $2, $3, now(), 'self_signup')
+       returning id`,
+      [clinicId, `+2010${String(Date.now()).slice(-7)}`, parentUserId],
+    );
+    guardianId = guardian.rows[0].id;
+
+    const kids = await db.database.query<{ id: string }>(
+      `insert into clinic.children (clinic_id, full_name)
+       values ($1, 'Leen'), ($1, 'Yusuf') returning id`,
+      [clinicId],
+    );
+    childId = kids.rows[0].id;
+    siblingId = kids.rows[1].id;
+    await db.database.query(
+      `insert into clinic.guardian_children (guardian_id, child_id, relationship)
+       values ($1, $2, 'mother'), ($1, $3, 'mother')`,
+      [guardianId, childId, siblingId],
+    );
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    configureApp(app);
+    await app.init();
+    await app.listen(0);
+    base = `${await app.getUrl()}/api/v1`;
+  }, 120_000);
+
+  beforeEach(async () => {
+    const session = await db.database.query<{ id: string }>(
+      `insert into clinic.clinic_sessions
+         (clinic_id, doctor_member_id, session_date, session_kind,
+          planned_start, planned_end, window_minutes, capacity_per_window,
+          avg_consult_minutes, status)
+       values ($1, $2, (now() at time zone 'Africa/Cairo')::date, 'morning',
+               now(), now() + interval '6 hours', 60, 20, 6, 'open')
+       returning id`,
+      [clinicId, doctorMemberId],
+    );
+    sessionId = session.rows[0].id;
+  });
+
+  afterEach(async () => {
+    // Events and entries in one statement: an FK ties them together, and two
+    // statements leave a window in which anything still in flight can write an
+    // event that then blocks the delete.
+    await db.database.query(
+      `with cleared as (
+         delete from clinic.queue_events
+          where entry_id in (
+            select id from clinic.queue_entries where clinic_id = $1)
+          returning entry_id)
+       delete from clinic.queue_entries where clinic_id = $1`,
+      [clinicId],
+    );
+    if (strangerChildIds.length > 0) {
+      await db.database.query(
+        `delete from clinic.children where id = any($1)`,
+        [strangerChildIds.splice(0)],
+      );
+    }
+    await db.database.query(
+      `with cleared as (
+         delete from clinic.appointment_events
+          where appointment_id in (
+            select id from clinic.appointments where clinic_id = $1)
+          returning appointment_id)
+       delete from clinic.appointments where clinic_id = $1`,
+      [clinicId],
+    );
+    await db.database.query(
+      `delete from clinic.clinic_sessions where clinic_id = $1`,
+      [clinicId],
+    );
+  });
+
+  afterAll(async () => {
+    if (app !== undefined) await app.close();
+    if (db !== undefined) {
+      await db.database.query(
+        `delete from clinic.guardian_children where guardian_id = $1`,
+        [guardianId],
+      );
+      await db.database.query(
+        `delete from clinic.children where clinic_id = $1`,
+        [clinicId],
+      );
+      await db.database.query(
+        `delete from clinic.guardians where clinic_id = $1`,
+        [clinicId],
+      );
+      await db.database.query(
+        `delete from clinic.clinic_members where clinic_id = $1`,
+        [clinicId],
+      );
+      await db.database.query(`delete from clinic.clinics where id = $1`, [
+        clinicId,
+      ]);
+      await db.close();
+    }
+    for (const id of createdUserIds) {
+      await admin.auth.admin.deleteUser(id);
+    }
+  }, 120_000);
+
+  describe('check-in', () => {
+    it('creates a queue entry and moves the appointment, together', async () => {
+      const appointmentId = await bookedAppointment();
+
+      const response = await call(
+        'POST',
+        `/clinic/appointments/${appointmentId}/check-in`,
+        { token: tokens.reception },
+      );
+
+      expect(response.status).toBe(201);
+      const entry = data<Entry>(response.body);
+      expect(entry).toMatchObject({
+        ticketNumber: 1,
+        status: 'waiting',
+        appointmentId,
+      });
+
+      // The other half of the same commit.
+      const appointment = await call(
+        'GET',
+        `/clinic/appointments/${appointmentId}`,
+        { token: tokens.reception },
+      );
+      expect(data<{ status: string }>(appointment.body).status).toBe(
+        'checked_in',
+      );
+    });
+
+    it('answers a double-click with the same entry', async () => {
+      const appointmentId = await bookedAppointment();
+      const first = await call(
+        'POST',
+        `/clinic/appointments/${appointmentId}/check-in`,
+        { token: tokens.reception },
+      );
+      const second = await call(
+        'POST',
+        `/clinic/appointments/${appointmentId}/check-in`,
+        { token: tokens.reception },
+      );
+
+      expect(data<Entry>(second.body).id).toBe(data<Entry>(first.body).id);
+
+      const count = await db.database.query<{ count: string }>(
+        `select count(*)::text as count from clinic.queue_entries
+          where appointment_id = $1`,
+        [appointmentId],
+      );
+      expect(count.rows[0].count).toBe('1');
+    });
+
+    it('survives five desks pressing it at once', async () => {
+      const appointmentId = await bookedAppointment();
+
+      const responses = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          call('POST', `/clinic/appointments/${appointmentId}/check-in`, {
+            token: tokens.reception,
+          }),
+        ),
+      );
+
+      // Whoever loses the appointment's row lock reads it as already checked
+      // in. "Not confirmed" would be a true statement and the wrong answer:
+      // the patient is in the queue, which is what was asked for.
+      expect(responses.map((r) => r.status)).toEqual([
+        201, 201, 201, 201, 201,
+      ]);
+      const ids = new Set(responses.map((r) => data<Entry>(r.body).id));
+      expect(ids.size).toBe(1);
+
+      const count = await db.database.query<{ count: string }>(
+        `select count(*)::text as count from clinic.queue_entries
+          where appointment_id = $1`,
+        [appointmentId],
+      );
+      expect(count.rows[0].count).toBe('1');
+    });
+
+    it('leaves neither half behind when the appointment is not confirmed', async () => {
+      // A requested appointment is not eligible. If the workflow were not one
+      // transaction, this is where a queue entry would appear for a visit the
+      // clinic has not accepted.
+      const appointment = await db.database.query<{ id: string }>(
+        `insert into clinic.appointments
+           (clinic_id, session_id, child_id, guardian_id, window_start,
+            window_end, seat_no, visit_type, status)
+         values ($1, $2, $3, $4, now() + interval '1 hour',
+                 now() + interval '2 hours', 9, 'new_visit', 'requested')
+         returning id`,
+        [clinicId, sessionId, siblingId, guardianId],
+      );
+
+      const response = await call(
+        'POST',
+        `/clinic/appointments/${appointment.rows[0].id}/check-in`,
+        { token: tokens.reception },
+      );
+      expect(response.status).toBe(409);
+
+      const entries = await db.database.query<{ count: string }>(
+        `select count(*)::text as count from clinic.queue_entries
+          where appointment_id = $1`,
+        [appointment.rows[0].id],
+      );
+      expect(entries.rows[0].count).toBe('0');
+    });
+
+    it('refuses a doctor, because checking in is the desk’s job', async () => {
+      const appointmentId = await bookedAppointment();
+      const response = await call(
+        'POST',
+        `/clinic/appointments/${appointmentId}/check-in`,
+        { token: tokens.doctor },
+      );
+      expect(response.status).toBe(403);
+    });
+  });
+
+  describe('walk-in', () => {
+    it('registers a patient with no appointment at all', async () => {
+      const response = await walkIn();
+
+      expect(response.status).toBe(201);
+      expect(data<Entry>(response.body)).toMatchObject({
+        appointmentId: null,
+        status: 'waiting',
+      });
+    });
+
+    it('shares one ticket sequence with checked-in patients', async () => {
+      const appointmentId = await bookedAppointment();
+      await call('POST', `/clinic/appointments/${appointmentId}/check-in`, {
+        token: tokens.reception,
+      });
+      const second = await walkIn(siblingId);
+
+      // One queue, one sequence. A walk-in is not a second-class entry.
+      expect(data<Entry>(second.body).ticketNumber).toBe(2);
+    });
+  });
+
+  describe('running the queue', () => {
+    it('calls, starts and completes', async () => {
+      const first = data<Entry>((await walkIn()).body);
+
+      const called = await call('POST', '/clinic/queue/call-next', {
+        token: tokens.reception,
+        body: { sessionId },
+      });
+      expect(data<Entry>(called.body).status).toBe('called');
+
+      const started = await call('POST', `/clinic/queue/${first.id}/start`, {
+        token: tokens.doctor,
+      });
+      expect(data<Entry>(started.body).status).toBe('in_service');
+
+      const done = await call('POST', `/clinic/queue/${first.id}/complete`, {
+        token: tokens.doctor,
+      });
+      expect(data<Entry>(done.body).status).toBe('done');
+    });
+
+    it('completes the appointment behind a checked-in patient', async () => {
+      const appointmentId = await bookedAppointment();
+      const entry = data<Entry>(
+        (
+          await call(
+            'POST',
+            `/clinic/appointments/${appointmentId}/check-in`,
+            { token: tokens.reception },
+          )
+        ).body,
+      );
+
+      await call('POST', `/clinic/queue/${entry.id}/call`, {
+        token: tokens.reception,
+      });
+      await call('POST', `/clinic/queue/${entry.id}/start`, {
+        token: tokens.doctor,
+      });
+      await call('POST', `/clinic/queue/${entry.id}/complete`, {
+        token: tokens.doctor,
+      });
+
+      const appointment = await call(
+        'GET',
+        `/clinic/appointments/${appointmentId}`,
+        { token: tokens.reception },
+      );
+      expect(data<{ status: string }>(appointment.body).status).toBe(
+        'completed',
+      );
+    });
+
+    it('completes a walk-in without an appointment to touch', async () => {
+      const entry = data<Entry>((await walkIn()).body);
+      await call('POST', `/clinic/queue/${entry.id}/call`, {
+        token: tokens.reception,
+      });
+
+      const done = await call('POST', `/clinic/queue/${entry.id}/complete`, {
+        token: tokens.doctor,
+      });
+      expect(done.status).toBe(200);
+      expect(data<Entry>(done.body).status).toBe('done');
+    });
+
+    it('says plainly when nobody is waiting', async () => {
+      const response = await call('POST', '/clinic/queue/call-next', {
+        token: tokens.reception,
+        body: { sessionId },
+      });
+      expect(response.status).toBe(409);
+      expect(errorCode(response.body)).toBe('queue_empty');
+    });
+  });
+
+  describe('the board', () => {
+    it('returns the day in service order', async () => {
+      await walkIn();
+      await walkIn(siblingId);
+
+      const response = await call(
+        'GET',
+        `/clinic/queue?sessionId=${sessionId}`,
+        { token: tokens.doctor },
+      );
+
+      expect(response.status).toBe(200);
+      const board = data<{
+        changed: boolean;
+        entries: Entry[];
+        revision: number;
+      }>(response.body);
+      expect(board.changed).toBe(true);
+      expect(board.entries).toHaveLength(2);
+      expect(board.entries.map((e) => e.ticketNumber)).toEqual([1, 2]);
+    });
+
+    it('answers a poll that is already current without the board', async () => {
+      await walkIn();
+      const first = data<{ revision: number }>(
+        (
+          await call('GET', `/clinic/queue?sessionId=${sessionId}`, {
+            token: tokens.doctor,
+          })
+        ).body,
+      );
+
+      const again = await call(
+        'GET',
+        `/clinic/queue?sessionId=${sessionId}&since=${first.revision}`,
+        { token: tokens.doctor },
+      );
+
+      const board = data<{ changed: boolean; entries?: Entry[] }>(again.body);
+      expect(board.changed).toBe(false);
+      expect(board.entries).toBeUndefined();
+    });
+
+    it('reports changed once somebody moves', async () => {
+      const entry = data<Entry>((await walkIn()).body);
+      const before = data<{ revision: number }>(
+        (
+          await call('GET', `/clinic/queue?sessionId=${sessionId}`, {
+            token: tokens.doctor,
+          })
+        ).body,
+      );
+
+      await call('POST', `/clinic/queue/${entry.id}/call`, {
+        token: tokens.reception,
+      });
+
+      const after = await call(
+        'GET',
+        `/clinic/queue?sessionId=${sessionId}&since=${before.revision}`,
+        { token: tokens.doctor },
+      );
+      expect(data<{ changed: boolean }>(after.body).changed).toBe(true);
+    });
+  });
+
+  describe('emergency', () => {
+    it('moves a patient ahead without changing anyone’s number', async () => {
+      const first = data<Entry>((await walkIn()).body);
+      const urgent = data<Entry>((await walkIn(siblingId)).body);
+
+      const marked = await call(
+        'POST',
+        `/clinic/queue/${urgent.id}/emergency`,
+        {
+          token: tokens.doctor,
+          body: { emergency: true, reason: 'صعوبة في التنفس' },
+        },
+      );
+
+      expect(marked.status).toBe(200);
+      expect(data<Entry>(marked.body)).toMatchObject({
+        isEmergency: true,
+        ticketNumber: urgent.ticketNumber,
+      });
+
+      const board = data<{ entries: Entry[] }>(
+        (
+          await call('GET', `/clinic/queue?sessionId=${sessionId}`, {
+            token: tokens.doctor,
+          })
+        ).body,
+      );
+      expect(board.entries.map((e) => e.id)).toEqual([urgent.id, first.id]);
+    });
+
+    it('refuses an emergency with no reason', async () => {
+      const entry = data<Entry>((await walkIn()).body);
+      const response = await call(
+        'POST',
+        `/clinic/queue/${entry.id}/emergency`,
+        { token: tokens.doctor, body: { emergency: true } },
+      );
+      expect(response.status).toBe(400);
+    });
+  });
+
+  describe('grace', () => {
+    it('refuses to skip a patient who still has time', async () => {
+      const entry = data<Entry>((await walkIn()).body);
+      await call('POST', `/clinic/queue/${entry.id}/call`, {
+        token: tokens.reception,
+      });
+
+      const response = await call('POST', `/clinic/queue/${entry.id}/miss`, {
+        token: tokens.reception,
+        body: {},
+      });
+      expect(response.status).toBe(409);
+      expect(errorCode(response.body)).toBe('queue_grace_not_expired');
+    });
+
+    it('allows an override with a reason, then a requeue', async () => {
+      const entry = data<Entry>((await walkIn()).body);
+      await call('POST', `/clinic/queue/${entry.id}/call`, {
+        token: tokens.reception,
+      });
+
+      const missed = await call('POST', `/clinic/queue/${entry.id}/miss`, {
+        token: tokens.reception,
+        body: { force: true, reason: 'اتصلت الأم' },
+      });
+      expect(data<Entry>(missed.body).status).toBe('missed');
+
+      const back = await call('POST', `/clinic/queue/${entry.id}/requeue`, {
+        token: tokens.reception,
+      });
+      expect(data<Entry>(back.body).status).toBe('waiting');
+      // A new number, because they genuinely lost their place.
+      expect(data<Entry>(back.body).ticketNumber).toBeGreaterThan(
+        entry.ticketNumber,
+      );
+    });
+  });
+
+  describe('cancelling a checked-in appointment', () => {
+    it('removes the queue entry too, so no ghost is left on the board', async () => {
+      const appointmentId = await bookedAppointment();
+      const entry = data<Entry>(
+        (
+          await call(
+            'POST',
+            `/clinic/appointments/${appointmentId}/check-in`,
+            { token: tokens.reception },
+          )
+        ).body,
+      );
+
+      const cancelled = await call(
+        'POST',
+        `/clinic/appointments/${appointmentId}/cancel`,
+        { token: tokens.reception, body: { reason: 'اتصلت الأم' } },
+      );
+      expect(cancelled.status).toBe(200);
+      expect(data<{ status: string }>(cancelled.body).status).toBe('cancelled');
+
+      // The half that would otherwise be forgotten.
+      const row = await db.database.query<{ status: string }>(
+        `select status from clinic.queue_entries where id = $1`,
+        [entry.id],
+      );
+      expect(row.rows[0].status).toBe('cancelled');
+
+      const board = data<{ entries: Entry[] }>(
+        (
+          await call('GET', `/clinic/queue?sessionId=${sessionId}`, {
+            token: tokens.doctor,
+          })
+        ).body,
+      );
+      expect(
+        board.entries.filter((e) => e.status !== 'cancelled'),
+      ).toHaveLength(0);
+    });
+  });
+
+  describe('what a parent sees', () => {
+    it('gets a count and their own row, and nobody else’s', async () => {
+      // Three patients ahead, none of them this family's.
+      const others = await db.database.query<{ id: string }>(
+        `insert into clinic.children (clinic_id, full_name)
+         values ($1, 'X'), ($1, 'Y') returning id`,
+        [clinicId],
+      );
+      strangerChildIds.push(...others.rows.map((r) => r.id));
+      for (const row of others.rows) {
+        await call('POST', '/clinic/queue/walk-in', {
+          token: tokens.reception,
+          body: { sessionId, childId: row.id },
+        });
+      }
+      const mine = data<Entry>((await walkIn()).body);
+
+      const response = await call('GET', '/queue/me', {
+        token: tokens.parent,
+      });
+
+      expect(response.status).toBe(200);
+      const view = data<
+        {
+          childId: string;
+          entry: { id: string; aheadCount: number; ticketNumber: number };
+          session: { doctorPresence: string } | null;
+        }[]
+      >(response.body);
+
+      expect(view).toHaveLength(1);
+      expect(view[0].entry.id).toBe(mine.id);
+      expect(view[0].entry.aheadCount).toBe(2);
+      expect(view[0].session?.doctorPresence).toBe('expected');
+
+      // The shape has nowhere to put another patient, which is the point.
+      expect(JSON.stringify(view)).not.toContain(others.rows[0].id);
+    });
+
+    it('is refused the staff board entirely', async () => {
+      const response = await call(
+        'GET',
+        `/clinic/queue?sessionId=${sessionId}`,
+        { token: tokens.parent },
+      );
+      expect(response.status).toBe(403);
+    });
+
+    it('can defer once, and is stopped at the clinic’s limit', async () => {
+      const mine = data<Entry>((await walkIn()).body);
+      await walkIn(siblingId);
+
+      const first = await call('POST', `/queue/${mine.id}/defer`, {
+        token: tokens.parent,
+      });
+      expect(first.status).toBe(200);
+      expect(data<{ deferCount: number }>(first.body).deferCount).toBe(1);
+
+      await call('POST', `/queue/${mine.id}/defer`, { token: tokens.parent });
+
+      const third = await call('POST', `/queue/${mine.id}/defer`, {
+        token: tokens.parent,
+      });
+      expect(third.status).toBe(409);
+      expect(errorCode(third.body)).toBe('queue_defer_limit_reached');
+    });
+
+    it('cannot defer somebody else’s turn', async () => {
+      const stranger = await db.database.query<{ id: string }>(
+        `insert into clinic.children (clinic_id, full_name) values ($1, 'Z')
+         returning id`,
+        [clinicId],
+      );
+      strangerChildIds.push(stranger.rows[0].id);
+      const theirs = data<Entry>(
+        (
+          await call('POST', '/clinic/queue/walk-in', {
+            token: tokens.reception,
+            body: { sessionId, childId: stranger.rows[0].id },
+          })
+        ).body,
+      );
+
+      const response = await call('POST', `/queue/${theirs.id}/defer`, {
+        token: tokens.parent,
+      });
+      expect(response.status).toBe(404);
+    });
+  });
+
+  describe('authorisation', () => {
+    it('refuses a parent every staff command', async () => {
+      const entry = data<Entry>((await walkIn()).body);
+      for (const path of [
+        '/clinic/queue/walk-in',
+        '/clinic/queue/call-next',
+        `/clinic/queue/${entry.id}/call`,
+        `/clinic/queue/${entry.id}/start`,
+        `/clinic/queue/${entry.id}/miss`,
+        `/clinic/queue/${entry.id}/cancel`,
+      ]) {
+        const response = await call('POST', path, { token: tokens.parent });
+        expect(response.status).toBe(403);
+      }
+    });
+
+    it('keeps reception-only commands away from the doctor', async () => {
+      // The doctor runs the queue but does not remove people from it or
+      // reorder it — those are desk decisions.
+      const entry = data<Entry>((await walkIn()).body);
+      for (const path of [
+        '/clinic/queue/walk-in',
+        `/clinic/queue/${entry.id}/cancel`,
+        `/clinic/queue/${entry.id}/move`,
+      ]) {
+        const response = await call('POST', path, { token: tokens.doctor });
+        expect(response.status).toBe(403);
+      }
+    });
+
+    it('refuses an unauthenticated caller', async () => {
+      expect(
+        (await call('GET', `/clinic/queue?sessionId=${sessionId}`)).status,
+      ).toBe(401);
+      expect((await call('GET', '/queue/me')).status).toBe(401);
+    });
+  });
+});
