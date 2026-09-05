@@ -46,4 +46,8 @@ export * from './lib/common/api-exception.filter';
 export * from './lib/common/api-response.util';
 export * from './lib/common/raw-response.decorator';
 
+// testing - a real database for domain suites. Test-only; nothing in the
+// application imports it.
+export * from './lib/testing/test-database';
+
 export * from './lib/server-core.module';

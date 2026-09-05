@@ -2,6 +2,10 @@ const nxPreset = require('@nx/jest/preset').default;
 
 module.exports = {
   ...nxPreset,
+  // Loads the workspace .env, so a domain suite can reach a real database.
+  // Resolved from this file rather than <rootDir>, because projects sit at
+  // different depths and a relative path would be wrong for half of them.
+  setupFiles: [require('node:path').join(__dirname, 'jest.setup-env.ts')],
   // `@nestjs/config` v12 is ESM-only: "type": "module", and its exports map
   // offers no CommonJS entry. Jest runs CommonJS here, so it cannot require it
   // and must transform it instead.
