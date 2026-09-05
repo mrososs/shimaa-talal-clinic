@@ -1,5 +1,9 @@
 import { Module } from '@nestjs/common';
-import { GUARDIAN_RESOLVER, ServerCoreModule } from '@clinic/server-core';
+import {
+  CHILD_ACCESS_CHECKER,
+  GUARDIAN_RESOLVER,
+  ServerCoreModule,
+} from '@clinic/server-core';
 import { ClinicModule } from '@clinic/server-clinic';
 import { ChildService } from './child.service';
 import { ClaimCodeService } from './claim-code.service';
@@ -10,6 +14,7 @@ import {
   ClinicGuardiansController,
 } from './api/clinic-guardians.controller';
 import { MeController } from './api/me.controller';
+import { PatientsChildAccessChecker } from './patients-child-access';
 import { PatientsGuardianResolver } from './patients-guardian.resolver';
 
 /**
@@ -49,6 +54,9 @@ import { PatientsGuardianResolver } from './patients-guardian.resolver';
     ClaimCodeService,
     PatientsGuardianResolver,
     { provide: GUARDIAN_RESOLVER, useExisting: PatientsGuardianResolver },
+    // Booking asks whether a child is this family's before it holds a seat.
+    PatientsChildAccessChecker,
+    { provide: CHILD_ACCESS_CHECKER, useExisting: PatientsChildAccessChecker },
   ],
   exports: [
     GuardianService,
@@ -56,6 +64,10 @@ import { PatientsGuardianResolver } from './patients-guardian.resolver';
     GuardianOwnershipService,
     ClaimCodeService,
     GUARDIAN_RESOLVER,
+    CHILD_ACCESS_CHECKER,
+    // Exported as a class as well as behind its token, so the composition root
+    // can publish it to the domains that may not import this module.
+    PatientsChildAccessChecker,
   ],
 })
 export class PatientsModule {}

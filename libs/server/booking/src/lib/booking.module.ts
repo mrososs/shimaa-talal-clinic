@@ -3,6 +3,8 @@ import { ServerCoreModule } from '@clinic/server-core';
 import { ClinicModule } from '@clinic/server-clinic';
 import { AppointmentService } from './appointment.service';
 import { AvailabilityService } from './availability.service';
+import { AppointmentsController } from './api/appointments.controller';
+import { ClinicAppointmentsController } from './api/clinic-appointments.controller';
 
 /**
  * Booking — appointments and the windows they occupy.
@@ -13,7 +15,7 @@ import { AvailabilityService } from './availability.service';
  */
 @Module({
   imports: [ServerCoreModule, ClinicModule],
-  controllers: [],
+  controllers: [AppointmentsController, ClinicAppointmentsController],
   providers: [AppointmentService, AvailabilityService],
   exports: [AppointmentService, AvailabilityService],
 })

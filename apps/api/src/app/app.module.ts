@@ -13,6 +13,7 @@ import {
   SupabaseAuthGuard,
 } from '@clinic/server-core';
 import { WorkflowsModule } from '@clinic/server-workflows';
+import { DomainPortsModule } from './domain-ports.module';
 import { HealthModule } from './health/health.module';
 
 /**
@@ -40,6 +41,10 @@ import { HealthModule } from './health/health.module';
     PaymentsModule,
     PatientsModule,
     NotificationsModule,
+
+    // Publishes the handful of ports one domain answers for another. See the
+    // module for why this cannot be a plain provider here.
+    DomainPortsModule,
 
     // Cross-domain orchestration. Sits above the domains; the domains stay
     // unaware of it and of each other.

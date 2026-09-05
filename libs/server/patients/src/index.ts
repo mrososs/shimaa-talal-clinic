@@ -7,6 +7,7 @@
  * a workflow noticing.
  */
 export * from './lib/patients.module';
+export { PatientsChildAccessChecker } from './lib/patients-child-access';
 
 export { GuardianService } from './lib/guardian.service';
 export type {

@@ -28,6 +28,7 @@ export * from './lib/auth/auth.module';
 export * from './lib/auth/authenticated-request';
 export * from './lib/auth/authenticated-user';
 export * from './lib/auth/cached-token.verifier';
+export * from './lib/auth/child-access';
 export * from './lib/auth/clinic-member-resolver';
 export * from './lib/auth/current-context.decorator';
 export * from './lib/auth/current-user.decorator';

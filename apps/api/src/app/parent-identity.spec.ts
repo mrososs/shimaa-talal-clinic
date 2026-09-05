@@ -177,19 +177,21 @@ const configured =
            where auth_user_id = any($1) or id = any($2))`,
       [owners, createdGuardianIds],
     );
-    await db.database.query(
+    // The links go first, and they name the children to remove. Sweeping every
+    // orphaned child in the clinic instead would be shorter and wrong: this
+    // clinic is shared with other suites, and one of them keeps a deliberately
+    // unlinked child to prove a parent cannot book for somebody else's.
+    const links = await db.database.query<{ child_id: string }>(
       `delete from clinic.guardian_children
         where guardian_id in (
           select id from clinic.guardians
-           where auth_user_id = any($1) or id = any($2))`,
+           where auth_user_id = any($1) or id = any($2))
+        returning child_id`,
       [owners, createdGuardianIds],
     );
-    await db.database.query(
-      `delete from clinic.children
-        where clinic_id = $1
-          and id not in (select child_id from clinic.guardian_children)`,
-      [clinicId],
-    );
+    await db.database.query(`delete from clinic.children where id = any($1)`, [
+      links.rows.map((row) => row.child_id),
+    ]);
     await db.database.query(
       `delete from clinic.guardians
         where auth_user_id = any($1) or id = any($2)`,
@@ -208,19 +210,19 @@ const configured =
              where id = any($1) or auth_user_id = any($2))`,
         [createdGuardianIds, createdUserIds],
       );
-      await db.database.query(
+      // Same reason as the per-test cleanup: the links name the children to
+      // remove, so this cannot reach into another suite's fixture.
+      const links = await db.database.query<{ child_id: string }>(
         `delete from clinic.guardian_children
           where guardian_id in (
             select id from clinic.guardians
-             where id = any($1) or auth_user_id = any($2))`,
+             where id = any($1) or auth_user_id = any($2))
+          returning child_id`,
         [createdGuardianIds, createdUserIds],
       );
-      await db.database.query(
-        `delete from clinic.children
-          where clinic_id = $1 and created_at > now() - interval '1 hour'
-            and id not in (select child_id from clinic.guardian_children)`,
-        [clinicId],
-      );
+      await db.database.query(`delete from clinic.children where id = any($1)`, [
+        links.rows.map((row) => row.child_id),
+      ]);
       await db.database.query(
         `delete from clinic.guardians where id = any($1) or auth_user_id = any($2)`,
         [createdGuardianIds, createdUserIds],
