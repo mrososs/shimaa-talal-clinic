@@ -40,8 +40,10 @@ export * from './lib/auth/supabase-auth.guard';
 export * from './lib/auth/supabase-token.verifier';
 export * from './lib/auth/token-verifier';
 
-// common - shared HTTP concerns
+// common - shared HTTP concerns: one response shape, success and failure
+export * from './lib/common/api-envelope.interceptor';
 export * from './lib/common/api-exception.filter';
 export * from './lib/common/api-response.util';
+export * from './lib/common/raw-response.decorator';
 
 export * from './lib/server-core.module';

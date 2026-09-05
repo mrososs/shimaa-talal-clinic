@@ -1,12 +1,16 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { BookingModule } from '@clinic/server-booking';
 import { ClinicModule } from '@clinic/server-clinic';
 import { NotificationsModule } from '@clinic/server-notifications';
 import { PatientsModule } from '@clinic/server-patients';
 import { PaymentsModule } from '@clinic/server-payments';
 import { QueueModule } from '@clinic/server-queue';
-import { ServerCoreModule, SupabaseAuthGuard } from '@clinic/server-core';
+import {
+  ApiEnvelopeInterceptor,
+  ServerCoreModule,
+  SupabaseAuthGuard,
+} from '@clinic/server-core';
 import { WorkflowsModule } from '@clinic/server-workflows';
 import { HealthModule } from './health/health.module';
 
@@ -41,6 +45,11 @@ import { HealthModule } from './health/health.module';
     WorkflowsModule,
   ],
   providers: [
+    // Every successful response leaves in the ApiResponse envelope, so a
+    // controller returns plain data and ApiClient has one shape to unwrap.
+    // The failure half is ApiExceptionFilter, registered in main.ts.
+    { provide: APP_INTERCEPTOR, useClass: ApiEnvelopeInterceptor },
+
     // Authentication is on by default for every route in every module. A route
     // opts out with `@Public()`, which is one line in a diff — where forgetting
     // to protect a route would be an absence nobody notices.
