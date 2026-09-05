@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { authMessage } from '../../../shared/messages';
 import { session } from '../../../runtime';
@@ -19,6 +19,10 @@ const password = ref('');
 const submitted = ref(false);
 
 const state = session.state;
+
+// The store outlives this screen: an error raised on the other auth page
+// would otherwise greet someone who has typed nothing yet.
+onMounted(() => session.clearAuthError());
 const serverError = computed(() => authMessage(state.authError));
 
 const emailError = computed(() =>
@@ -48,7 +52,7 @@ async function submit(): Promise<void> {
 <template>
   <div class="signin">
     <form
-      class="c-card c-stack signin__form"
+      class="dcard dcard--pad dstack signin__form"
       novalidate
       @submit.prevent="submit"
     >
@@ -56,19 +60,19 @@ async function submit(): Promise<void> {
         <p class="signin__clinic">
           عيادة د. شيماء طلال
         </p>
-        <h1 class="c-title">
+        <h1>
           لوحة العيادة
         </h1>
-        <p class="c-muted">
+        <p class="dmuted">
           سجّلي الدخول للوصول إلى المواعيد والطابور.
         </p>
       </header>
 
-      <label class="c-field">
-        <span class="c-field__label">البريد الإلكتروني</span>
+      <label class="dfield">
+        <span class="dfield__label">البريد الإلكتروني</span>
         <input
           v-model="email"
-          class="c-input"
+          class="dinput"
           type="email"
           autocomplete="username"
           :aria-invalid="emailError !== null"
@@ -79,11 +83,11 @@ async function submit(): Promise<void> {
         >{{ emailError }}</span>
       </label>
 
-      <label class="c-field">
-        <span class="c-field__label">كلمة المرور</span>
+      <label class="dfield">
+        <span class="dfield__label">كلمة المرور</span>
         <input
           v-model="password"
-          class="c-input"
+          class="dinput"
           type="password"
           autocomplete="current-password"
           :aria-invalid="passwordError !== null"
@@ -96,14 +100,14 @@ async function submit(): Promise<void> {
 
       <p
         v-if="serverError"
-        class="c-notice c-notice--error"
+        class="dnotice dnotice--error"
         role="alert"
       >
         {{ serverError }}
       </p>
 
       <button
-        class="c-btn c-btn--block"
+        class="dbtn dbtn--primary dbtn--block"
         type="submit"
         :disabled="state.pending"
       >
@@ -118,7 +122,7 @@ async function submit(): Promise<void> {
   display: grid;
   place-items: center;
   min-height: 100vh;
-  padding: var(--c-space);
+  padding: 16px;
 }
 
 .signin__form {
@@ -126,13 +130,13 @@ async function submit(): Promise<void> {
 }
 
 .signin__clinic {
-  margin: 0 0 var(--c-space-xs);
-  color: var(--c-primary);
+  margin: 0 0 4px;
+  color: var(--coral-ink);
   font-weight: 700;
 }
 
 .signin__error {
-  color: var(--c-danger);
+  color: var(--danger);
   font-size: 0.85rem;
 }
 </style>

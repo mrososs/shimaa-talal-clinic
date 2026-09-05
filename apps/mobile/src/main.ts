@@ -14,6 +14,8 @@ import '@ionic/vue/css/normalize.css';
 import '@ionic/vue/css/structure.css';
 import '@ionic/vue/css/typography.css';
 
+// The shared token layer first: the app's own file maps these onto Ionic.
+import '@clinic/client-theme';
 import './app/shared/theme/variables.css';
 import './styles.css';
 

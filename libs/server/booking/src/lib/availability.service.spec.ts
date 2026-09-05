@@ -2,11 +2,7 @@ import { VisitType } from '@clinic/contracts';
 import { ClinicService, ClinicSessionService } from '@clinic/server-clinic';
 import { AppointmentService } from './appointment.service';
 import { AvailabilityService } from './availability.service';
-import {
-  describeWithDatabase,
-  insertChild,
-  insertSession,
-} from './booking.fixture';
+import { describeWithDatabase, insertSession } from './booking.fixture';
 
 /**
  * What a parent is offered.

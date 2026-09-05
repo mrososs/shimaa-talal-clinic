@@ -1,51 +1,16 @@
-/*
- * The dashboard's visual system.
- *
- * There is no component library here, and none is coming. Six screens of
- * tables, dialogs and status pills do not justify a dependency that would then
- * have to be fought over RTL, Arabic typography and Arabic-Indic numerals. What
- * exists instead is this file: the tokens, and the handful of primitives every
- * screen composes from.
- *
- * The palette is shared with the mobile app on purpose — the same clinic,
- * looked at from the other side of the desk — but the density is not. Reception
- * works at a desktop with many rows on screen at once.
- */
+/* ========================================================================
+   لوحة تحكم العيادة — the dashboard's component layer.
 
-:root {
-  --c-primary: #0e7c7b;
-  --c-primary-strong: #0c6d6c;
-  --c-primary-soft: rgba(14, 124, 123, 0.1);
+   Tokens come from `@clinic/client-theme`, shared with the mobile app. This
+   file holds only what the desktop surface adds on top, ported from the
+   prototype's `dash.css`: the shell, and the `.d*` primitives every screen
+   composes from.
 
-  --c-accent: #e07a5f;
-  --c-success: #2e7d5b;
-  --c-success-soft: rgba(46, 125, 91, 0.12);
-  --c-warning: #b57614;
-  --c-warning-soft: rgba(181, 118, 20, 0.12);
-  --c-danger: #b3261e;
-  --c-danger-soft: rgba(179, 38, 30, 0.1);
-
-  --c-bg: #f4f2ef;
-  --c-surface: #ffffff;
-  --c-surface-muted: #efeae4;
-  --c-border: #e2dcd4;
-  --c-text: #21201d;
-  --c-text-muted: #6b665e;
-
-  --c-radius: 14px;
-  --c-radius-sm: 8px;
-  --c-space-xs: 4px;
-  --c-space-sm: 8px;
-  --c-space: 16px;
-  --c-space-lg: 24px;
-  --c-space-xl: 32px;
-
-  --c-shadow: 0 1px 2px rgba(33, 32, 29, 0.05),
-    0 8px 24px rgba(33, 32, 29, 0.04);
-
-  --c-font: 'Cairo', 'Tajawal', 'Segoe UI', system-ui, -apple-system,
-    'Noto Sans Arabic', sans-serif;
-}
+   Same clinic, different density. Reception works at a desktop with many rows
+   on screen at once, so the radii are tighter than mobile's and the shadows
+   lighter — but the palette, the type and the warmth are identical, which is
+   what makes the two surfaces read as one product.
+   ======================================================================== */
 
 * {
   box-sizing: border-box;
@@ -53,165 +18,447 @@
 
 body {
   margin: 0;
-  font-family: var(--c-font);
-  background: var(--c-bg);
-  color: var(--c-text);
+  font-family: var(--ff-body);
+  background: var(--bg);
+  color: var(--ink);
   font-size: 15px;
   line-height: 1.6;
 }
 
-/* Arabic-Indic numerals, as a font feature rather than a string transform. */
-.c-numerals {
-  font-feature-settings: 'anum';
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--ff-display);
+  margin: 0;
+  font-weight: 700;
+}
+
+p {
+  margin: 0;
 }
 
 /* --------------------------------------------------------------------------
- * Primitives. Eight of them, and the list is meant to stay that short.
+ * Shell
  * ----------------------------------------------------------------------- */
 
-.c-card {
-  background: var(--c-surface);
-  border: 1px solid var(--c-border);
-  border-radius: var(--c-radius);
-  box-shadow: var(--c-shadow);
-  padding: var(--c-space);
+.dash {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  background: var(--bg);
 }
 
-.c-stack {
+.dash-side {
+  width: 256px;
+  flex-shrink: 0;
+  background: var(--surface);
+  /* Logical, so the sidebar sits on the reading-start side either way. */
+  border-inline-end: 1px solid var(--line);
   display: flex;
   flex-direction: column;
-  gap: var(--c-space);
+  padding: 18px 14px 16px;
 }
 
-.c-row {
+.dash-brand {
   display: flex;
   align-items: center;
-  gap: var(--c-space-sm);
+  gap: 11px;
+  padding: 4px 8px 18px;
 }
 
-.c-title {
-  font-size: 1.25rem;
+.dash-brand__logo {
+  width: 46px;
+  height: 46px;
+  border-radius: 15px;
+  flex-shrink: 0;
+  background: var(--coral-soft);
+  color: var(--coral-ink);
+  display: grid;
+  place-items: center;
+  font-family: var(--ff-display);
+  font-weight: 800;
+  font-size: 18px;
+}
+
+.dash-brand__name {
+  font-family: var(--ff-display);
   font-weight: 700;
-  margin: 0;
+  font-size: 15px;
+  line-height: 1.3;
 }
 
-.c-muted {
-  color: var(--c-text-muted);
+.dash-brand__role {
+  font-size: 12.5px;
+  color: var(--muted);
+  font-weight: 600;
 }
 
-.c-field {
+.dash-nav {
   display: flex;
   flex-direction: column;
-  gap: var(--c-space-xs);
+  gap: 3px;
+  flex: 1;
+  margin: 6px -4px;
+  padding: 0 4px;
 }
 
-.c-field__label {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--c-text-muted);
-}
-
-.c-input {
-  font: inherit;
-  color: inherit;
+.dash-navbtn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   padding: 10px 12px;
-  border: 1px solid var(--c-border);
-  border-radius: var(--c-radius-sm);
-  background: var(--c-surface);
-  width: 100%;
-}
-
-.c-input:focus-visible {
-  outline: 2px solid var(--c-primary);
-  outline-offset: 1px;
-}
-
-.c-input[aria-invalid='true'] {
-  border-color: var(--c-danger);
-}
-
-.c-btn {
-  font: inherit;
-  font-weight: 600;
-  padding: 10px 18px;
-  border-radius: var(--c-radius-sm);
-  border: 1px solid transparent;
-  background: var(--c-primary);
-  color: #fff;
+  border: none;
+  background: none;
   cursor: pointer;
-  transition: background 120ms ease;
+  border-radius: 14px;
+  color: var(--ink-2);
+  font-family: var(--ff-body);
+  font-weight: 700;
+  font-size: 14.5px;
+  text-align: start;
+  width: 100%;
+  text-decoration: none;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
-.c-btn:hover:not(:disabled) {
-  background: var(--c-primary-strong);
+.dash-navbtn:hover {
+  background: var(--surface-2);
+  color: var(--ink);
 }
 
-.c-btn:disabled {
-  opacity: 0.6;
+.dash-navbtn--active {
+  background: var(--coral-soft);
+  color: var(--coral-ink);
+}
+
+.dash-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dash-top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 28px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(12px);
+  flex-shrink: 0;
+}
+
+.dash-top__title h1 {
+  font-size: 23px;
+  line-height: 1.15;
+}
+
+.dash-top__title p {
+  font-size: 13px;
+  color: var(--ink-2);
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.dash-content {
+  flex: 1;
+  overflow-x: auto;
+  padding: 24px 28px 40px;
+}
+
+/* --------------------------------------------------------------------------
+ * Primitives
+ * ----------------------------------------------------------------------- */
+
+.dcard {
+  background: var(--surface);
+  border-radius: var(--r-md);
+  box-shadow: var(--sh-sm);
+  border: 1px solid var(--line);
+}
+
+.dcard--pad {
+  padding: 20px;
+}
+
+.dcard__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dcard__title {
+  font-family: var(--ff-display);
+  font-weight: 700;
+  font-size: 16.5px;
+}
+
+.dbtn {
+  font-family: var(--ff-body);
+  font-weight: 800;
+  font-size: 14px;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  white-space: nowrap;
+  transition:
+    transform 0.1s,
+    box-shadow 0.2s,
+    background 0.15s;
+}
+
+.dbtn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.dbtn:disabled {
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
-.c-btn--ghost {
-  background: transparent;
-  color: var(--c-text-muted);
-  border-color: var(--c-border);
+.dbtn--primary {
+  background: var(--coral);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(255, 126, 95, 0.35);
 }
 
-.c-btn--ghost:hover:not(:disabled) {
-  background: var(--c-surface-muted);
+.dbtn--teal {
+  background: var(--teal);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(33, 191, 166, 0.3);
 }
 
-.c-btn--block {
+.dbtn--ghost {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1.5px solid var(--line);
+}
+
+.dbtn--ghost:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.dbtn--soft {
+  background: var(--coral-soft);
+  color: var(--coral-ink);
+}
+
+.dbtn--sm {
+  padding: 7px 12px;
+  font-size: 13px;
+  border-radius: 10px;
+}
+
+.dbtn--block {
   width: 100%;
 }
 
-.c-pill {
+.diconbtn {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: var(--ink-2);
+  flex-shrink: 0;
+}
+
+.dpill {
   display: inline-flex;
   align-items: center;
-  gap: var(--c-space-xs);
-  padding: 2px 10px;
+  gap: 6px;
+  padding: 5px 12px;
   border-radius: 999px;
-  font-size: 0.8rem;
+  font-size: 12.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+
+.dpill__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 99px;
+  background: currentColor;
+}
+
+.dpill--ok {
+  background: var(--teal-soft);
+  color: var(--teal-ink);
+}
+
+.dpill--warn {
+  background: var(--sun-soft);
+  color: #8a6212;
+}
+
+.dpill--danger {
+  background: #fde6e6;
+  color: var(--danger);
+}
+
+.dtable {
+  width: 100%;
+}
+
+.dtable__row {
+  display: grid;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dtable__row:last-child {
+  border-bottom: none;
+}
+
+.dtable__row--head {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.dtabs {
+  display: flex;
+  gap: 6px;
+  background: var(--surface-2);
+  padding: 5px;
+  border-radius: 14px;
+}
+
+.dtabs button {
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 9px 16px;
+  border-radius: 10px;
+  font-family: var(--ff-body);
+  font-weight: 800;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.dtabs button.on {
+  background: var(--surface);
+  color: var(--coral-ink);
+  box-shadow: var(--sh-sm);
+}
+
+/* --------------------------------------------------------------------------
+ * Forms
+ * ----------------------------------------------------------------------- */
+
+.dfield {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dfield__label {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink-2);
+}
+
+.dinput {
+  font-family: var(--ff-body);
   font-weight: 600;
-  background: var(--c-surface-muted);
-  color: var(--c-text-muted);
+  font-size: 14.5px;
+  color: var(--ink);
+  padding: 11px 14px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  width: 100%;
 }
 
-.c-pill--ok {
-  background: var(--c-success-soft);
-  color: var(--c-success);
+.dinput:focus-visible {
+  outline: none;
+  border-color: var(--coral);
+  background: var(--surface);
 }
 
-.c-pill--warn {
-  background: var(--c-warning-soft);
-  color: var(--c-warning);
+.dinput[aria-invalid='true'] {
+  border-color: var(--danger);
 }
 
-.c-pill--danger {
-  background: var(--c-danger-soft);
-  color: var(--c-danger);
-}
-
-.c-notice {
+.dnotice {
   margin: 0;
-  padding: var(--c-space-sm) var(--c-space);
-  border-radius: var(--c-radius-sm);
-  font-size: 0.9rem;
-  /* Logical, so the accent stays on the reading-start side in either direction. */
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  font-weight: 600;
   border-inline-start: 3px solid currentColor;
 }
 
-.c-notice--error {
-  color: var(--c-danger);
-  background: var(--c-danger-soft);
+.dnotice--error {
+  color: var(--danger);
+  background: #fde6e6;
 }
 
-.c-notice--info {
-  color: var(--c-primary);
-  background: var(--c-primary-soft);
+.dnotice--info {
+  color: var(--coral-ink);
+  background: var(--coral-soft);
 }
 
-.c-notice--success {
-  color: var(--c-success);
-  background: var(--c-success-soft);
+.dnotice--ok {
+  color: var(--teal-ink);
+  background: var(--teal-soft);
+}
+
+/* --------------------------------------------------------------------------
+ * Layout helpers
+ * ----------------------------------------------------------------------- */
+
+.dstack {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.drow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dmuted {
+  color: var(--ink-2);
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  min-width: 0;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  min-width: 0;
+}
+
+.grid-2 > *,
+.grid-3 > * {
+  min-width: 0;
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import {
   IonButton,
@@ -27,6 +27,10 @@ const password = ref('');
 const submitted = ref(false);
 
 const state = session.state;
+
+// The store outlives this screen: an error raised on the other auth page
+// would otherwise greet someone who has typed nothing yet.
+onMounted(() => session.clearAuthError());
 const serverError = computed(() => authMessage(state.authError));
 
 const emailError = computed(() =>
@@ -61,21 +65,21 @@ async function submit(): Promise<void> {
 <template>
   <ion-page>
     <ion-content>
-      <div class="clinic-page auth">
+      <div class="screen auth">
         <header class="auth__header">
           <p class="auth__clinic">
             عيادة د. شيماء طلال
           </p>
-          <h1 class="clinic-title">
+          <h1 class="title">
             أهلاً بعودتك
           </h1>
-          <p class="clinic-subtitle">
+          <p class="subtitle">
             سجّلي الدخول لمتابعة مواعيد أطفالك.
           </p>
         </header>
 
         <form
-          class="clinic-stack"
+          class="stack"
           novalidate
           @submit.prevent="submit"
         >
@@ -104,7 +108,7 @@ async function submit(): Promise<void> {
 
           <form-notice :message="serverError" />
 
-          <div class="clinic-actions">
+          <div class="actions">
             <ion-button
               type="submit"
               expand="block"
@@ -144,12 +148,12 @@ async function submit(): Promise<void> {
 }
 
 .auth__header {
-  margin-block-end: var(--clinic-space-lg);
+  margin-block-end: 24px;
 }
 
 .auth__clinic {
-  color: var(--ion-color-primary);
+  color: var(--coral-ink);
   font-weight: 700;
-  margin: 0 0 var(--clinic-space-sm);
+  margin: 0 0 8px;
 }
 </style>

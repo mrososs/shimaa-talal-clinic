@@ -11,6 +11,7 @@ import {
   type RefresherCustomEvent,
 } from '@ionic/vue';
 import FormNotice from '../../../shared/components/FormNotice.vue';
+import { arabicDigits } from '../../../shared/numerals';
 import { session } from '../../../runtime';
 
 /**
@@ -52,9 +53,9 @@ function ageLabel(dateOfBirth: string | null): string | null {
 
   const years = Math.floor(months / 12);
   const remainder = months % 12;
-  if (years === 0) return `${remainder} شهر`;
-  if (remainder === 0) return `${years} سنة`;
-  return `${years} سنة و${remainder} شهر`;
+  if (years === 0) return `${arabicDigits(remainder)} شهر`;
+  if (remainder === 0) return `${arabicDigits(years)} سنة`;
+  return `${arabicDigits(years)} سنة و${arabicDigits(remainder)} شهر`;
 }
 
 async function refresh(event?: RefresherCustomEvent): Promise<void> {
@@ -83,12 +84,12 @@ async function signOut(): Promise<void> {
         <ion-refresher-content />
       </ion-refresher>
 
-      <div class="clinic-page home">
+      <div class="screen home">
         <header class="home__header">
           <p class="home__clinic">
             {{ clinic?.name ?? 'عيادة د. شيماء طلال' }}
           </p>
-          <h1 class="clinic-title">
+          <h1 class="title">
             {{ guardian ? `أهلاً ${guardian.fullName}` : 'أهلاً بك' }}
           </h1>
         </header>
@@ -96,7 +97,7 @@ async function signOut(): Promise<void> {
         <form-notice :message="identityFailure" />
         <div
           v-if="identityFailure"
-          class="clinic-actions"
+          class="actions"
         >
           <ion-button
             fill="outline"
@@ -109,7 +110,7 @@ async function signOut(): Promise<void> {
 
         <section
           v-if="children.length > 0"
-          class="clinic-stack"
+          class="stack"
         >
           <h2 class="section-title">
             أطفالك
@@ -117,7 +118,7 @@ async function signOut(): Promise<void> {
           <article
             v-for="child in children"
             :key="child.id"
-            class="clinic-card child"
+            class="card child"
           >
             <div>
               <p class="child__name">
@@ -125,7 +126,7 @@ async function signOut(): Promise<void> {
               </p>
               <p
                 v-if="ageLabel(child.dateOfBirth)"
-                class="clinic-muted child__age"
+                class="subtle child__age"
               >
                 {{ ageLabel(child.dateOfBirth) }}
               </p>
@@ -133,7 +134,7 @@ async function signOut(): Promise<void> {
           </article>
         </section>
 
-        <div class="clinic-actions">
+        <div class="actions">
           <ion-button
             fill="clear"
             expand="block"
@@ -160,13 +161,13 @@ async function signOut(): Promise<void> {
 }
 
 .home__header {
-  margin-block-end: var(--clinic-space-lg);
+  margin-block-end: 24px;
 }
 
 .home__clinic {
-  color: var(--ion-color-primary);
+  color: var(--coral-ink);
   font-weight: 700;
-  margin: 0 0 var(--clinic-space-xs);
+  margin: 0 0 4px;
 }
 
 .section-title {
@@ -187,7 +188,7 @@ async function signOut(): Promise<void> {
 }
 
 .child__age {
-  margin: var(--clinic-space-xs) 0 0;
+  margin: 4px 0 0;
   font-size: 0.85rem;
 }
 </style>

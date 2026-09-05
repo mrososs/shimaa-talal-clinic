@@ -36,6 +36,14 @@ export type AuthErrorCode =
   | 'invalid_credentials'
   | 'email_not_confirmed'
   | 'email_taken'
+  /**
+   * The address itself was refused — a typo, or a domain the project blocks.
+   *
+   * Worth its own code rather than falling through to `unknown`: the person can
+   * fix a typo the moment they are told which field is wrong, and "an
+   * unexpected error occurred" tells them to try the same thing again.
+   */
+  | 'email_invalid'
   | 'weak_password'
   | 'rate_limited'
   /** The request never got an answer. Says nothing about the credentials. */
@@ -223,6 +231,13 @@ function toAuthError(error: unknown): AuthError {
     text.includes('already been registered')
   ) {
     return new AuthError('email_taken', message, error);
+  }
+  if (
+    code === 'email_address_invalid' ||
+    code === 'email_address_not_authorized' ||
+    text.includes('is invalid')
+  ) {
+    return new AuthError('email_invalid', message, error);
   }
   if (
     code === 'weak_password' ||

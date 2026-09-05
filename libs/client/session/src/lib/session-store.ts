@@ -70,6 +70,14 @@ export interface SessionStore<TIdentity> {
    */
   signUp(credentials: AuthCredentials): Promise<boolean>;
   signOut(): Promise<void>;
+  /**
+   * Forget the last credential failure.
+   *
+   * The store outlives any one screen, so an error raised on sign-in is still
+   * there when the register screen mounts — and a person who has typed nothing
+   * yet is told their password is wrong. Each auth screen clears it on entry.
+   */
+  clearAuthError(): void;
   /** Re-read the identity — after onboarding, or after claiming a family. */
   refreshIdentity(): Promise<void>;
   /** Stop listening to the auth provider. */
@@ -208,6 +216,10 @@ export function createSessionStore<TIdentity>(
       } finally {
         state.pending = false;
       }
+    },
+
+    clearAuthError() {
+      state.authError = null;
     },
 
     async refreshIdentity() {

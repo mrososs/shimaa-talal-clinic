@@ -28,6 +28,9 @@ const ROLE_LABELS: Record<string, string> = {
   admin: 'مسؤول',
 };
 
+/** The clinic's initial, for the brand tile. */
+const brandInitial = computed(() => clinic.value?.name?.trim().at(0) ?? 'ع');
+
 async function signOut(): Promise<void> {
   signingOut.value = true;
   try {
@@ -40,26 +43,32 @@ async function signOut(): Promise<void> {
 </script>
 
 <template>
-  <div class="shell">
+  <div class="dash">
     <aside
       v-if="member"
-      class="shell__nav"
+      class="dash-side"
     >
-      <div class="shell__brand">
-        <p class="shell__clinic">
-          {{ clinic?.name ?? 'العيادة' }}
-        </p>
-        <p class="c-muted shell__role">
-          {{ member.displayName }} ·
-          {{ ROLE_LABELS[member.role] ?? member.role }}
-        </p>
+      <div class="dash-brand">
+        <div class="dash-brand__logo">
+          {{ brandInitial }}
+        </div>
+        <div>
+          <p class="dash-brand__name">
+            {{ clinic?.name ?? 'العيادة' }}
+          </p>
+          <p class="dash-brand__role">
+            {{ member.displayName }} ·
+            {{ ROLE_LABELS[member.role] ?? member.role }}
+          </p>
+        </div>
       </div>
 
-      <nav class="shell__links">
+      <nav class="dash-nav">
         <router-link
           v-for="link in links"
           :key="link.name"
-          class="shell__link"
+          class="dash-navbtn"
+          active-class="dash-navbtn--active"
           :to="{ name: link.name }"
         >
           {{ link.label }}
@@ -67,7 +76,7 @@ async function signOut(): Promise<void> {
       </nav>
 
       <button
-        class="c-btn c-btn--ghost c-btn--block"
+        class="dbtn dbtn--ghost dbtn--block"
         :disabled="signingOut"
         @click="signOut"
       >
@@ -75,21 +84,19 @@ async function signOut(): Promise<void> {
       </button>
     </aside>
 
-    <main class="shell__main">
+    <main class="dash-main">
       <section
         v-if="state.identityError === 'forbidden'"
-        class="shell__blocked"
+        class="dash-blocked"
       >
-        <div class="c-card c-stack">
-          <h1 class="c-title">
-            لا صلاحية لهذا الحساب
-          </h1>
-          <p class="c-muted">
+        <div class="dcard dcard--pad dstack">
+          <h1>لا صلاحية لهذا الحساب</h1>
+          <p class="dmuted">
             هذا الحساب ليس مسجَّلاً ضمن فريق العيادة. إن كنتِ من الفريق،
             تواصلي مع مسؤول العيادة لإضافة حسابك.
           </p>
           <button
-            class="c-btn c-btn--ghost"
+            class="dbtn dbtn--ghost"
             :disabled="signingOut"
             @click="signOut"
           >
@@ -100,18 +107,16 @@ async function signOut(): Promise<void> {
 
       <section
         v-else-if="state.identityError === 'unavailable'"
-        class="shell__blocked"
+        class="dash-blocked"
       >
-        <div class="c-card c-stack">
-          <h1 class="c-title">
-            تعذَّر الاتصال بالخادم
-          </h1>
-          <p class="c-muted">
+        <div class="dcard dcard--pad dstack">
+          <h1>تعذَّر الاتصال بالخادم</h1>
+          <p class="dmuted">
             لم نتمكن من تحميل بيانات العيادة. تحقّقي من الاتصال ثم أعيدي
             المحاولة.
           </p>
           <button
-            class="c-btn"
+            class="dbtn dbtn--primary"
             @click="session.refreshIdentity()"
           >
             إعادة المحاولة
@@ -119,96 +124,44 @@ async function signOut(): Promise<void> {
         </div>
       </section>
 
-      <router-view v-else />
+      <!--
+        The scroll container, and the only place page padding is defined. A
+        screen that set its own would drift from every other one.
+      -->
+      <div
+        v-else
+        class="dash-content"
+      >
+        <router-view />
+      </div>
     </main>
   </div>
 </template>
 
 <style scoped>
-.shell {
-  display: grid;
-  /* Logical placement: the sidebar sits on the reading-start side, which is
-     the right under RTL, without a single direction-specific rule. */
-  grid-template-columns: 248px 1fr;
-  min-height: 100vh;
-}
-
-.shell__nav {
-  display: flex;
-  flex-direction: column;
-  gap: var(--c-space-lg);
-  padding: var(--c-space-lg) var(--c-space);
-  background: var(--c-surface);
-  border-inline-end: 1px solid var(--c-border);
-}
-
-.shell__brand {
-  display: flex;
-  flex-direction: column;
-  gap: var(--c-space-xs);
-}
-
-.shell__clinic {
-  margin: 0;
-  font-weight: 700;
-  color: var(--c-primary);
-}
-
-.shell__role {
-  margin: 0;
-  font-size: 0.85rem;
-}
-
-.shell__links {
-  display: flex;
-  flex-direction: column;
-  gap: var(--c-space-xs);
-  flex: 1;
-}
-
-.shell__link {
-  padding: 10px 12px;
-  border-radius: var(--c-radius-sm);
-  color: var(--c-text);
-  text-decoration: none;
-  font-weight: 600;
-}
-
-.shell__link:hover {
-  background: var(--c-surface-muted);
-}
-
-.shell__link.router-link-active {
-  background: var(--c-primary-soft);
-  color: var(--c-primary);
-}
-
-.shell__main {
-  padding: var(--c-space-lg);
-  overflow-x: auto;
-}
-
-.shell__blocked {
+.dash-blocked {
   display: grid;
   place-items: center;
-  min-height: 60vh;
+  min-height: 70vh;
+  padding: 24px;
 }
 
-.shell__blocked .c-card {
+.dash-blocked .dcard {
   max-width: 460px;
 }
 
 @media (max-width: 720px) {
-  .shell {
-    grid-template-columns: 1fr;
+  .dash {
+    flex-direction: column;
   }
 
-  .shell__nav {
+  .dash-side {
+    width: 100%;
     border-inline-end: none;
-    border-block-end: 1px solid var(--c-border);
+    border-block-end: 1px solid var(--line);
   }
 
-  .shell__links {
+  .dash-nav {
     flex-direction: row;
     flex-wrap: wrap;
   }

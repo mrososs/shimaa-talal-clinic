@@ -10,6 +10,7 @@ import {
 } from '@ionic/vue';
 import FormNotice from '../../../shared/components/FormNotice.vue';
 import { apiMessage } from '../../../shared/messages';
+import { arabicDigits } from '../../../shared/numerals';
 import { identityApi, session } from '../../../runtime';
 
 /**
@@ -63,26 +64,26 @@ async function submit(): Promise<void> {
 <template>
   <ion-page>
     <ion-content>
-      <div class="clinic-page onboarding">
+      <div class="screen onboarding">
         <header>
-          <h1 class="clinic-title">
+          <h1 class="title">
             هذا الرقم مسجَّل لدينا
           </h1>
-          <p class="clinic-subtitle">
+          <p class="subtitle">
             لدى العيادة ملف عائلي مرتبط بالرقم
-            <span class="phone clinic-numerals">{{ phone }}</span>. لربطه بحسابك، اطلبي من الاستقبال رمز التأكيد المكوَّن من ٦ أرقام.
+            <span class="phone">{{ arabicDigits(phone) }}</span>. لربطه بحسابك، اطلبي من الاستقبال رمز التأكيد المكوَّن من ٦ أرقام.
           </p>
         </header>
 
-        <div class="clinic-card hint">
-          <p class="clinic-muted">
+        <div class="card hint">
+          <p class="subtle">
             الرمز صالح لمدة ١٥ دقيقة ويُستخدم مرة واحدة. لا يُرسَل عبر رسالة —
             تحصلين عليه من الاستقبال مباشرةً أو أثناء المكالمة.
           </p>
         </div>
 
         <form
-          class="clinic-stack"
+          class="stack"
           novalidate
           @submit.prevent="submit"
         >
@@ -94,14 +95,14 @@ async function submit(): Promise<void> {
             inputmode="numeric"
             :maxlength="6"
             fill="outline"
-            class="code clinic-numerals"
+            class="code"
             :class="{ 'ion-invalid': codeError, 'ion-touched': submitted }"
             :error-text="codeError ?? undefined"
           />
 
           <form-notice :message="failure" />
 
-          <div class="clinic-actions">
+          <div class="actions">
             <ion-button
               type="submit"
               expand="block"
@@ -137,7 +138,7 @@ async function submit(): Promise<void> {
 }
 
 .hint {
-  margin-block: var(--clinic-space);
+  margin-block: 16px;
 }
 
 .hint p {
@@ -148,7 +149,7 @@ async function submit(): Promise<void> {
 
 .phone {
   font-weight: 700;
-  color: var(--ion-text-color);
+  color: var(--ink);
   direction: ltr;
   unicode-bidi: embed;
 }

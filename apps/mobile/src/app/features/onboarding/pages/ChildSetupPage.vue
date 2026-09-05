@@ -81,18 +81,18 @@ async function submit(): Promise<void> {
 <template>
   <ion-page>
     <ion-content>
-      <div class="clinic-page onboarding">
+      <div class="screen onboarding">
         <header>
-          <h1 class="clinic-title">
+          <h1 class="title">
             بيانات طفلك
           </h1>
-          <p class="clinic-subtitle">
+          <p class="subtitle">
             يمكنك إضافة بقية الأطفال لاحقاً من الصفحة الرئيسية.
           </p>
         </header>
 
         <form
-          class="clinic-stack"
+          class="stack"
           novalidate
           @submit.prevent="submit"
         >
@@ -116,7 +116,7 @@ async function submit(): Promise<void> {
           />
 
           <div>
-            <p class="clinic-muted field-label">
+            <p class="subtle field-label">
               النوع (اختياري)
             </p>
             <ion-segment v-model="sex">
@@ -132,7 +132,7 @@ async function submit(): Promise<void> {
 
           <form-notice :message="failure" />
 
-          <div class="clinic-actions">
+          <div class="actions">
             <ion-button
               type="submit"
               expand="block"
@@ -159,7 +159,7 @@ async function submit(): Promise<void> {
 }
 
 .field-label {
-  margin: 0 0 var(--clinic-space-sm);
+  margin: 0 0 8px;
   font-size: 0.85rem;
 }
 </style>

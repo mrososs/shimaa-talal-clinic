@@ -1,0 +1,90 @@
+/* ========================================================================
+   عيادة د. شيماء طلال — the design system's token layer.
+   Warm · rounded · playful (RTL Arabic)
+
+   Ported from the prototype's `styles.css`. This file is the single source of
+   colour, radius, shadow and type for BOTH apps — the mobile app and the
+   dashboard are the same clinic seen from two sides of the desk, and the
+   prototype's own `dash.css` says so in its first comment: "Reuses tokens from
+   styles.css".
+
+   Component classes do NOT belong here. Mobile builds on Ionic's components and
+   maps these onto `--ion-*`; the dashboard has its own `.d*` primitives. What
+   they share is exactly this.
+   ======================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Baloo+Bhaijaan+2:wght@500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap');
+
+:root {
+  /* ---- warm playful palette ---- */
+  --bg: #fff4ec; /* warm cream backdrop */
+  --bg-2: #ffefe6;
+  --surface: #ffffff;
+  --surface-2: #fff9f5;
+
+  /* Coral is the primary. Not teal — the warmth is the brand. */
+  --coral: #ff7e5f;
+  --coral-ink: #d24a2c;
+  --coral-soft: #ffe4db;
+
+  --teal: #21bfa6;
+  --teal-ink: #0e7a6b;
+  --teal-soft: #d2f4ed;
+
+  --sky: #4fb7f0;
+  --sky-soft: #dcf0fd;
+
+  --sun: #ffc24b;
+  --sun-soft: #fff0cc;
+
+  --lav: #a78be6;
+  --lav-soft: #ece4fb;
+
+  --rose: #ff6f9c;
+  --rose-soft: #ffe1ec;
+
+  --ink: #3a3340; /* primary text */
+  --ink-2: #6b6470; /* secondary text */
+  --muted: #9c95a3; /* tertiary text */
+  --line: #f0e7e0; /* hairlines */
+
+  --ok: #2fb479;
+  --warn: #f4a52b;
+  --danger: #ef5b5b;
+
+  /* ---- radii: generous, and pill for anything pressable ---- */
+  --r-sm: 14px;
+  --r-md: 20px;
+  --r-lg: 28px;
+  --r-xl: 34px;
+  --r-pill: 999px;
+
+  /* ---- shadows: warm-tinted, never neutral grey ---- */
+  --sh-sm: 0 4px 14px rgba(210, 120, 80, 0.1);
+  --sh-md: 0 12px 30px rgba(200, 110, 70, 0.14);
+  --sh-lg: 0 20px 48px rgba(190, 100, 60, 0.18);
+
+  /*
+   * Two families, and the split carries meaning: Baloo for anything that should
+   * feel spoken — headings, numbers, a ticket number — and Tajawal for reading.
+   */
+  --ff-display: 'Baloo Bhaijaan 2', system-ui, sans-serif;
+  --ff-body: 'Tajawal', system-ui, sans-serif;
+}
+
+/*
+ * Numbers, wherever they carry weight.
+ *
+ * `tabular-nums` keeps a live counter from jittering as it counts down, which
+ * matters more here than anywhere: the queue position and the grace timer both
+ * change while someone is looking at them.
+ */
+.t-num {
+  font-family: var(--ff-display);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.t-display {
+  font-family: var(--ff-display);
+}

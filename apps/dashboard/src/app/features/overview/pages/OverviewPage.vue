@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { arabicDigits } from '../../../shared/numerals';
 import { session } from '../../../runtime';
 
 /**
@@ -29,36 +30,36 @@ const todayLabel = computed(() => {
 <template>
   <div
     v-if="identity"
-    class="c-stack"
+    class="dstack"
   >
     <header>
-      <h1 class="c-title">
+      <h1>
         اليوم
       </h1>
-      <p class="c-muted c-numerals">
+      <p class="dmuted">
         {{ todayLabel }}
       </p>
     </header>
 
-    <section class="c-card c-stack">
+    <section class="dcard dcard--pad dstack">
       <h2 class="overview__heading">
         إعدادات العيادة
       </h2>
-      <dl class="overview__facts c-numerals">
+      <dl class="overview__facts">
         <div>
-          <dt class="c-field__label">
+          <dt class="dfield__label">
             المنطقة الزمنية
           </dt>
           <dd>{{ identity.clinic.timezone }}</dd>
         </div>
         <div>
-          <dt class="c-field__label">
+          <dt class="dfield__label">
             مهلة الحضور
           </dt>
-          <dd>{{ identity.clinic.gracePeriodMinutes }} دقيقة</dd>
+          <dd>{{ arabicDigits(identity.clinic.gracePeriodMinutes) }} دقيقة</dd>
         </div>
         <div>
-          <dt class="c-field__label">
+          <dt class="dfield__label">
             حجوزات الأهل
           </dt>
           <dd>
@@ -84,7 +85,7 @@ const todayLabel = computed(() => {
 .overview__facts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: var(--c-space);
+  gap: 16px;
   margin: 0;
 }
 

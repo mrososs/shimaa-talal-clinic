@@ -26,26 +26,27 @@ defineProps<{
 <style scoped>
 .notice {
   margin: 0;
-  padding: var(--clinic-space-sm) var(--clinic-space);
-  border-radius: var(--clinic-radius-sm);
-  font-size: 0.9rem;
-  line-height: 1.6;
+  padding: 12px 16px;
+  border-radius: var(--r-sm);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.7;
   /* Logical, so the accent sits on the correct side under RTL and LTR alike. */
   border-inline-start: 3px solid currentColor;
 }
 
 .notice--error {
-  color: var(--ion-color-danger);
-  background: rgba(var(--ion-color-danger-rgb), 0.08);
+  color: var(--danger);
+  background: #fde6e6;
 }
 
 .notice--info {
-  color: var(--ion-color-primary);
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
+  color: var(--coral-ink);
+  background: var(--coral-soft);
 }
 
 .notice--success {
-  color: var(--ion-color-success);
-  background: rgba(var(--ion-color-success-rgb), 0.08);
+  color: var(--teal-ink);
+  background: var(--teal-soft);
 }
 </style>

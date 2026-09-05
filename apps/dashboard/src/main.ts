@@ -1,6 +1,8 @@
 import { createApp } from 'vue';
 import App from './app/App.vue';
 import { router, startSession } from './app/router';
+// The shared token layer first: the dashboard's own file builds on it.
+import '@clinic/client-theme';
 import './app/shared/styles/tokens.css';
 import './styles.css';
 

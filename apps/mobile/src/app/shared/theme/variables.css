@@ -1,156 +1,305 @@
-/*
- * The clinic's visual language, as Ionic reads it.
- *
- * Ionic components take their colours from CSS custom properties, so the theme
- * is defined here once rather than restated in every component's <style> block.
- * Anything a screen needs that Ionic does not own gets a `--clinic-*` token
- * below.
- *
- * This is a pediatric clinic in Cairo: the palette is calm and warm rather than
- * clinical-blue, and the whole product is Arabic and right-to-left. `dir="rtl"`
- * is set on the document in main.ts, not here, because direction is a document
- * fact rather than a style — but every rule below is written with logical
- * properties so that it holds either way.
- */
+/* ========================================================================
+   The mobile app's component layer.
+
+   The tokens come from `@clinic/client-theme`, which both apps share. This file
+   does two jobs and no others:
+
+     1. Maps those tokens onto Ionic's `--ion-*` variables, so Ionic's own
+        components (buttons, inputs, segments) inherit the clinic's look
+        instead of the framework's default blue.
+     2. Ports the prototype's mobile primitives — `.btn`, `.card`, `.chip`,
+        `.appbar` — which are what the screens are actually built from.
+
+   Direction is set on the document in main.ts, not here: Ionic reads it when it
+   decides which way a page transition slides.
+   ======================================================================== */
 
 :root {
-  /* Teal, not the default Ionic blue. Reads as care rather than software. */
-  --ion-color-primary: #0e7c7b;
-  --ion-color-primary-rgb: 14, 124, 123;
+  /* ---- Ionic's palette, in the clinic's colours ---- */
+
+  /* Coral is primary. The warmth is the brand. */
+  --ion-color-primary: #ff7e5f;
+  --ion-color-primary-rgb: 255, 126, 95;
   --ion-color-primary-contrast: #ffffff;
   --ion-color-primary-contrast-rgb: 255, 255, 255;
-  --ion-color-primary-shade: #0c6d6c;
-  --ion-color-primary-tint: #278988;
+  --ion-color-primary-shade: #e06b4f;
+  --ion-color-primary-tint: #ff9179;
 
-  /* Warm coral, for the one action per screen that matters most. */
-  --ion-color-secondary: #e07a5f;
-  --ion-color-secondary-rgb: 224, 122, 95;
+  --ion-color-secondary: #21bfa6;
+  --ion-color-secondary-rgb: 33, 191, 166;
   --ion-color-secondary-contrast: #ffffff;
   --ion-color-secondary-contrast-rgb: 255, 255, 255;
-  --ion-color-secondary-shade: #c56b53;
-  --ion-color-secondary-tint: #e4876f;
+  --ion-color-secondary-shade: #1da892;
+  --ion-color-secondary-tint: #37c6af;
 
-  --ion-color-success: #2e7d5b;
-  --ion-color-success-rgb: 46, 125, 91;
+  --ion-color-tertiary: #4fb7f0;
+  --ion-color-tertiary-rgb: 79, 183, 240;
+  --ion-color-tertiary-contrast: #ffffff;
+  --ion-color-tertiary-contrast-rgb: 255, 255, 255;
+  --ion-color-tertiary-shade: #46a1d3;
+  --ion-color-tertiary-tint: #61bef2;
+
+  --ion-color-success: #2fb479;
+  --ion-color-success-rgb: 47, 180, 121;
   --ion-color-success-contrast: #ffffff;
   --ion-color-success-contrast-rgb: 255, 255, 255;
-  --ion-color-success-shade: #286e50;
-  --ion-color-success-tint: #438a6b;
+  --ion-color-success-shade: #299e6b;
+  --ion-color-success-tint: #44bc87;
 
-  --ion-color-warning: #b57614;
-  --ion-color-warning-rgb: 181, 118, 20;
-  --ion-color-warning-contrast: #ffffff;
-  --ion-color-warning-contrast-rgb: 255, 255, 255;
-  --ion-color-warning-shade: #9f6812;
-  --ion-color-warning-tint: #bc842c;
+  --ion-color-warning: #f4a52b;
+  --ion-color-warning-rgb: 244, 165, 43;
+  --ion-color-warning-contrast: #3a3340;
+  --ion-color-warning-contrast-rgb: 58, 51, 64;
+  --ion-color-warning-shade: #d79126;
+  --ion-color-warning-tint: #f5ae40;
 
-  --ion-color-danger: #b3261e;
-  --ion-color-danger-rgb: 179, 38, 30;
+  --ion-color-danger: #ef5b5b;
+  --ion-color-danger-rgb: 239, 91, 91;
   --ion-color-danger-contrast: #ffffff;
   --ion-color-danger-contrast-rgb: 255, 255, 255;
-  --ion-color-danger-shade: #9e211a;
-  --ion-color-danger-tint: #bb3c35;
+  --ion-color-danger-shade: #d25050;
+  --ion-color-danger-tint: #f16b6b;
 
-  --ion-background-color: #f7f5f2;
-  --ion-background-color-rgb: 247, 245, 242;
-  --ion-text-color: #21201d;
-  --ion-text-color-rgb: 33, 32, 29;
+  --ion-color-medium: #9c95a3;
+  --ion-color-medium-rgb: 156, 149, 163;
+  --ion-color-medium-contrast: #ffffff;
+  --ion-color-medium-contrast-rgb: 255, 255, 255;
+  --ion-color-medium-shade: #898390;
+  --ion-color-medium-tint: #a6a0ac;
 
-  /*
-   * An Arabic-first stack. No webfont is downloaded: this ships as a native app
-   * on a metered connection, and every one of these renders Arabic correctly on
-   * the platforms the app targets.
-   */
-  --ion-font-family: 'Cairo', 'Tajawal', 'Segoe UI', 'Helvetica Neue',
-    system-ui, -apple-system, 'Noto Sans Arabic', sans-serif;
+  /* Warm cream, not neutral grey. */
+  --ion-background-color: #fff4ec;
+  --ion-background-color-rgb: 255, 244, 236;
+  --ion-text-color: #3a3340;
+  --ion-text-color-rgb: 58, 51, 64;
 
-  --clinic-surface: #ffffff;
-  --clinic-surface-muted: #efeae4;
-  --clinic-border: #e2dcd4;
-  --clinic-text-muted: #6b665e;
+  --ion-item-background: #ffffff;
+  --ion-card-background: #ffffff;
+  --ion-toolbar-background: #fff4ec;
+  --ion-border-color: #f0e7e0;
 
-  --clinic-radius: 16px;
-  --clinic-radius-sm: 10px;
-  --clinic-space-xs: 4px;
-  --clinic-space-sm: 8px;
-  --clinic-space: 16px;
-  --clinic-space-lg: 24px;
-  --clinic-space-xl: 32px;
-
-  --clinic-shadow: 0 1px 2px rgba(33, 32, 29, 0.06),
-    0 8px 24px rgba(33, 32, 29, 0.05);
+  --ion-font-family: var(--ff-body);
 }
 
-/*
- * Arabic-Indic numerals throughout.
- *
- * The clinic reads ٢٤, not 24. This is a font feature rather than a string
- * transform, so numbers stay numbers — sortable, comparable, and still correct
- * when a screen reader reaches them.
- */
-:root {
-  --clinic-numerals: 'Cairo', 'Tajawal', sans-serif;
+/* Headings speak; body reads. */
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--ff-display);
+  margin: 0;
+  font-weight: 700;
 }
 
-.clinic-numerals {
-  font-feature-settings: 'anum';
-  font-variant-numeric: normal;
+p {
+  margin: 0;
 }
 
 /* --------------------------------------------------------------------------
- * The handful of primitives every screen uses. Kept here, and small, because
- * the alternative is each page inventing its own card.
+ * Ionic component overrides
+ *
+ * Only where Ionic's default contradicts the design: rounded pill controls,
+ * warm surfaces, and inputs that read as cards rather than as form fields.
  * ----------------------------------------------------------------------- */
 
-.clinic-card {
-  background: var(--clinic-surface);
-  border: 1px solid var(--clinic-border);
-  border-radius: var(--clinic-radius);
-  padding: var(--clinic-space);
-  box-shadow: var(--clinic-shadow);
+ion-content {
+  --background: var(--bg);
 }
 
-.clinic-stack {
-  display: flex;
-  flex-direction: column;
-  gap: var(--clinic-space);
-}
-
-.clinic-stack--tight {
-  gap: var(--clinic-space-sm);
-}
-
-.clinic-page {
-  padding: var(--clinic-space);
-  padding-block-end: var(--clinic-space-xl);
-}
-
-.clinic-title {
-  font-size: 1.4rem;
+ion-button {
+  --border-radius: var(--r-pill);
+  --box-shadow: 0 8px 20px rgba(255, 126, 95, 0.4);
+  --padding-top: 20px;
+  --padding-bottom: 20px;
+  font-family: var(--ff-body);
   font-weight: 700;
-  margin: 0;
+  font-size: 16px;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
-.clinic-subtitle {
-  color: var(--clinic-text-muted);
-  margin: 0;
-  line-height: 1.6;
+ion-button[fill='clear'] {
+  --box-shadow: none;
+  --color: var(--coral-ink);
+  font-weight: 700;
 }
 
-.clinic-muted {
-  color: var(--clinic-text-muted);
+ion-button[fill='outline'] {
+  --box-shadow: none;
+  --border-width: 1.5px;
+  --border-color: var(--line);
+  --color: var(--ink);
+  --background: var(--surface);
 }
 
-/* Logical properties, so the rule survives a direction change unedited. */
-.clinic-inline {
-  display: flex;
+ion-input {
+  --background: var(--surface);
+  --border-radius: var(--r-md);
+  --border-color: var(--line);
+  --border-width: 1.5px;
+  --highlight-color-focused: var(--coral);
+  --padding-start: 16px;
+  --padding-end: 16px;
+  --padding-top: 14px;
+  --padding-bottom: 14px;
+  --placeholder-color: var(--muted);
+  font-weight: 600;
+  box-shadow: var(--sh-sm);
+  border-radius: var(--r-md);
+  margin-block-end: 2px;
+}
+
+ion-input.ion-invalid.ion-touched {
+  --border-color: var(--danger);
+}
+
+/* The relationship / sex picker: a soft track with a raised active pill. */
+ion-segment {
+  --background: var(--surface-2);
+  border-radius: var(--r-sm);
+  border: 1.5px solid var(--line);
+  padding: 5px;
+}
+
+ion-segment-button {
+  --background-checked: var(--surface);
+  --color: var(--ink-2);
+  --color-checked: var(--coral-ink);
+  --border-radius: 10px;
+  --indicator-color: transparent;
+  --indicator-box-shadow: none;
+  min-height: 38px;
+  font-family: var(--ff-body);
+  font-weight: 800;
+  font-size: 13.5px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+ion-segment-button.segment-button-checked {
+  box-shadow: var(--sh-sm);
+}
+
+ion-spinner {
+  --color: currentColor;
+}
+
+/* --------------------------------------------------------------------------
+ * The prototype's own primitives.
+ * ----------------------------------------------------------------------- */
+
+.card {
+  background: var(--surface);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-md);
+  padding: var(--r-sm);
+}
+
+.chip {
+  display: inline-flex;
   align-items: center;
-  gap: var(--clinic-space-sm);
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--r-pill);
+  font-size: 13.5px;
+  font-weight: 700;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  border: 1.5px solid var(--line);
 }
 
-.clinic-actions {
+.chip--on {
+  background: var(--coral-soft);
+  color: var(--coral-ink);
+  border-color: transparent;
+}
+
+.section-title {
+  font-family: var(--ff-display);
+  font-weight: 700;
+  font-size: 19px;
+  color: var(--ink);
+}
+
+.title {
+  font-family: var(--ff-display);
+  font-weight: 800;
+  font-size: 26px;
+  line-height: 1.3;
+  color: var(--ink);
+}
+
+.subtitle {
+  color: var(--ink-2);
+  line-height: 1.7;
+  font-weight: 500;
+}
+
+.hero-grad {
+  background: linear-gradient(135deg, #ff8e6e, #ff7e5f 55%, #ff6f8e 130%);
+}
+
+.avatar {
+  border-radius: var(--r-pill);
+  display: grid;
+  place-items: center;
+  font-family: var(--ff-display);
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+/* --------------------------------------------------------------------------
+ * Layout helpers used across screens.
+ * ----------------------------------------------------------------------- */
+
+.screen {
+  padding: 18px;
+  padding-block-end: 40px;
+  max-width: 520px;
+  margin-inline: auto;
+}
+
+.stack {
   display: flex;
   flex-direction: column;
-  gap: var(--clinic-space-sm);
-  margin-block-start: var(--clinic-space-lg);
+  gap: 16px;
+}
+
+.stack--tight {
+  gap: 8px;
+}
+
+.muted {
+  color: var(--ink-2);
+  line-height: 1.7;
+}
+
+.subtle {
+  color: var(--muted);
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-block-start: 24px;
+}
+
+/* Entrance, gated so a throttled tab never strands content off-screen. */
+@media (prefers-reduced-motion: no-preference) {
+  .pop {
+    animation: pop-in 0.4s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  }
+}
+
+@keyframes pop-in {
+  from {
+    transform: translateY(10px) scale(0.99);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
 }
