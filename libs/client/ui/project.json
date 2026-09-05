@@ -1,0 +1,9 @@
+{
+  "name": "client-ui",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/client/ui/src",
+  "projectType": "library",
+  "tags": ["type:util", "platform:client", "scope:shared"],
+  "// targets": "to see all targets run: nx show project client-ui --web",
+  "targets": {}
+}

@@ -38,6 +38,7 @@
       "@clinic/client-auth": ["./libs/client/auth/src/index.ts"],
       "@clinic/client-session": ["./libs/client/session/src/index.ts"],
       "@clinic/client-theme": ["./libs/client/theme/src/index.ts"],
+      "@clinic/client-ui": ["./libs/client/ui/src/index.ts"],
       "@clinic/server-core": ["./libs/server/core/src/index.ts"],
       "@clinic/server-booking": ["./libs/server/booking/src/index.ts"],
       "@clinic/server-queue": ["./libs/server/queue/src/index.ts"],

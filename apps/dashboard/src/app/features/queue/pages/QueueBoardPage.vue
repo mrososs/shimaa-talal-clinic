@@ -10,6 +10,7 @@ import {
 import { queueApi, session as staffSession } from '../../../runtime';
 import { agoLabel } from '../../../shared/format';
 import { arabicDigits } from '../../../shared/numerals';
+import ConfirmDialog from '../../../shared/components/ConfirmDialog.vue';
 import ReasonDialog from '../../../shared/components/ReasonDialog.vue';
 import { useQueueBoard } from '../composables/useQueueBoard';
 import ExpectedList from '../components/ExpectedList.vue';
@@ -168,15 +169,25 @@ function sessionCommand(
   void board.run(key, () => command(id));
 }
 
-function close(): void {
+/**
+ * Ending the day is final, and it cancels whoever is still in the line.
+ *
+ * Those families were told to wait, so the question names how many there are
+ * before it is answered — and it is asked in a dialog the clinic can read,
+ * rather than the browser's own, which renders "OK / Cancel" in English and
+ * left-to-right over an Arabic screen.
+ */
+const closing = ref(false);
+
+const closeMessage = computed(() => {
   const waiting = board.waiting.value.length;
-  // Closing cancels whoever is still in the line, and those families were told
-  // to wait. Naming the number is the least this can do before doing it.
-  const message =
-    waiting === 0
-      ? 'إنهاء اليوم؟ لا يمكن فتحه من جديد.'
-      : `ما زال ${arabicDigits(waiting)} في الانتظار. إنهاء اليوم؟`;
-  if (!window.confirm(message)) return;
+  return waiting === 0
+    ? 'سيُغلق يوم العيادة ولا يمكن فتحه من جديد.'
+    : `ما زال ${arabicDigits(waiting)} في الانتظار — سيُلغى دورهم، ولا يمكن فتح اليوم من جديد.`;
+});
+
+function confirmClose(): void {
+  closing.value = false;
   sessionCommand('close', (id) => queueApi.closeSession(id));
 }
 
@@ -219,7 +230,7 @@ function setPresence(presence: DoctorPresence): void {
         @open="sessionCommand('open', (id) => queueApi.openSession(id))"
         @pause="sessionCommand('pause', (id) => queueApi.pauseSession(id))"
         @resume="sessionCommand('resume', (id) => queueApi.resumeSession(id))"
-        @close="close"
+        @close="closing = true"
         @presence="setPresence"
         @pace="
           (minutes) =>
@@ -326,6 +337,16 @@ function setPresence(presence: DoctorPresence): void {
         </template>
       </p>
     </template>
+
+    <ConfirmDialog
+      :open="closing"
+      title="إنهاء اليوم"
+      :message="closeMessage"
+      confirm-label="إنهاء اليوم"
+      destructive
+      @confirm="confirmClose"
+      @cancel="closing = false"
+    />
 
     <ReasonDialog
       :open="ask !== null"

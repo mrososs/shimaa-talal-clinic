@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue';
+import { ClinicDialog } from '@clinic/client-ui';
 
 /**
  * "Why?" — asked once, properly, before something irreversible or unusual.
@@ -10,8 +11,9 @@ import { nextTick, ref, watch } from 'vue';
  * stored against the person who acted, so it has to be typed rather than
  * defaulted.
  *
- * Deliberately not `window.prompt`: it cannot be styled, it is not RTL, and it
- * blocks the polling loop that keeps the board behind it current.
+ * The modal itself — scrim, Escape, focus, the page lock — is
+ * `ClinicDialog`, shared with the mobile app. What is left here is the one
+ * thing that is actually about reasons.
  */
 
 const props = defineProps<{
@@ -42,6 +44,8 @@ watch(
     if (!open) return;
     reason.value = '';
     touched.value = false;
+    // After the dialog has taken focus itself, move it to the one field.
+    await nextTick();
     await nextTick();
     field.value?.focus();
   },
@@ -55,101 +59,56 @@ function confirm(): void {
 </script>
 
 <template>
-  <div
-    v-if="open"
-    class="scrim"
-    @click.self="emit('cancel')"
-    @keydown.esc="emit('cancel')"
+  <clinic-dialog
+    :open="open"
+    :title="title"
+    :subject="subject"
+    @close="emit('cancel')"
   >
-    <div
-      class="dcard dcard--pad sheet"
-      role="dialog"
-      aria-modal="true"
-      :aria-label="title"
+    <label class="dfield">
+      <span class="dfield__label">السبب</span>
+      <textarea
+        ref="field"
+        v-model="reason"
+        class="dinput sheet__text"
+        rows="3"
+        maxlength="280"
+        :placeholder="placeholder"
+        :aria-invalid="touched && invalid() ? 'true' : undefined"
+        @blur="touched = true"
+      />
+    </label>
+
+    <p
+      v-if="touched && invalid()"
+      class="dnotice dnotice--error"
+      role="alert"
     >
-      <h2 class="dcard__title">
-        {{ title }}
-      </h2>
-      <p
-        v-if="subject"
-        class="dmuted sheet__subject"
+      يلزم ذكر السبب.
+    </p>
+
+    <template #actions>
+      <button
+        class="dbtn dbtn--ghost"
+        type="button"
+        @click="emit('cancel')"
       >
-        {{ subject }}
-      </p>
-
-      <label class="dfield">
-        <span class="dfield__label">السبب</span>
-        <textarea
-          ref="field"
-          v-model="reason"
-          class="dinput sheet__text"
-          rows="3"
-          maxlength="280"
-          :placeholder="placeholder"
-          :aria-invalid="touched && invalid() ? 'true' : undefined"
-          @blur="touched = true"
-        />
-      </label>
-
-      <p
-        v-if="touched && invalid()"
-        class="dnotice dnotice--error"
-        role="alert"
+        تراجع
+      </button>
+      <button
+        class="dbtn dbtn--primary"
+        type="button"
+        @click="confirm"
       >
-        يلزم ذكر السبب.
-      </p>
-
-      <div class="sheet__actions">
-        <button
-          class="dbtn dbtn--ghost"
-          type="button"
-          @click="emit('cancel')"
-        >
-          تراجع
-        </button>
-        <button
-          class="dbtn dbtn--primary"
-          type="button"
-          @click="confirm"
-        >
-          {{ confirmLabel }}
-        </button>
-      </div>
-    </div>
-  </div>
+        {{ confirmLabel }}
+      </button>
+    </template>
+  </clinic-dialog>
 </template>
 
 <style scoped>
-.scrim {
-  position: fixed;
-  inset: 0;
-  background: rgb(60 40 34 / 45%);
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  z-index: 40;
-}
-
-.sheet {
-  width: min(440px, 100%);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.sheet__subject {
-  margin: 0;
-  font-size: 13.5px;
-}
-
 .sheet__text {
   resize: vertical;
   font-family: var(--ff-body);
-}
-
-.sheet__actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
 }
 </style>
