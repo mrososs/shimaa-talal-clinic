@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   SERVER_CONFIG_NAMESPACE,
   ServerConfigError,
+  type ClinicDeploymentConfig,
   type DatabaseConfig,
   type NodeEnvironment,
   type SecurityConfig,
@@ -48,6 +49,11 @@ export class ServerConfigService {
   /** Application-level secrets. Never reaches a client. */
   get security(): SecurityConfig {
     return this.values.security;
+  }
+
+  /** The clinic this deployment serves. */
+  get clinic(): ClinicDeploymentConfig {
+    return this.values.clinic;
   }
 
   private get values(): ServerConfig {

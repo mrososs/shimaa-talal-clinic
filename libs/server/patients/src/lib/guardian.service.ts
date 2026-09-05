@@ -257,6 +257,61 @@ export class GuardianService {
     }
   }
 
+  /**
+   * Create a guardian that already belongs to the account creating it.
+   *
+   * One INSERT rather than a create followed by a link. A guardian committed
+   * without its account would be unreachable by the person who just registered
+   * — indistinguishable from a family reception had typed in — and would need a
+   * repair step that has no owner. The claim columns travel with it, so the
+   * row can never exist in the half-claimed state the CHECK constraint forbids.
+   */
+  async createSelfRegistered(
+    input: CreateGuardianInput,
+    authUserId: string,
+    db: SqlExecutor = this.database,
+  ): Promise<Guardian> {
+    const phoneE164 = this.requireE164(input.phone, input.region);
+
+    try {
+      const result = await db.query<GuardianRow>(
+        `insert into clinic.guardians
+           (clinic_id, full_name, phone_e164, phone_raw, email,
+            default_relationship, auth_user_id, claimed_at, claimed_via)
+         values ($1, $2, $3, $4, $5, $6, $7, now(), 'self_signup')
+         returning ${RETURNING_COLUMNS}`,
+        [
+          input.clinicId,
+          input.fullName.trim(),
+          phoneE164,
+          input.phone,
+          input.email ?? null,
+          input.defaultRelationship ?? null,
+          authUserId,
+        ],
+      );
+      return toGuardian(result.rows[0]);
+    } catch (error) {
+      if (isUniqueViolation(error, 'guardians_clinic_phone_uq')) {
+        // The clinic already knows this number. The caller is told to claim it
+        // rather than being handed a second record for the same family.
+        throw new PatientsError(
+          PatientsErrorCode.GuardianPhoneTaken,
+          'A guardian with that phone number already exists at this clinic.',
+          error,
+        );
+      }
+      if (isUniqueViolation(error, 'guardians_clinic_auth_user_uq')) {
+        throw new PatientsError(
+          PatientsErrorCode.AuthUserAlreadyLinked,
+          'This account already belongs to a guardian at this clinic.',
+          error,
+        );
+      }
+      throw error;
+    }
+  }
+
   async update(
     clinicId: string,
     guardianId: string,

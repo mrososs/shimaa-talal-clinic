@@ -59,6 +59,25 @@ export interface DatabaseConfig {
   ssl: boolean;
 }
 
+/**
+ * Which clinic this deployment serves.
+ *
+ * The schema is multi-tenant and stays that way — every table carries a
+ * `clinic_id`. This is a fact about the *deployment*, not the model: the mobile
+ * app is one clinic's app, so a parent who has not onboarded yet has no
+ * guardian row to learn a tenant from, and something has to say which clinic
+ * they are joining.
+ *
+ * Configuration rather than "the only row in the table", because a silent
+ * assumption that breaks the day a second clinic is added is worse than a line
+ * in .env. When the platform serves several clinics from one API, the client
+ * will name one and this goes away.
+ */
+export interface ClinicDeploymentConfig {
+  /** Matches `clinic.clinics.slug`. */
+  slug: string;
+}
+
 /** Secrets that protect application-level credentials, not infrastructure. */
 export interface SecurityConfig {
   /**
@@ -83,6 +102,7 @@ export interface ServerConfig {
   supabase: SupabaseServerConfig;
   database: DatabaseConfig;
   security: SecurityConfig;
+  clinic: ClinicDeploymentConfig;
 }
 
 export class ServerConfigError extends Error {
@@ -206,6 +226,16 @@ function readBoolean(
   );
 }
 
+function readClinicDeployment(env: RawServerEnv): ClinicDeploymentConfig {
+  return {
+    slug: requireString(
+      env,
+      'CLINIC_SLUG',
+      'The slug of the clinic this deployment serves, from clinic.clinics.',
+    ),
+  };
+}
+
 /** Minimum pepper length. A short secret is barely better than none. */
 const MIN_PEPPER_LENGTH = 32;
 
@@ -298,6 +328,7 @@ export function loadServerConfig(
     supabase: readSupabase(env),
     database: readDatabase(env),
     security: readSecurity(env),
+    clinic: readClinicDeployment(env),
   };
 }
 

@@ -214,6 +214,29 @@ export class ChildService {
     return db ? run(db) : this.database.transaction(run);
   }
 
+  /**
+   * Create a child for a guardian and return it with the relationship attached.
+   *
+   * The same unit of work as `createForGuardian`, shaped for a caller that is
+   * about to render the family list — it saves re-reading the link that was
+   * just written.
+   */
+  async createForGuardianLinked(
+    input: CreateChildInput & {
+      guardianId: string;
+      relationship: GuardianRelationship;
+      isPrimary?: boolean;
+    },
+    db?: SqlExecutor,
+  ): Promise<GuardianChild> {
+    const child = await this.createForGuardian(input, db);
+    return {
+      ...child,
+      relationship: input.relationship,
+      isPrimary: input.isPrimary ?? false,
+    };
+  }
+
   async update(
     clinicId: string,
     childId: string,

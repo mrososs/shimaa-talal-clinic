@@ -5,6 +5,7 @@ const MINIMAL_ENV = {
   SUPABASE_SECRET_KEY: 'sb_secret_for_tests',
   DATABASE_URL: 'postgresql://postgres:postgres@127.0.0.1:54322/postgres',
   CLAIM_CODE_PEPPER: 'a-test-pepper-of-at-least-thirty-two-characters',
+  CLINIC_SLUG: 'test-clinic',
 };
 
 /** The minimal environment with one required variable removed. */
@@ -137,6 +138,21 @@ describe('loadServerConfig', () => {
       expect(loadServerConfig(MINIMAL_ENV).security.claimCodePepper).toBe(
         MINIMAL_ENV.CLAIM_CODE_PEPPER,
       );
+    });
+  });
+
+  describe('clinic deployment', () => {
+    it('is required, because onboarding has to name a clinic', () => {
+      // A parent who has not onboarded has no guardian row to learn a tenant
+      // from. Guessing "the only clinic" would break silently the day a second
+      // one is added.
+      expect(() => loadServerConfig(envWithout('CLINIC_SLUG'))).toThrow(
+        ServerConfigError,
+      );
+    });
+
+    it('is exposed on the clinic section', () => {
+      expect(loadServerConfig(MINIMAL_ENV).clinic.slug).toBe('test-clinic');
     });
   });
 });

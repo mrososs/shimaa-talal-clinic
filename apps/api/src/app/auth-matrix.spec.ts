@@ -101,44 +101,31 @@ suite('auth matrix (HTTP)', () => {
 
   const tokens: Record<string, string> = {};
 
-  /** A throwaway account. Password is generated and never leaves this process. */
+  /**
+   * A throwaway account, and a session for it.
+   *
+   * Signs in with the password just set. Magic links are reserved for the two
+   * real staff accounts below, whose passwords must not be known here — OTP
+   * verification is rate limited, and spending it on accounts we control would
+   * make this suite unrunnable twice in a row.
+   */
   async function createUser(label: string): Promise<string> {
     const email = `${tag}-${label}@example.test`;
+    const password = randomBytes(24).toString('base64url');
+
     const created = await admin.auth.admin.createUser({
       email,
-      password: randomBytes(24).toString('base64url'),
+      password,
       email_confirm: true,
     });
     if (created.error) throw created.error;
     const id = created.data.user.id;
     createdUserIds.push(id);
-    tokens[label] = await mintToken(email);
+
+    const session = await anon.auth.signInWithPassword({ email, password });
+    if (session.error) throw session.error;
+    tokens[label] = session.data.session.access_token;
     return id;
-  }
-
-  /**
-   * A session for an existing account, without its password.
-   *
-   * `generateLink` is an admin operation that returns the link rather than
-   * sending it, so the real staff accounts can be exercised without anyone
-   * needing to know or change their credentials.
-   */
-  async function mintToken(email: string): Promise<string> {
-    const link = await admin.auth.admin.generateLink({
-      type: 'magiclink',
-      email,
-    });
-    if (link.error) throw link.error;
-
-    const verified = await anon.auth.verifyOtp({
-      token_hash: link.data.properties.hashed_token,
-      type: 'magiclink',
-    });
-    if (verified.error) throw verified.error;
-
-    const token = verified.data.session?.access_token;
-    if (token === undefined) throw new Error(`No session issued for ${email}.`);
-    return token;
   }
 
   async function get(
@@ -174,9 +161,34 @@ suite('auth matrix (HTTP)', () => {
     );
     otherClinicId = other.rows[0].id;
 
-    // The real staff, linked by the bootstrap script.
-    tokens['doctor'] = await mintToken('doctor@email.com');
-    tokens['reception'] = await mintToken('reception@email.com');
+    // Staff for the HTTP role checks.
+    //
+    // Throwaway accounts linked as members, rather than sessions minted for the
+    // real doctor@ / reception@ logins. Getting a token for an account whose
+    // password must stay unknown means an admin magic link, and OTP
+    // verification is rate limited hard enough that two runs in quick
+    // succession fail — a security suite that goes red on a second run trains
+    // people to ignore it.
+    //
+    // Nothing is lost: the resolver keys on auth_user_id, so what these prove
+    // is that a member with a role resolves that role. That the real accounts
+    // hold those roles is asserted separately, straight from the database, in
+    // the last test here.
+    const doctorUserId = await createUser('doctor');
+    await db.database.query(
+      `insert into clinic.clinic_members
+         (clinic_id, auth_user_id, role, display_name)
+       values ($1, $2, 'doctor', 'Matrix Doctor')`,
+      [pilotClinicId, doctorUserId],
+    );
+
+    const receptionUserId = await createUser('reception');
+    await db.database.query(
+      `insert into clinic.clinic_members
+         (clinic_id, auth_user_id, role, display_name)
+       values ($1, $2, 'reception', 'Matrix Reception')`,
+      [pilotClinicId, receptionUserId],
+    );
 
     // A signed-in user who has not onboarded.
     await createUser('fresh');
@@ -287,7 +299,7 @@ suite('auth matrix (HTTP)', () => {
     });
   });
 
-  it('5. the doctor account resolves the doctor role', async () => {
+  it('5. a doctor member resolves the doctor role', async () => {
     const response = await get('/probe/doctor', tokens['doctor']);
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
@@ -296,7 +308,7 @@ suite('auth matrix (HTTP)', () => {
     });
   });
 
-  it('6. the reception account resolves the reception role', async () => {
+  it('6. a reception member resolves the reception role', async () => {
     const response = await get('/probe/reception', tokens['reception']);
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
@@ -364,5 +376,27 @@ suite('auth matrix (HTTP)', () => {
   it('12. a garbage token is refused without reaching a handler', async () => {
     const response = await get('/probe/authenticated', 'not-a-real-token');
     expect(response.status).toBe(401);
+  });
+
+  it('13. the real staff accounts hold the roles the bootstrap gave them', async () => {
+    // The other half of items 5 and 6: those prove a role resolves over HTTP,
+    // this proves these two accounts carry those roles. Read straight from the
+    // database, so it needs no session and cannot be rate limited.
+    const rows = await db.database.query<{
+      email: string;
+      role: string;
+      status: string;
+    }>(
+      `select u.email, m.role, m.status
+         from clinic.clinic_members m
+         join auth.users u on u.id = m.auth_user_id
+        where u.email in ('doctor@email.com', 'reception@email.com')
+        order by u.email`,
+    );
+
+    expect(rows.rows).toEqual([
+      { email: 'doctor@email.com', role: 'doctor', status: 'active' },
+      { email: 'reception@email.com', role: 'reception', status: 'active' },
+    ]);
   });
 });
