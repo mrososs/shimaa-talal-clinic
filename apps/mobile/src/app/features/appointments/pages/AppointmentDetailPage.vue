@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { IonButton, IonSpinner } from '@ionic/vue';
 import { AppointmentStatus, type Appointment } from '@clinic/contracts';
+import { ClinicDialog } from '@clinic/client-ui';
 import ScreenShell from '../../../shared/components/ScreenShell.vue';
 import FormNotice from '../../../shared/components/FormNotice.vue';
 import { dayLabel, windowLabel } from '../../../shared/format';
@@ -69,6 +70,17 @@ const STATUS: Record<string, { label: string; note: string; tone: string }> = {
   no_show: { label: 'لم يتم الحضور', note: '', tone: 'danger' },
 };
 
+/**
+ * Once reception has checked them in, the queue is where the answer is.
+ *
+ * The link only appears in that state. Offering it earlier would suggest a
+ * turn exists before anybody has arrived, which is the confusion the whole
+ * appointment-versus-queue split exists to avoid.
+ */
+const inClinic = computed(
+  () => appointment.value?.status === AppointmentStatus.CheckedIn,
+);
+
 /** Only a live appointment can still be called off. */
 const canCancel = computed(
   () =>
@@ -90,7 +102,17 @@ async function load(): Promise<void> {
   }
 }
 
+/**
+ * Cancelling is asked about first.
+ *
+ * It gives up a seat somebody else can take, and the clinic's cutoff may make
+ * it final. That question used to be a bare button; it is now the same dialog
+ * the clinic staff see, in Arabic and right-to-left, rather than the browser's.
+ */
+const confirming = ref(false);
+
 async function cancel(): Promise<void> {
+  confirming.value = false;
   if (appointment.value === null) return;
   working.value = true;
   failure.value = null;
@@ -160,7 +182,19 @@ onMounted(load);
       <form-notice :message="failure" />
 
       <div
-        v-if="canCancel"
+        v-if="inClinic"
+        class="actions"
+      >
+        <ion-button
+          expand="block"
+          @click="router.replace({ name: 'queue' })"
+        >
+          متابعة دورك في الطابور
+        </ion-button>
+      </div>
+
+      <div
+        v-else-if="canCancel"
         class="actions"
       >
         <ion-button
@@ -168,7 +202,7 @@ onMounted(load);
           fill="outline"
           color="danger"
           :disabled="working"
-          @click="cancel"
+          @click="confirming = true"
         >
           <ion-spinner
             v-if="working"
@@ -195,10 +229,44 @@ onMounted(load);
       v-else
       :message="failure"
     />
+
+    <clinic-dialog
+      :open="confirming"
+      title="إلغاء الموعد"
+      :subject="appointment ? dayLabel(appointment.windowStart) : undefined"
+      @close="confirming = false"
+    >
+      <p class="muted confirm">
+        سيُلغى هذا الموعد ويُتاح مكانه لعائلة أخرى. يمكنك الحجز من جديد في أي
+        وقت.
+      </p>
+
+      <template #actions>
+        <ion-button
+          fill="outline"
+          size="small"
+          @click="confirming = false"
+        >
+          تراجع
+        </ion-button>
+        <ion-button
+          color="danger"
+          size="small"
+          @click="cancel"
+        >
+          تأكيد الإلغاء
+        </ion-button>
+      </template>
+    </clinic-dialog>
   </screen-shell>
 </template>
 
 <style scoped>
+.confirm {
+  margin: 0;
+  font-size: 14px;
+}
+
 .card--centre {
   display: grid;
   place-items: center;

@@ -14,6 +14,7 @@ import {
   createIdentityApi,
   type IdentityApi,
 } from './features/identity/identity.api';
+import { createQueueApi, type QueueApi } from './features/queue/queue.api';
 
 /**
  * Composition root for everything this app talks to.
@@ -45,6 +46,7 @@ export const apiClient: ApiClient = createApiClient({
 
 export const identityApi: IdentityApi = createIdentityApi(apiClient);
 export const bookingApi: BookingApi = createBookingApi(apiClient);
+export const queueApi: QueueApi = createQueueApi(apiClient);
 
 /**
  * The signed-in session, and who that account is at the clinic.

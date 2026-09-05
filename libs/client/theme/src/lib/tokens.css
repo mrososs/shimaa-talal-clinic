@@ -35,6 +35,10 @@
   --sky-soft: #dcf0fd;
 
   --sun: #ffc24b;
+  /* Readable on --sun-soft. Coral and teal both had an ink; warn did not, and
+     a warning that has to borrow another colour's text is a warning nobody
+     styles the same way twice. */
+  --sun-ink: #8a5a00;
   --sun-soft: #fff0cc;
 
   --lav: #a78be6;
