@@ -64,6 +64,8 @@ export function describeWithDatabase(
       fixture.db = createTestDatabase(url);
       const sql = fixture.db.database;
 
+      await sweepStaleFixtures(sql);
+
       fixture.clinicId = await insertClinic(sql, `${SUITE_TAG}-a`);
       fixture.otherClinicId = await insertClinic(sql, `${SUITE_TAG}-b`);
 
@@ -105,6 +107,34 @@ export function describeWithDatabase(
 
     suite(fixture as PatientsFixture);
   });
+}
+
+/**
+ * Remove fixture clinics an earlier run failed to clean up.
+ *
+ * This matters more here than anywhere else. These suites link guardians to a
+ * borrowed auth account and unlink them afterwards, so a run killed mid-test
+ * leaves that account attached to a guardian in a clinic nobody will look at
+ * again — and the guardian resolver, which is deliberately not clinic-scoped,
+ * then finds it forever. The symptom is a later suite failing an assertion
+ * about a completely different thing.
+ *
+ * An hour is far longer than any suite runs, so this cannot touch a concurrent
+ * one, and a real clinic's slug does not look like this.
+ */
+async function sweepStaleFixtures(sql: SqlExecutor): Promise<void> {
+  const stale = await sql.query<{ id: string }>(
+    `select id from clinic.clinics
+      where slug like 'test-%'
+        and name like 'Fixture %'
+        and created_at < now() - interval '1 hour'`,
+  );
+  if (stale.rows.length === 0) return;
+
+  await removeClinics(
+    sql,
+    stale.rows.map((row) => row.id),
+  );
 }
 
 async function insertClinic(sql: SqlExecutor, slug: string): Promise<string> {
