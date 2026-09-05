@@ -21,7 +21,8 @@
     "format:check": "nx format:check",
     "mobile:sync": "nx run mobile:cap-sync",
     "supabase:start": "supabase start",
-    "supabase:stop": "supabase stop"
+    "supabase:stop": "supabase stop",
+    "bootstrap:staff": "node tools/bootstrap-staff.mjs"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.1",

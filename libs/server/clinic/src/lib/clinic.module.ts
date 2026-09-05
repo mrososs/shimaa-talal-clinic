@@ -1,39 +1,38 @@
 import { Module } from '@nestjs/common';
-import { ServerCoreModule } from '@clinic/server-core';
+import { CLINIC_MEMBER_RESOLVER, ServerCoreModule } from '@clinic/server-core';
+import { ClinicMemberResolverImpl } from './clinic-member.resolver';
+import { ClinicMemberService } from './clinic-member.service';
+import { ClinicService } from './clinic.service';
 
 /**
- * Clinic boundary — tenancy, staff and the operational day.
+ * Clinic boundary — tenancy, staff and (later) the operational day.
  *
- * Owns, when it is built:
- *   - clinics (the tenant root, and clinic-level policy: timezone, grace
- *     period, default consultation pace)
- *   - clinic members (doctor / reception / admin) and their roles
- *   - clinic schedules and closures (the weekly template)
- *   - clinic sessions (one concrete day-part: capacity, doctor presence,
- *     open/paused/closed, the daily ticket counter)
+ * Owns today:
+ *   - clinics: the tenant root and the policy other domains read from it
+ *   - clinic members: who may act for a clinic, and in what role
  *
- * Why this is `scope:shared` and not a domain of its own:
+ * It also answers `CLINIC_MEMBER_RESOLVER`, the port `server-core` declares so
+ * the authorisation layer can ask who a caller is without a shared library
+ * depending on a domain. Bound here rather than in `apps/api`, matching how
+ * Patients binds the guardian side: the implementation choice stays inside the
+ * domain that owns it.
  *
- * Booking reads sessions to compute availability; Queue writes their
- * operational state; Patients needs clinic members to attribute staff actions.
- * Under the scope rules a domain may only depend on itself and `scope:shared`,
- * so a `scope:clinic` tag would need a new lint rule per consumer. This is
- * genuinely shared reference and tenancy data rather than a business engine,
- * so `scope:shared` is both the honest tag and the one that costs no rule
- * changes.
+ * Schedules, closures and sessions are NOT here. They are the operational day,
+ * a separate task, and nothing in this module anticipates them.
  *
- * It is `type:data-access`, so it may hold repositories and narrow state
- * transitions — but no product rules. "Is this appointment eligible for
- * check-in" belongs to booking, not here.
- *
- * Deliberately empty for now: the schema lands with the identity and
- * scheduling migrations. The module exists so the dependency direction
- * (api → clinic → server-core) is enforced before any code can get it wrong.
+ * `scope:shared` rather than a domain of its own because booking, queue and
+ * patients all need to read a clinic, and a domain may only depend on itself
+ * and shared code.
  */
 @Module({
   imports: [ServerCoreModule],
   controllers: [],
-  providers: [],
-  exports: [],
+  providers: [
+    ClinicService,
+    ClinicMemberService,
+    ClinicMemberResolverImpl,
+    { provide: CLINIC_MEMBER_RESOLVER, useExisting: ClinicMemberResolverImpl },
+  ],
+  exports: [ClinicService, ClinicMemberService, CLINIC_MEMBER_RESOLVER],
 })
 export class ClinicModule {}
