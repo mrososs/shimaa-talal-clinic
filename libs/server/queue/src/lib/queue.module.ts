@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ServerCoreModule } from '@clinic/server-core';
 import { ClinicModule } from '@clinic/server-clinic';
+import { ClinicQueueController } from './api/clinic-queue.controller';
+import { MyQueueController } from './api/my-queue.controller';
 import { QueueCommandService } from './queue-command.service';
 import { QueueEntryService } from './queue-entry.service';
 
@@ -14,7 +16,7 @@ import { QueueEntryService } from './queue-entry.service';
  */
 @Module({
   imports: [ServerCoreModule, ClinicModule],
-  controllers: [],
+  controllers: [ClinicQueueController, MyQueueController],
   providers: [QueueEntryService, QueueCommandService],
   exports: [QueueEntryService, QueueCommandService],
 })

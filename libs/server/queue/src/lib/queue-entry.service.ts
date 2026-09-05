@@ -135,6 +135,27 @@ export class QueueEntryService {
     return result.rows.map(toEntry);
   }
 
+  /**
+   * Every child of this guardian who is currently in a queue.
+   *
+   * Scoped by `guardian_id` in the query rather than filtered afterwards. A
+   * check that happens after the read is a check somebody eventually forgets,
+   * and what it would leak is another family's place in the queue.
+   */
+  async listActiveForGuardian(
+    clinicId: string,
+    guardianId: string,
+    db: SqlExecutor = this.database,
+  ): Promise<QueueEntry[]> {
+    const result = await db.query<EntryRow>(
+      `select ${COLUMNS} from clinic.queue_entries
+        where clinic_id = $1 and guardian_id = $2 and status = any($3)
+        order by checked_in_at`,
+      [clinicId, guardianId, ACTIVE_STATUSES],
+    );
+    return result.rows.map(toEntry);
+  }
+
   /** The entry a given appointment produced, if it has been checked in. */
   async findByAppointment(
     clinicId: string,

@@ -23,3 +23,5 @@ export {
   type QueueActor,
 } from './lib/queue-command.service';
 export { QueueError, QueueErrorCode } from './lib/queue.errors';
+export type { QueueBoardResponse } from './lib/api/clinic-queue.controller';
+export type { ParentQueueView } from './lib/api/my-queue.controller';
