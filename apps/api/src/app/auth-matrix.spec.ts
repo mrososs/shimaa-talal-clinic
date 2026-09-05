@@ -387,11 +387,17 @@ suite('auth matrix (HTTP)', () => {
       role: string;
       status: string;
     }>(
+      // Scoped to the deployment's clinic. Domain suites create throwaway
+      // clinics that borrow these same auth users for their own members, so an
+      // unscoped read here would be asserting about somebody else's fixture.
       `select u.email, m.role, m.status
          from clinic.clinic_members m
          join auth.users u on u.id = m.auth_user_id
+         join clinic.clinics c on c.id = m.clinic_id
         where u.email in ('doctor@email.com', 'reception@email.com')
+          and c.slug = $1
         order by u.email`,
+      [process.env['CLINIC_SLUG']],
     );
 
     expect(rows.rows).toEqual([

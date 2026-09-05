@@ -3,6 +3,8 @@ import { CLINIC_MEMBER_RESOLVER, ServerCoreModule } from '@clinic/server-core';
 import { ClinicMeController } from './api/clinic-me.controller';
 import { ClinicMemberResolverImpl } from './clinic-member.resolver';
 import { ClinicMemberService } from './clinic-member.service';
+import { ClinicScheduleService } from './clinic-schedule.service';
+import { ClinicSessionService } from './clinic-session.service';
 import { ClinicService } from './clinic.service';
 
 /**
@@ -31,9 +33,17 @@ import { ClinicService } from './clinic.service';
   providers: [
     ClinicService,
     ClinicMemberService,
+    ClinicScheduleService,
+    ClinicSessionService,
     ClinicMemberResolverImpl,
     { provide: CLINIC_MEMBER_RESOLVER, useExisting: ClinicMemberResolverImpl },
   ],
-  exports: [ClinicService, ClinicMemberService, CLINIC_MEMBER_RESOLVER],
+  exports: [
+    ClinicService,
+    ClinicMemberService,
+    ClinicScheduleService,
+    ClinicSessionService,
+    CLINIC_MEMBER_RESOLVER,
+  ],
 })
 export class ClinicModule {}

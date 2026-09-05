@@ -146,9 +146,66 @@ async function main() {
       `\n${linked} of ${wanted.length} processed; ` +
         `${total.rows[0].n} member(s) at this clinic.`,
     );
+
+    await ensureSchedule(pool, clinicId);
   } finally {
     await pool.end();
   }
+}
+
+/**
+ * Give the clinic its working hours, once it has a doctor to hang them on.
+ *
+ * The `pilot_schedule` migration does exactly this, and inserts nothing on a
+ * fresh database where no staff exist yet — migrations run before anyone has
+ * created the Supabase Auth accounts. Repeating it here is what makes a new
+ * environment converge: run the migrations, create the accounts, run this.
+ *
+ * Idempotent through the same unique index, so on an environment where the
+ * migration already succeeded this reports zero and changes nothing.
+ */
+async function ensureSchedule(pool, clinicId) {
+  const result = await pool.query(
+    `insert into clinic.clinic_schedules
+       (clinic_id, doctor_member_id, weekday, session_kind, starts_at, ends_at,
+        window_minutes, capacity_per_window, effective_from)
+     select
+       c.id, d.id, day.weekday, 'morning', day.starts_at, day.ends_at,
+       60, 5, (now() at time zone c.timezone)::date
+     from clinic.clinics c
+     cross join lateral (
+       select m.id from clinic.clinic_members m
+        where m.clinic_id = c.id and m.role = 'doctor' and m.status = 'active'
+        order by m.created_at, m.id limit 1
+     ) d
+     cross join (
+       values
+         (6::smallint, time '10:00', time '16:00'),
+         (0::smallint, time '10:00', time '16:00'),
+         (1::smallint, time '10:00', time '16:00'),
+         (2::smallint, time '10:00', time '16:00'),
+         (3::smallint, time '10:00', time '16:00'),
+         (4::smallint, time '12:00', time '17:00')
+     ) as day(weekday, starts_at, ends_at)
+     where c.id = $1
+     on conflict (clinic_id, doctor_member_id, weekday, session_kind,
+                  effective_from)
+     do nothing`,
+    [clinicId],
+  );
+
+  const existing = await pool.query(
+    `select count(*)::int as n from clinic.clinic_schedules where clinic_id = $1`,
+    [clinicId],
+  );
+
+  if (result.rowCount > 0) {
+    console.log(`Schedule: added ${result.rowCount} weekly slot(s).`);
+  }
+  console.log(
+    `Schedule: ${existing.rows[0].n} weekly slot(s) at this clinic ` +
+      '(Saturday-Wednesday 10:00-16:00, Thursday 12:00-17:00, Friday closed).',
+  );
 }
 
 main().catch((error) => {
