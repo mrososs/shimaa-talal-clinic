@@ -1,26 +1,21 @@
 import { Module } from '@nestjs/common';
 import { ServerCoreModule } from '@clinic/server-core';
+import { ClinicModule } from '@clinic/server-clinic';
+import { QueueCommandService } from './queue-command.service';
+import { QueueEntryService } from './queue-entry.service';
 
 /**
- * Queue domain boundary.
+ * Queue — who is here, in what order, and who is next.
  *
- * Owns, when it is built:
- *   - check-in and the live queue
- *   - serving order, missed turns and grace periods
- *   - emergency insertion and doctor delays
- *
- * Deliberately empty. No queue algorithm exists yet — that is Phase 2, and it
- * is the part most likely to need careful design, so nothing is prejudged here.
- *
- * Neutrality note: a queue entry does not presuppose an appointment. Walk-ins
- * and receptionist-inserted entries are first-class cases, so this domain must
- * never depend on Booking. Any workflow that links the two belongs to the
- * orchestration layer — see docs/cross-domain-orchestration.md.
+ * Depends on the clinic (for the session it locks and the policy it reads) and
+ * on nothing else. It has no idea Booking exists: `appointment_id` is an opaque
+ * uuid to this library, and joining a check-in to an appointment is a workflow
+ * above both.
  */
 @Module({
-  imports: [ServerCoreModule],
+  imports: [ServerCoreModule, ClinicModule],
   controllers: [],
-  providers: [],
-  exports: [],
+  providers: [QueueEntryService, QueueCommandService],
+  exports: [QueueEntryService, QueueCommandService],
 })
 export class QueueModule {}
