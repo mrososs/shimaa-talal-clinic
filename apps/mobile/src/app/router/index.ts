@@ -12,9 +12,10 @@ import {
  * navigation stack work. Always create it from `@ionic/vue-router`, never from
  * `vue-router` directly.
  *
- * Every page is lazy except the two that decide the first frame — the login
- * screen and home — because those are what a cold start renders and a dynamic
- * import there is a visible blank moment.
+ * Three of these routes are tab roots — home, appointments, queue — and the
+ * rest are not. The tab bar is rendered by the screen rather than by
+ * `ion-tabs`, because sign-in, onboarding and the booking flow are all places
+ * where a tab bar would offer a way out of a task somebody is in the middle of.
  */
 export const routes: RouteRecordRaw[] = [
   {
@@ -32,13 +33,15 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/onboarding/guardian',
     name: 'onboarding-guardian',
-    component: () => import('../features/onboarding/pages/GuardianSetupPage.vue'),
+    component: () =>
+      import('../features/onboarding/pages/GuardianSetupPage.vue'),
     meta: { [ROUTE_META_ONBOARDING]: true },
   },
   {
     path: '/onboarding/claim',
     name: 'onboarding-claim',
-    component: () => import('../features/onboarding/pages/ClaimAccountPage.vue'),
+    component: () =>
+      import('../features/onboarding/pages/ClaimAccountPage.vue'),
     meta: { [ROUTE_META_ONBOARDING]: true },
   },
   {
@@ -47,11 +50,38 @@ export const routes: RouteRecordRaw[] = [
     component: () => import('../features/onboarding/pages/ChildSetupPage.vue'),
     meta: { [ROUTE_META_ONBOARDING]: true },
   },
+
+  // Tab roots.
   {
     path: '/',
     name: 'home',
     component: () => import('../features/home/pages/HomePage.vue'),
   },
+  {
+    path: '/appointments',
+    name: 'appointments',
+    component: () =>
+      import('../features/appointments/pages/AppointmentsPage.vue'),
+  },
+  {
+    path: '/queue',
+    name: 'queue',
+    component: () => import('../features/queue/pages/LiveQueuePage.vue'),
+  },
+
+  // Inside a task: no tabs.
+  {
+    path: '/booking',
+    name: 'booking',
+    component: () => import('../features/booking/pages/BookVisitPage.vue'),
+  },
+  {
+    path: '/appointments/:appointmentId',
+    name: 'appointment-detail',
+    component: () =>
+      import('../features/appointments/pages/AppointmentDetailPage.vue'),
+  },
+
   {
     // An unknown deep link is not worth an error screen in a clinic app.
     path: '/:pathMatch(.*)*',

@@ -1,41 +1,53 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { IonButton, IonContent, IonIcon, IonPage, IonSpinner } from '@ionic/vue';
 import {
-  IonButton,
-  IonContent,
-  IonInput,
-  IonPage,
-  IonSpinner,
-} from '@ionic/vue';
+  eyeOffOutline,
+  eyeOutline,
+  lockClosedOutline,
+  mailOutline,
+  personOutline,
+} from 'ionicons/icons';
+import AuthHero from '../../../shared/components/AuthHero.vue';
+import FieldRow from '../../../shared/components/FieldRow.vue';
 import FormNotice from '../../../shared/components/FormNotice.vue';
 import { authMessage } from '../../../shared/messages';
 import { session } from '../../../runtime';
 
 /**
- * Create an account: email, password, confirm.
+ * Create an account: name, email, password.
  *
- * No phone here. The phone belongs to the clinic profile on the next screen —
- * mixing it into account creation is what makes people believe the number is
- * what signs them in.
+ * The design asks for a name here, and it is worth collecting: it is what the
+ * next screen greets someone with, and typing it twice would be an odd welcome.
+ * It is carried forward to guardian onboarding rather than sent to Supabase —
+ * the account is credentials, the clinic profile is a separate thing.
+ *
+ * No phone. The phone belongs to the clinic profile on the next screen; mixing
+ * it into account creation is what makes people believe the number signs them
+ * in.
  */
 
 const MIN_PASSWORD_LENGTH = 8;
 
 const router = useRouter();
+const fullName = ref('');
 const email = ref('');
 const password = ref('');
-const confirmation = ref('');
+const revealed = ref(false);
 const submitted = ref(false);
 const awaitingConfirmation = ref(false);
 
 const state = session.state;
 
-// The store outlives this screen: an error raised on the other auth page
-// would otherwise greet someone who has typed nothing yet.
 onMounted(() => session.clearAuthError());
 const serverError = computed(() => authMessage(state.authError));
 
+const nameError = computed(() =>
+  !submitted.value || fullName.value.trim().length >= 2
+    ? null
+    : 'أدخلي الاسم كاملاً.',
+);
 const emailError = computed(() =>
   !submitted.value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim())
     ? null
@@ -44,18 +56,13 @@ const emailError = computed(() =>
 const passwordError = computed(() =>
   !submitted.value || password.value.length >= MIN_PASSWORD_LENGTH
     ? null
-    : 'كلمة المرور ٨ أحرف على الأقل.',
-);
-const confirmationError = computed(() =>
-  !submitted.value || confirmation.value === password.value
-    ? null
-    : 'كلمتا المرور غير متطابقتين.',
+    : `كلمة المرور ٨ أحرف على الأقل.`,
 );
 const invalid = computed(
   () =>
+    nameError.value !== null ||
     emailError.value !== null ||
-    passwordError.value !== null ||
-    confirmationError.value !== null,
+    passwordError.value !== null,
 );
 
 async function submit(): Promise<void> {
@@ -69,7 +76,12 @@ async function submit(): Promise<void> {
   });
 
   if (signedIn) {
-    await router.replace({ name: 'home' });
+    // Carried in the route, not in the store: it is a convenience for the very
+    // next screen, and it should not outlive this flow.
+    await router.replace({
+      name: 'onboarding-guardian',
+      query: { name: fullName.value.trim() },
+    });
     return;
   }
 
@@ -83,14 +95,13 @@ async function submit(): Promise<void> {
 <template>
   <ion-page>
     <ion-content>
-      <div class="screen auth">
-        <header class="auth__header">
-          <p class="auth__clinic">
-            عيادة د. شيماء طلال
-          </p>
-          <h1 class="title">
-            إنشاء حساب
-          </h1>
+      <auth-hero />
+
+      <div class="screen auth pop">
+        <header class="auth__intro">
+          <h2 class="title">
+            إنشاء حساب جديد
+          </h2>
           <p class="subtitle">
             حسابٌ واحد لمتابعة مواعيد أطفالك ودورك في العيادة.
           </p>
@@ -101,42 +112,60 @@ async function submit(): Promise<void> {
           novalidate
           @submit.prevent="submit"
         >
-          <ion-input
-            v-model="email"
+          <field-row
+            label="الاسم الكامل"
+            :icon="personOutline"
+            :error="nameError"
+          >
+            <input
+              v-model="fullName"
+              type="text"
+              autocomplete="name"
+              placeholder="مثال: منى عبدالله"
+            >
+          </field-row>
+
+          <field-row
             label="البريد الإلكتروني"
-            label-placement="stacked"
-            type="email"
-            inputmode="email"
-            autocomplete="email"
-            fill="outline"
-            :class="{ 'ion-invalid': emailError, 'ion-touched': submitted }"
-            :error-text="emailError ?? undefined"
-          />
+            :icon="mailOutline"
+            :error="emailError"
+          >
+            <input
+              v-model="email"
+              type="email"
+              inputmode="email"
+              autocomplete="email"
+              placeholder="name@email.com"
+              dir="ltr"
+            >
+          </field-row>
 
-          <ion-input
-            v-model="password"
+          <field-row
             label="كلمة المرور"
-            label-placement="stacked"
-            type="password"
-            autocomplete="new-password"
-            fill="outline"
-            :class="{ 'ion-invalid': passwordError, 'ion-touched': submitted }"
-            :error-text="passwordError ?? undefined"
-          />
-
-          <ion-input
-            v-model="confirmation"
-            label="تأكيد كلمة المرور"
-            label-placement="stacked"
-            type="password"
-            autocomplete="new-password"
-            fill="outline"
-            :class="{
-              'ion-invalid': confirmationError,
-              'ion-touched': submitted,
-            }"
-            :error-text="confirmationError ?? undefined"
-          />
+            :icon="lockClosedOutline"
+            :error="passwordError"
+            hint="٨ أحرف على الأقل"
+          >
+            <input
+              v-model="password"
+              :type="revealed ? 'text' : 'password'"
+              autocomplete="new-password"
+              placeholder="••••••••"
+              dir="ltr"
+            >
+            <template #end>
+              <button
+                type="button"
+                class="reveal"
+                :aria-label="
+                  revealed ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'
+                "
+                @click="revealed = !revealed"
+              >
+                <ion-icon :icon="revealed ? eyeOffOutline : eyeOutline" />
+              </button>
+            </template>
+          </field-row>
 
           <form-notice :message="serverError" />
           <form-notice
@@ -148,29 +177,29 @@ async function submit(): Promise<void> {
             "
           />
 
-          <div class="actions">
-            <ion-button
-              type="submit"
-              expand="block"
-              size="large"
-              :disabled="state.pending"
-            >
-              <ion-spinner
-                v-if="state.pending"
-                name="crescent"
-              />
-              <span v-else>إنشاء الحساب</span>
-            </ion-button>
+          <ion-button
+            type="submit"
+            expand="block"
+            size="large"
+            :disabled="state.pending"
+          >
+            <ion-spinner
+              v-if="state.pending"
+              name="crescent"
+            />
+            <span v-else>متابعة</span>
+          </ion-button>
 
-            <ion-button
-              fill="clear"
-              expand="block"
-              :disabled="state.pending"
+          <p class="auth__switch">
+            لديك حساب بالفعل؟
+            <button
+              type="button"
+              class="auth__link"
               @click="router.push({ name: 'sign-in' })"
             >
-              لديك حساب بالفعل؟ سجّلي الدخول
-            </ion-button>
-          </div>
+              سجّلي الدخول
+            </button>
+          </p>
         </form>
       </div>
     </ion-content>
@@ -179,21 +208,42 @@ async function submit(): Promise<void> {
 
 <style scoped>
 .auth {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 100%;
-  max-width: 480px;
-  margin-inline: auto;
+  padding-block-start: 24px;
 }
 
-.auth__header {
-  margin-block-end: 24px;
+.auth__intro {
+  margin-block-end: 20px;
 }
 
-.auth__clinic {
-  color: var(--coral-ink);
+.reveal {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.auth__switch {
+  text-align: center;
+  color: var(--ink-2);
+  font-size: 13.5px;
   font-weight: 700;
-  margin: 0 0 8px;
+  margin-block-start: 8px;
+}
+
+.auth__link {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 800;
+  color: var(--coral);
+  cursor: pointer;
 }
 </style>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import {
   IonButton,
   IonContent,
@@ -36,7 +36,11 @@ const RELATIONSHIPS = [
 ] as const;
 
 const router = useRouter();
-const fullName = ref('');
+const route = useRoute();
+
+// Registration already asked for a name. Typing it twice would be an odd
+// welcome, so it arrives in the route and is prefilled here.
+const fullName = ref(String(route.query['name'] ?? ''));
 const phone = ref('');
 const relationship = ref<GuardianRelationship>(GuardianRelationship.Mother);
 const submitted = ref(false);

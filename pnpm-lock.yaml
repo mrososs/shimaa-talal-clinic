@@ -44,6 +44,9 @@ importers:
       class-validator:
         specifier: ^0.14.4
         version: 0.14.4
+      ionicons:
+        specifier: ^8.1.0
+        version: 8.1.0
       pg:
         specifier: ^8.23.0
         version: 8.23.0

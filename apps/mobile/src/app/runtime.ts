@@ -6,7 +6,14 @@ import {
 import { getClientConfig, isSupabaseConfigured } from '@clinic/client-config';
 import { createSessionStore, type SessionStore } from '@clinic/client-session';
 import type { MeResponse } from '@clinic/contracts';
-import { createIdentityApi, type IdentityApi } from './features/identity/identity.api';
+import {
+  createBookingApi,
+  type BookingApi,
+} from './features/booking/booking.api';
+import {
+  createIdentityApi,
+  type IdentityApi,
+} from './features/identity/identity.api';
 
 /**
  * Composition root for everything this app talks to.
@@ -37,6 +44,7 @@ export const apiClient: ApiClient = createApiClient({
 });
 
 export const identityApi: IdentityApi = createIdentityApi(apiClient);
+export const bookingApi: BookingApi = createBookingApi(apiClient);
 
 /**
  * The signed-in session, and who that account is at the clinic.

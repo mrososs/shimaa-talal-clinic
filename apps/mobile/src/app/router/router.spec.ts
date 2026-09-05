@@ -38,6 +38,12 @@ describe('mobile router', () => {
       'home',
       'onboarding-guardian',
       'onboarding-child',
+      // Tab destinations: the tab bar routes by name, so a missing one is a
+      // dead tab rather than a compile error.
+      'appointments',
+      'queue',
+      'booking',
+      'appointment-detail',
     ]) {
       expect(named(name), name).toBeDefined();
     }
