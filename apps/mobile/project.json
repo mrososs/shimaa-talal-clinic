@@ -1,0 +1,48 @@
+{
+  "name": "mobile",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/mobile/src",
+  "tags": ["type:app", "platform:mobile"],
+  "// targets": "run `nx show project mobile --web` to see inferred Vite targets too",
+  "targets": {
+    "cap-add-android": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/mobile",
+        "command": "cap add android"
+      }
+    },
+    "cap-add-ios": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/mobile",
+        "command": "cap add ios"
+      }
+    },
+    "cap-sync": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "cwd": "apps/mobile",
+        "command": "cap sync"
+      }
+    },
+    "cap-open-android": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["cap-sync"],
+      "options": {
+        "cwd": "apps/mobile",
+        "command": "cap open android"
+      }
+    },
+    "cap-open-ios": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["cap-sync"],
+      "options": {
+        "cwd": "apps/mobile",
+        "command": "cap open ios"
+      }
+    }
+  }
+}

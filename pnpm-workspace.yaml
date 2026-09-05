@@ -1,0 +1,17 @@
+# This is an *integrated* Nx monorepo: there is exactly one package.json at the
+# root, and libraries are resolved through tsconfig.base.json path mappings
+# (`@clinic/*`) rather than through pnpm workspace links.
+#
+# This file therefore declares no packages. It exists to hold pnpm-level
+# settings that cannot live in package.json.
+packages: []
+
+# pnpm >= 10 requires explicit approval before a dependency may run install
+# scripts. These are build-toolchain packages that legitimately need it.
+allowBuilds:
+  nx: true
+  '@swc/core': true
+  esbuild: true
+  unrs-resolver: true
+  '@parcel/watcher': true
+  '@nestjs/core': false

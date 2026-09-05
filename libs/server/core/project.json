@@ -1,0 +1,9 @@
+{
+  "name": "server-core",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/server/core/src",
+  "projectType": "library",
+  "tags": ["type:data-access", "platform:server", "scope:shared"],
+  "// targets": "to see all targets run: nx show project server-core --web",
+  "targets": {}
+}

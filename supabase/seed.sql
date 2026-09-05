@@ -1,0 +1,12 @@
+-- Local development seed data.
+--
+-- Intentionally empty.
+--
+-- There is no clinic schema yet, so there is nothing to seed. Fabricating
+-- patients, doctors or appointments now would create fixtures that encode
+-- guesses about a domain model we have not designed, and those guesses tend to
+-- outlive the code that produced them.
+--
+-- When the Booking domain lands in Phase 2, seed the minimum needed to exercise
+-- it locally, and keep this file idempotent: `supabase db reset` runs it on a
+-- fresh database every time.

@@ -1,0 +1,9 @@
+{
+  "name": "api-client",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/client/api-client/src",
+  "projectType": "library",
+  "tags": ["type:data-access", "platform:client", "scope:shared"],
+  "// targets": "to see all targets run: nx show project api-client --web",
+  "targets": {}
+}

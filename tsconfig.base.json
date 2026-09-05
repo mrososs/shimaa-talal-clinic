@@ -1,0 +1,53 @@
+{
+  "//": [
+    "Base TypeScript configuration for the whole workspace.",
+    "",
+    "`paths` is the mechanism that makes `@clinic/*` imports work: this is an",
+    "integrated Nx workspace, so libraries are resolved from source through",
+    "these mappings rather than through pnpm workspace links.",
+    "",
+    "There is deliberately no `baseUrl`: it is deprecated in TypeScript 6 and",
+    "removed in 7. Paths below are resolved relative to this file instead.",
+    "",
+    "Nx generators keep this file up to date — add libraries with",
+    "`nx g @nx/js:library` rather than editing `paths` by hand."
+  ],
+  "compileOnSave": false,
+  "compilerOptions": {
+    "rootDir": ".",
+    "sourceMap": true,
+    "declaration": false,
+    "moduleResolution": "node",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "importHelpers": true,
+    "target": "es2022",
+    "module": "esnext",
+    "lib": ["es2022", "dom"],
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
+    "strict": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": false,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "paths": {
+      "@clinic/contracts": ["./libs/contracts/src/index.ts"],
+      "@clinic/client-config": ["./libs/client/config/src/index.ts"],
+      "@clinic/api-client": ["./libs/client/api-client/src/index.ts"],
+      "@clinic/client-auth": ["./libs/client/auth/src/index.ts"],
+      "@clinic/server-core": ["./libs/server/core/src/index.ts"],
+      "@clinic/server-booking": ["./libs/server/booking/src/index.ts"],
+      "@clinic/server-queue": ["./libs/server/queue/src/index.ts"],
+      "@clinic/server-payments": ["./libs/server/payments/src/index.ts"],
+      "@clinic/server-patients": ["./libs/server/patients/src/index.ts"],
+      "@clinic/server-notifications": [
+        "./libs/server/notifications/src/index.ts"
+      ],
+      "@clinic/server-clinic": ["./libs/server/clinic/src/index.ts"],
+      "@clinic/server-workflows": ["./libs/server/workflows/src/index.ts"],
+      "@clinic/phone": ["./libs/shared/phone/src/index.ts"]
+    }
+  },
+  "exclude": ["node_modules", "tmp"]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "server-workflows",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/server/workflows/src",
+  "projectType": "library",
+  "tags": ["type:workflow", "platform:server", "scope:orchestration"],
+  "// targets": "to see all targets run: nx show project server-workflows --web",
+  "targets": {}
+}

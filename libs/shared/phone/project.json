@@ -1,0 +1,9 @@
+{
+  "name": "phone",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/phone/src",
+  "projectType": "library",
+  "tags": ["type:util", "platform:shared", "scope:shared"],
+  "// targets": "to see all targets run: nx show project phone --web",
+  "targets": {}
+}
