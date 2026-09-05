@@ -16,6 +16,12 @@ export default [
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '**/*.vue'],
     rules: {
       'vue/multi-word-component-names': 'off',
+
+      // Ionic's components are web components, and 'slot' is how they are
+      // told where content goes - <ion-refresher slot="fixed"> is Ionic's
+      // own documented API, not the deprecated Vue 2 slot syntax this rule
+      // is about.
+      'vue/no-deprecated-slot-attribute': 'off',
     },
   },
 ];

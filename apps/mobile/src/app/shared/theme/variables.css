@@ -1,0 +1,156 @@
+/*
+ * The clinic's visual language, as Ionic reads it.
+ *
+ * Ionic components take their colours from CSS custom properties, so the theme
+ * is defined here once rather than restated in every component's <style> block.
+ * Anything a screen needs that Ionic does not own gets a `--clinic-*` token
+ * below.
+ *
+ * This is a pediatric clinic in Cairo: the palette is calm and warm rather than
+ * clinical-blue, and the whole product is Arabic and right-to-left. `dir="rtl"`
+ * is set on the document in main.ts, not here, because direction is a document
+ * fact rather than a style — but every rule below is written with logical
+ * properties so that it holds either way.
+ */
+
+:root {
+  /* Teal, not the default Ionic blue. Reads as care rather than software. */
+  --ion-color-primary: #0e7c7b;
+  --ion-color-primary-rgb: 14, 124, 123;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: #0c6d6c;
+  --ion-color-primary-tint: #278988;
+
+  /* Warm coral, for the one action per screen that matters most. */
+  --ion-color-secondary: #e07a5f;
+  --ion-color-secondary-rgb: 224, 122, 95;
+  --ion-color-secondary-contrast: #ffffff;
+  --ion-color-secondary-contrast-rgb: 255, 255, 255;
+  --ion-color-secondary-shade: #c56b53;
+  --ion-color-secondary-tint: #e4876f;
+
+  --ion-color-success: #2e7d5b;
+  --ion-color-success-rgb: 46, 125, 91;
+  --ion-color-success-contrast: #ffffff;
+  --ion-color-success-contrast-rgb: 255, 255, 255;
+  --ion-color-success-shade: #286e50;
+  --ion-color-success-tint: #438a6b;
+
+  --ion-color-warning: #b57614;
+  --ion-color-warning-rgb: 181, 118, 20;
+  --ion-color-warning-contrast: #ffffff;
+  --ion-color-warning-contrast-rgb: 255, 255, 255;
+  --ion-color-warning-shade: #9f6812;
+  --ion-color-warning-tint: #bc842c;
+
+  --ion-color-danger: #b3261e;
+  --ion-color-danger-rgb: 179, 38, 30;
+  --ion-color-danger-contrast: #ffffff;
+  --ion-color-danger-contrast-rgb: 255, 255, 255;
+  --ion-color-danger-shade: #9e211a;
+  --ion-color-danger-tint: #bb3c35;
+
+  --ion-background-color: #f7f5f2;
+  --ion-background-color-rgb: 247, 245, 242;
+  --ion-text-color: #21201d;
+  --ion-text-color-rgb: 33, 32, 29;
+
+  /*
+   * An Arabic-first stack. No webfont is downloaded: this ships as a native app
+   * on a metered connection, and every one of these renders Arabic correctly on
+   * the platforms the app targets.
+   */
+  --ion-font-family: 'Cairo', 'Tajawal', 'Segoe UI', 'Helvetica Neue',
+    system-ui, -apple-system, 'Noto Sans Arabic', sans-serif;
+
+  --clinic-surface: #ffffff;
+  --clinic-surface-muted: #efeae4;
+  --clinic-border: #e2dcd4;
+  --clinic-text-muted: #6b665e;
+
+  --clinic-radius: 16px;
+  --clinic-radius-sm: 10px;
+  --clinic-space-xs: 4px;
+  --clinic-space-sm: 8px;
+  --clinic-space: 16px;
+  --clinic-space-lg: 24px;
+  --clinic-space-xl: 32px;
+
+  --clinic-shadow: 0 1px 2px rgba(33, 32, 29, 0.06),
+    0 8px 24px rgba(33, 32, 29, 0.05);
+}
+
+/*
+ * Arabic-Indic numerals throughout.
+ *
+ * The clinic reads ٢٤, not 24. This is a font feature rather than a string
+ * transform, so numbers stay numbers — sortable, comparable, and still correct
+ * when a screen reader reaches them.
+ */
+:root {
+  --clinic-numerals: 'Cairo', 'Tajawal', sans-serif;
+}
+
+.clinic-numerals {
+  font-feature-settings: 'anum';
+  font-variant-numeric: normal;
+}
+
+/* --------------------------------------------------------------------------
+ * The handful of primitives every screen uses. Kept here, and small, because
+ * the alternative is each page inventing its own card.
+ * ----------------------------------------------------------------------- */
+
+.clinic-card {
+  background: var(--clinic-surface);
+  border: 1px solid var(--clinic-border);
+  border-radius: var(--clinic-radius);
+  padding: var(--clinic-space);
+  box-shadow: var(--clinic-shadow);
+}
+
+.clinic-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--clinic-space);
+}
+
+.clinic-stack--tight {
+  gap: var(--clinic-space-sm);
+}
+
+.clinic-page {
+  padding: var(--clinic-space);
+  padding-block-end: var(--clinic-space-xl);
+}
+
+.clinic-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.clinic-subtitle {
+  color: var(--clinic-text-muted);
+  margin: 0;
+  line-height: 1.6;
+}
+
+.clinic-muted {
+  color: var(--clinic-text-muted);
+}
+
+/* Logical properties, so the rule survives a direction change unedited. */
+.clinic-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--clinic-space-sm);
+}
+
+.clinic-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--clinic-space-sm);
+  margin-block-start: var(--clinic-space-lg);
+}
