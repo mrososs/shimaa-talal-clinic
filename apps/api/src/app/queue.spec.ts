@@ -56,8 +56,18 @@ const configured =
   let siblingId: string;
   let sessionId: string;
 
-  const tokens: Record<'parent' | 'reception' | 'doctor', string> =
-    {} as never;
+  /** A second family at the same clinic. Nothing of theirs may ever be visible. */
+  let otherGuardianId: string;
+  let otherChildId: string;
+
+  /** A second clinic, so "scoped by clinic" is proven and not assumed. */
+  let otherClinicId: string;
+  let otherClinicSessionId: string;
+
+  const tokens: Record<
+    'parent' | 'other' | 'reception' | 'doctor' | 'elsewhere',
+    string
+  > = {} as never;
 
   async function account(label: string): Promise<string> {
     const email = `${tag}-${label}@example.test`;
@@ -123,6 +133,55 @@ const configured =
     notArrived?: { id: string; child: { fullName: string }; isLate: boolean }[];
   }
 
+  interface ParentEntry {
+    id: string;
+    ticketNumber: number;
+    status: string;
+    aheadCount: number;
+    calledAt: string | null;
+    graceExpiresAt: string | null;
+    estimatedWaitMinutes: { from: number; to: number } | null;
+    deferCount: number;
+    isEmergency: boolean;
+  }
+
+  interface ParentItem {
+    childId: string;
+    childName: string;
+    appointment: { id: string; status: string } | null;
+    queueEntry: ParentEntry | null;
+    session: {
+      status: string;
+      doctorPresence: string;
+      delayMinutes: number | null;
+      avgConsultMinutes: number;
+      revision: number;
+    };
+  }
+
+  interface ParentView {
+    items?: ParentItem[];
+    revision: number;
+    changed?: false;
+  }
+
+  const mine = async (
+    since?: number,
+    token = tokens.parent,
+  ): Promise<ParentView> => {
+    const query = since === undefined ? '' : `?since=${since}`;
+    const response = await call('GET', `/queue/me${query}`, { token });
+    expect(response.status).toBe(200);
+    return data<ParentView>(response.body);
+  };
+
+  /** The doctor is here and the day is running — the estimate's precondition. */
+  const doctorArrived = () =>
+    call('POST', `/clinic/sessions/${sessionId}/doctor-presence`, {
+      token: tokens.reception,
+      body: { presence: 'arrived' },
+    });
+
   const board = async (since?: number): Promise<Board> => {
     const query =
       since === undefined ? '' : `&since=${since}`;
@@ -178,8 +237,14 @@ const configured =
     clinicId = clinic.rows[0].id;
 
     const parentUserId = await account('parent');
+    const otherParentUserId = await account('other');
     const receptionUserId = await account('reception');
     const doctorUserId = await account('doctor');
+    // The second clinic gets its own account. Giving one auth user a
+    // membership at two clinics makes `findByAuthUserId` pick between them by
+    // uuid order, so every request that account makes lands at whichever
+    // clinic sorted first — which is a coin toss per run, not a test.
+    const elsewhereUserId = await account('elsewhere');
 
     const members = await db.database.query<{ id: string }>(
       `insert into clinic.clinic_members
@@ -211,6 +276,66 @@ const configured =
       `insert into clinic.guardian_children (guardian_id, child_id, relationship)
        values ($1, $2, 'mother'), ($1, $3, 'mother')`,
       [guardianId, childId, siblingId],
+    );
+
+    // Another family at the same clinic, with a distinctive name so a leak
+    // would be unmistakable in a response body.
+    const otherGuardian = await db.database.query<{ id: string }>(
+      `insert into clinic.guardians
+         (clinic_id, full_name, phone_e164, auth_user_id, claimed_at,
+          claimed_via)
+       values ($1, 'Other Parent', $2, $3, now(), 'self_signup')
+       returning id`,
+      [clinicId, `+2011${String(Date.now()).slice(-7)}`, otherParentUserId],
+    );
+    otherGuardianId = otherGuardian.rows[0].id;
+
+    const otherChild = await db.database.query<{ id: string }>(
+      `insert into clinic.children (clinic_id, full_name)
+       values ($1, 'Nobody-Elses-Business') returning id`,
+      [clinicId],
+    );
+    otherChildId = otherChild.rows[0].id;
+    await db.database.query(
+      `insert into clinic.guardian_children (guardian_id, child_id, relationship)
+       values ($1, $2, 'father')`,
+      [otherGuardianId, otherChildId],
+    );
+
+    // A whole other clinic, running its own day.
+    const second = await db.database.query<{ id: string }>(
+      `insert into clinic.clinics (name, slug, timezone, default_country_code)
+       values ($1, $2, 'Africa/Cairo', 'EG') returning id`,
+      [`Second ${tag}`, `${tag}-2`],
+    );
+    otherClinicId = second.rows[0].id;
+    const otherMember = await db.database.query<{ id: string }>(
+      `insert into clinic.clinic_members
+         (clinic_id, auth_user_id, role, display_name)
+       values ($1, $2, 'doctor', 'Other Clinic Doctor') returning id`,
+      [otherClinicId, elsewhereUserId],
+    );
+    const otherChildElsewhere = await db.database.query<{ id: string }>(
+      `insert into clinic.children (clinic_id, full_name)
+       values ($1, 'Another-Clinic-Child') returning id`,
+      [otherClinicId],
+    );
+    const otherSession = await db.database.query<{ id: string }>(
+      `insert into clinic.clinic_sessions
+         (clinic_id, doctor_member_id, session_date, session_kind,
+          planned_start, planned_end, window_minutes, capacity_per_window,
+          avg_consult_minutes, status)
+       values ($1, $2, (now() at time zone 'Africa/Cairo')::date, 'morning',
+               now(), now() + interval '6 hours', 60, 20, 6, 'open')
+       returning id`,
+      [otherClinicId, otherMember.rows[0].id],
+    );
+    otherClinicSessionId = otherSession.rows[0].id;
+    await db.database.query(
+      `insert into clinic.queue_entries
+         (clinic_id, session_id, child_id, source, ticket_number, sort_key)
+       values ($1, $2, $3, 'walk_in', 1, 1000)`,
+      [otherClinicId, otherClinicSessionId, otherChildElsewhere.rows[0].id],
     );
 
     const moduleRef = await Test.createTestingModule({
@@ -275,8 +400,31 @@ const configured =
     if (app !== undefined) await app.close();
     if (db !== undefined) {
       await db.database.query(
-        `delete from clinic.guardian_children where guardian_id = $1`,
-        [guardianId],
+        `with cleared as (
+           delete from clinic.queue_events where entry_id in (
+             select id from clinic.queue_entries where clinic_id = $1)
+           returning entry_id)
+         delete from clinic.queue_entries where clinic_id = $1`,
+        [otherClinicId],
+      );
+      await db.database.query(
+        `delete from clinic.clinic_sessions where clinic_id = $1`,
+        [otherClinicId],
+      );
+      await db.database.query(
+        `delete from clinic.children where clinic_id = $1`,
+        [otherClinicId],
+      );
+      await db.database.query(
+        `delete from clinic.clinic_members where clinic_id = $1`,
+        [otherClinicId],
+      );
+      await db.database.query(`delete from clinic.clinics where id = $1`, [
+        otherClinicId,
+      ]);
+      await db.database.query(
+        `delete from clinic.guardian_children where guardian_id = any($1)`,
+        [[guardianId, otherGuardianId]],
       );
       await db.database.query(
         `delete from clinic.children where clinic_id = $1`,
@@ -688,6 +836,32 @@ const configured =
       expect(refused.status).toBe(400);
     });
 
+    it('moves the revision, so every watcher learns it changed', async () => {
+      // The revision is the token both apps poll against. A session change that
+      // did not move it would be told "unchanged" forever — a paused queue that
+      // still reads as running on every phone in the waiting room.
+      const before = await board();
+
+      await call('POST', `/clinic/sessions/${sessionId}/pause`, {
+        token: tokens.reception,
+      });
+      const paused = await board();
+      expect(paused.revision).toBeGreaterThan(before.revision);
+
+      await call('POST', `/clinic/sessions/${sessionId}/doctor-presence`, {
+        token: tokens.reception,
+        body: { presence: 'arrived' },
+      });
+      const present = await board();
+      expect(present.revision).toBeGreaterThan(paused.revision);
+
+      await call('PATCH', `/clinic/sessions/${sessionId}/pace`, {
+        token: tokens.doctor,
+        body: { avgConsultMinutes: 9 },
+      });
+      expect((await board()).revision).toBeGreaterThan(present.revision);
+    });
+
     it('is not the parent’s to operate', async () => {
       const response = await call('POST', `/clinic/sessions/${sessionId}/pause`, {
         token: tokens.parent,
@@ -805,8 +979,31 @@ const configured =
   });
 
   describe('what a parent sees', () => {
-    it('gets a count and their own row, and nobody else’s', async () => {
-      // Three patients ahead, none of them this family's.
+    it('says nothing is happening when nothing is', async () => {
+      const view = await mine();
+      expect(view.items).toEqual([]);
+    });
+
+    it('shows today’s booking before anyone has checked them in', async () => {
+      // An appointment is not a place in the line, and the shape says so: the
+      // visit is there, the turn is not.
+      const appointmentId = await bookedAppointment();
+
+      const view = await mine();
+
+      expect(view.items).toHaveLength(1);
+      expect(view.items?.[0]).toMatchObject({
+        childId,
+        childName: 'Leen',
+        queueEntry: null,
+      });
+      expect(view.items?.[0].appointment).toMatchObject({
+        id: appointmentId,
+        status: 'confirmed',
+      });
+    });
+
+    it('counts the patients actually ahead, and nothing else', async () => {
       const others = await db.database.query<{ id: string }>(
         `insert into clinic.children (clinic_id, full_name)
          values ($1, 'X'), ($1, 'Y') returning id`,
@@ -819,61 +1016,50 @@ const configured =
           body: { sessionId, childId: row.id },
         });
       }
-      const mine = data<Entry>((await walkIn()).body);
+      const ours = data<Entry>((await walkIn()).body);
 
-      const response = await call('GET', '/queue/me', {
-        token: tokens.parent,
+      const view = await mine();
+
+      expect(view.items).toHaveLength(1);
+      expect(view.items?.[0].queueEntry).toMatchObject({
+        id: ours.id,
+        status: 'waiting',
+        aheadCount: 2,
       });
-
-      expect(response.status).toBe(200);
-      const view = data<
-        {
-          childId: string;
-          entry: { id: string; aheadCount: number; ticketNumber: number };
-          session: { doctorPresence: string } | null;
-        }[]
-      >(response.body);
-
-      expect(view).toHaveLength(1);
-      expect(view[0].entry.id).toBe(mine.id);
-      expect(view[0].entry.aheadCount).toBe(2);
-      expect(view[0].session?.doctorPresence).toBe('expected');
 
       // The shape has nowhere to put another patient, which is the point.
       expect(JSON.stringify(view)).not.toContain(others.rows[0].id);
     });
 
-    it('is refused the staff board entirely', async () => {
-      const response = await call(
-        'GET',
-        `/clinic/queue?sessionId=${sessionId}`,
-        { token: tokens.parent },
-      );
-      expect(response.status).toBe(403);
+    it('says nobody is ahead when nobody is', async () => {
+      await walkIn();
+      const view = await mine();
+      expect(view.items?.[0].queueEntry?.aheadCount).toBe(0);
     });
 
-    it('can defer once, and is stopped at the clinic’s limit', async () => {
-      const mine = data<Entry>((await walkIn()).body);
-      await walkIn(siblingId);
+    it('recounts when an emergency is admitted ahead of them', async () => {
+      const ours = data<Entry>((await walkIn()).body);
+      const urgent = data<Entry>((await walkIn(siblingId)).body);
+      expect((await mine()).items?.[0].queueEntry?.aheadCount).toBe(0);
 
-      const first = await call('POST', `/queue/${mine.id}/defer`, {
-        token: tokens.parent,
+      await call('POST', `/clinic/queue/${urgent.id}/emergency`, {
+        token: tokens.doctor,
+        body: { emergency: true, reason: 'صعوبة في التنفس' },
       });
-      expect(first.status).toBe(200);
-      expect(data<{ deferCount: number }>(first.body).deferCount).toBe(1);
 
-      await call('POST', `/queue/${mine.id}/defer`, { token: tokens.parent });
-
-      const third = await call('POST', `/queue/${mine.id}/defer`, {
-        token: tokens.parent,
+      // Ticket numbers did not move; the count did, because it is a count.
+      const after = await mine();
+      const item = after.items?.find((i) => i.queueEntry?.id === ours.id);
+      expect(item?.queueEntry).toMatchObject({
+        ticketNumber: ours.ticketNumber,
+        aheadCount: 1,
       });
-      expect(third.status).toBe(409);
-      expect(errorCode(third.body)).toBe('queue_defer_limit_reached');
     });
 
-    it('cannot defer somebody else’s turn', async () => {
+    it('recounts when staff reorder the line', async () => {
+      const ours = data<Entry>((await walkIn()).body);
       const stranger = await db.database.query<{ id: string }>(
-        `insert into clinic.children (clinic_id, full_name) values ($1, 'Z')
+        `insert into clinic.children (clinic_id, full_name) values ($1, 'R')
          returning id`,
         [clinicId],
       );
@@ -886,11 +1072,280 @@ const configured =
           })
         ).body,
       );
+      expect((await mine()).items?.[0].queueEntry?.aheadCount).toBe(0);
 
-      const response = await call('POST', `/queue/${theirs.id}/defer`, {
+      await call('POST', `/clinic/queue/${theirs.id}/move`, {
+        token: tokens.reception,
+        body: { beforeEntryId: ours.id },
+      });
+
+      expect((await mine()).items?.[0].queueEntry?.aheadCount).toBe(1);
+    });
+
+    it('puts them at the back after a missed turn is requeued', async () => {
+      const ours = data<Entry>((await walkIn()).body);
+      await walkIn(siblingId);
+
+      await call('POST', `/clinic/queue/${ours.id}/call`, {
+        token: tokens.reception,
+      });
+      await call('POST', `/clinic/queue/${ours.id}/miss`, {
+        token: tokens.reception,
+        body: { force: true, reason: 'لم يصل' },
+      });
+
+      const missed = await mine();
+      const missedItem = missed.items?.find((i) => i.childId === childId);
+      expect(missedItem?.queueEntry).toMatchObject({
+        status: 'missed',
+        // Nobody is ahead of a turn that is no longer pending, and a number
+        // left over from when it was waiting would be read as one.
+        aheadCount: 0,
+        estimatedWaitMinutes: null,
+      });
+
+      await call('POST', `/clinic/queue/${ours.id}/requeue`, {
+        token: tokens.reception,
+      });
+
+      const back = await mine();
+      const backItem = back.items?.find((i) => i.childId === childId);
+      expect(backItem?.queueEntry?.status).toBe('waiting');
+      expect(backItem?.queueEntry?.ticketNumber).toBeGreaterThan(
+        ours.ticketNumber,
+      );
+      // Behind the sibling now, which is what losing your place means.
+      expect(backItem?.queueEntry?.aheadCount).toBe(1);
+    });
+
+    it('carries the called time and the deadline it promised', async () => {
+      const ours = data<Entry>((await walkIn()).body);
+      await call('POST', `/clinic/queue/${ours.id}/call`, {
+        token: tokens.reception,
+      });
+
+      const entry = (await mine()).items?.[0].queueEntry;
+      expect(entry?.status).toBe('called');
+      expect(entry?.calledAt).not.toBeNull();
+      expect(entry?.graceExpiresAt).not.toBeNull();
+
+      // The clinic's own grace policy, ten minutes, as a real instant the app
+      // may count down to.
+      const remaining =
+        Date.parse(entry?.graceExpiresAt as string) - Date.now();
+      expect(remaining).toBeGreaterThan(8 * 60_000);
+      expect(remaining).toBeLessThanOrEqual(10 * 60_000);
+    });
+
+    it('reports the queue paused', async () => {
+      await walkIn();
+      await call('POST', `/clinic/sessions/${sessionId}/pause`, {
+        token: tokens.reception,
+      });
+
+      const view = await mine();
+      expect(view.items?.[0].session.status).toBe('paused');
+      // A paused queue is not moving, so there is nothing honest to estimate.
+      expect(view.items?.[0].queueEntry?.estimatedWaitMinutes).toBeNull();
+    });
+
+    it('reports the doctor running late, with the delay staff entered', async () => {
+      await walkIn();
+      await call('POST', `/clinic/sessions/${sessionId}/doctor-presence`, {
+        token: tokens.reception,
+        body: { presence: 'en_route', delayMinutes: 20 },
+      });
+
+      const view = await mine();
+      expect(view.items?.[0].session).toMatchObject({
+        doctorPresence: 'en_route',
+        delayMinutes: 20,
+      });
+      expect(view.items?.[0].queueEntry?.estimatedWaitMinutes).toBeNull();
+    });
+
+    it('offers a coarse band only once the doctor is actually here', async () => {
+      const others = await db.database.query<{ id: string }>(
+        `insert into clinic.children (clinic_id, full_name)
+         values ($1, 'P'), ($1, 'Q'), ($1, 'S') returning id`,
+        [clinicId],
+      );
+      strangerChildIds.push(...others.rows.map((r) => r.id));
+      for (const row of others.rows) {
+        await call('POST', '/clinic/queue/walk-in', {
+          token: tokens.reception,
+          body: { sessionId, childId: row.id },
+        });
+      }
+      await walkIn();
+
+      expect(
+        (await mine()).items?.[0].queueEntry?.estimatedWaitMinutes,
+      ).toBeNull();
+
+      await doctorArrived();
+
+      // Three ahead at six minutes each: a range, never a countdown.
+      expect((await mine()).items?.[0].queueEntry?.estimatedWaitMinutes).toEqual(
+        { from: 20, to: 30 },
+      );
+    });
+
+    it('lists both children when a family has two in the clinic', async () => {
+      const first = data<Entry>((await walkIn()).body);
+      const second = data<Entry>((await walkIn(siblingId)).body);
+
+      const view = await mine();
+
+      expect(view.items).toHaveLength(2);
+      expect(view.items?.map((i) => i.childName).sort()).toEqual([
+        'Leen',
+        'Yusuf',
+      ]);
+      expect(view.items?.map((i) => i.queueEntry?.id).sort()).toEqual(
+        [first.id, second.id].sort(),
+      );
+    });
+
+    it('moves its revision when the queue moves, and holds still otherwise', async () => {
+      const entry = data<Entry>((await walkIn()).body);
+      const first = await mine();
+      expect(first.revision).toBeGreaterThan(0);
+
+      // An unchanged poll answers in two numbers.
+      const unchanged = await mine(first.revision);
+      expect(unchanged.changed).toBe(false);
+      expect(unchanged.items).toBeUndefined();
+
+      await call('POST', `/clinic/queue/${entry.id}/call`, {
+        token: tokens.reception,
+      });
+
+      const after = await mine(first.revision);
+      expect(after.changed).toBeUndefined();
+      expect(after.items?.[0].queueEntry?.status).toBe('called');
+      expect(after.revision).toBeGreaterThan(first.revision);
+    });
+
+    it('is refused the staff board entirely', async () => {
+      const response = await call(
+        'GET',
+        `/clinic/queue?sessionId=${sessionId}`,
+        { token: tokens.parent },
+      );
+      expect(response.status).toBe(403);
+    });
+
+    it('can defer once, and is stopped at the clinic’s limit', async () => {
+      const ours = data<Entry>((await walkIn()).body);
+      await walkIn(siblingId);
+
+      const first = await call('POST', `/queue/${ours.id}/defer`, {
         token: tokens.parent,
       });
-      expect(response.status).toBe(404);
+      expect(first.status).toBe(200);
+      expect(data<{ deferCount: number }>(first.body).deferCount).toBe(1);
+
+      await call('POST', `/queue/${ours.id}/defer`, { token: tokens.parent });
+
+      const third = await call('POST', `/queue/${ours.id}/defer`, {
+        token: tokens.parent,
+      });
+      expect(third.status).toBe(409);
+      expect(errorCode(third.body)).toBe('queue_defer_limit_reached');
+    });
+  });
+
+  describe('one family cannot see another', () => {
+    /** Both families in the clinic at once, so isolation is actually tested. */
+    async function bothFamilies(): Promise<{ ours: Entry; theirs: Entry }> {
+      const theirs = data<Entry>(
+        (
+          await call('POST', '/clinic/queue/walk-in', {
+            token: tokens.reception,
+            body: {
+              sessionId,
+              childId: otherChildId,
+              guardianId: otherGuardianId,
+            },
+          })
+        ).body,
+      );
+      const ours = data<Entry>((await walkIn()).body);
+      return { ours, theirs };
+    }
+
+    it('returns only the caller’s own children', async () => {
+      const { ours } = await bothFamilies();
+
+      const view = await mine();
+
+      expect(view.items).toHaveLength(1);
+      expect(view.items?.[0].queueEntry?.id).toBe(ours.id);
+    });
+
+    it('leaks no name, id, ticket or appointment belonging to anyone else', async () => {
+      const { theirs } = await bothFamilies();
+      const appointmentId = await bookedAppointment();
+
+      const body = JSON.stringify(await mine());
+
+      for (const secret of [
+        theirs.id,
+        otherChildId,
+        otherGuardianId,
+        'Nobody-Elses-Business',
+      ]) {
+        expect(body).not.toContain(secret);
+      }
+      // Our own appointment is ours to see; the check above is about theirs.
+      expect(body).toContain(appointmentId);
+    });
+
+    it('shows the other family their own turn and only theirs', async () => {
+      const { ours } = await bothFamilies();
+
+      const view = await mine(undefined, tokens.other);
+
+      expect(view.items).toHaveLength(1);
+      expect(view.items?.[0]).toMatchObject({
+        childId: otherChildId,
+        childName: 'Nobody-Elses-Business',
+      });
+      expect(JSON.stringify(view)).not.toContain(ours.id);
+      expect(JSON.stringify(view)).not.toContain(childId);
+    });
+
+    it('tells a guessed entry id nothing at all', async () => {
+      const { theirs } = await bothFamilies();
+
+      // The only route that takes an entry id from a parent. A real id
+      // belonging to somebody else answers exactly as an invented one does.
+      const real = await call('POST', `/queue/${theirs.id}/defer`, {
+        token: tokens.parent,
+      });
+      const invented = await call(
+        'POST',
+        '/queue/00000000-0000-4000-8000-000000000000/defer',
+        { token: tokens.parent },
+      );
+
+      expect(real.status).toBe(404);
+      expect(invented.status).toBe(404);
+      expect(errorCode(real.body)).toBe(errorCode(invented.body));
+      expect(real.body).toEqual(invented.body);
+    });
+
+    it('cannot see another clinic’s day at all', async () => {
+      await walkIn();
+
+      const view = await mine();
+
+      expect(JSON.stringify(view)).not.toContain(otherClinicId);
+      expect(JSON.stringify(view)).not.toContain(otherClinicSessionId);
+      expect(JSON.stringify(view)).not.toContain('Another-Clinic-Child');
+      // The other clinic has a patient waiting; it must not count here.
+      expect(view.items?.[0].queueEntry?.aheadCount).toBe(0);
     });
   });
 

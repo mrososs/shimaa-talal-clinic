@@ -31,4 +31,3 @@ export {
 // session's entries with the appointments still expected and the names behind
 // both, and this library may not see either.
 export type { QueueSessionEntry } from './lib/queue-entry.service';
-export type { ParentQueueView } from './lib/api/my-queue.controller';

@@ -87,10 +87,46 @@ export interface ParentQueueEntry {
    * How many patients are ahead of this one right now. Counted by the server
    * from the real service order, so it stays correct after a reorder, an
    * emergency insertion or a deferral.
+   *
+   * Zero once the turn is no longer pending — a finished or missed entry has
+   * nobody ahead of it, and a number left over from when it was waiting would
+   * be read as one.
    */
   aheadCount: number;
 
+  /** When the clinic called this patient. `null` until they are called. */
+  calledAt: IsoInstant | null;
+
+  /**
+   * The deadline the clinic promised when it called them.
+   *
+   * A real instant, so a screen may count down to it exactly. It is the only
+   * countdown in the parent app that is allowed to tick — see
+   * `estimatedWaitMinutes` for why the other one may not.
+   */
   graceExpiresAt: IsoInstant | null;
+
+  /**
+   * A coarse band, in minutes, or `null`.
+   *
+   * Null whenever the clinic cannot honestly estimate: the doctor has not
+   * arrived, the session is not running, or the turn is not pending. The rule
+   * lives here rather than in the app because it is a promise the clinic makes,
+   * and a client deriving it from `avgConsultMinutes` would eventually make
+   * that promise in a state where the clinic would not.
+   *
+   * Deliberately a range and never a countdown. A ticking "17:42 remaining" is
+   * a commitment the clinic cannot keep, and a parent reads it as one while
+   * driving.
+   */
+  estimatedWaitMinutes: WaitEstimate | null;
+
   deferCount: number;
   isEmergency: boolean;
+}
+
+/** A range, in minutes. Always shown as a range, never as a single number. */
+export interface WaitEstimate {
+  from: number;
+  to: number;
 }

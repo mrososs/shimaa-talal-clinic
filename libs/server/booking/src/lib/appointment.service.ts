@@ -474,6 +474,33 @@ export class AppointmentService {
   }
 
   /**
+   * One family's appointments inside a given set of sessions.
+   *
+   * The live-queue screen needs today's visit and only today's: a booking three
+   * weeks out is not what a parent standing in the clinic is asking about.
+   * Sessions are passed in because this library does not know what "today"
+   * means for a clinic — that lives with the clinic's timezone.
+   */
+  async listForGuardianInSessions(
+    clinicId: string,
+    guardianId: string,
+    sessionIds: readonly string[],
+    db: SqlExecutor = this.database,
+  ): Promise<Appointment[]> {
+    if (sessionIds.length === 0) return [];
+
+    const result = await db.query<AppointmentRow>(
+      `select ${COLUMNS} from clinic.appointments
+        where clinic_id = $1
+          and guardian_id = $2
+          and session_id = any($3)
+        order by window_start`,
+      [clinicId, guardianId, [...sessionIds]],
+    );
+    return result.rows.map(toAppointment);
+  }
+
+  /**
    * A guardian's own appointments.
    *
    * Scoped by `guardian_id` in the query rather than filtered afterwards. A

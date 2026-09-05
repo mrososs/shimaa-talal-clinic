@@ -20,3 +20,7 @@ export {
   type CancelInput,
 } from './lib/cancel-appointment.workflow';
 export { ClinicQueueBoardWorkflow } from './lib/clinic-queue-board.workflow';
+export {
+  ParentQueueViewWorkflow,
+  type ParentQueueInput,
+} from './lib/parent-queue-view.workflow';

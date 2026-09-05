@@ -181,6 +181,38 @@ export class QueueEntryService {
     return result.rows.map(toEntry);
   }
 
+  /**
+   * Every entry belonging to these children, in these sessions.
+   *
+   * Scoped by child rather than by `guardian_id`, because `guardian_children`
+   * is the ownership predicate the rest of the system uses: a father must see
+   * his child's turn even when the mother's name is the one reception wrote on
+   * the entry, and a walk-in registered with no guardian at all is still that
+   * child's turn.
+   *
+   * Every status, not only the active ones. A parent whose turn was missed
+   * needs to be told so, and one whose visit just finished should see it end
+   * rather than watch the screen go blank.
+   */
+  async listForChildrenInSessions(
+    clinicId: string,
+    childIds: readonly string[],
+    sessionIds: readonly string[],
+    db: SqlExecutor = this.database,
+  ): Promise<QueueEntry[]> {
+    if (childIds.length === 0 || sessionIds.length === 0) return [];
+
+    const result = await db.query<EntryRow>(
+      `select ${COLUMNS} from clinic.queue_entries
+        where clinic_id = $1
+          and child_id = any($2)
+          and session_id = any($3)
+        order by checked_in_at`,
+      [clinicId, [...childIds], [...sessionIds]],
+    );
+    return result.rows.map(toEntry);
+  }
+
   /** The entry a given appointment produced, if it has been checked in. */
   async findByAppointment(
     clinicId: string,

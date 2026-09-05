@@ -4,9 +4,11 @@ import { BookingModule } from '@clinic/server-booking';
 import { QueueModule } from '@clinic/server-queue';
 import { PatientsModule } from '@clinic/server-patients';
 import { ClinicModule } from '@clinic/server-clinic';
+import { ParentQueueController } from './api/parent-queue.controller';
 import { QueueBoardController } from './api/queue-board.controller';
 import { WorkflowsController } from './api/workflows.controller';
 import { ClinicQueueBoardWorkflow } from './clinic-queue-board.workflow';
+import { ParentQueueViewWorkflow } from './parent-queue-view.workflow';
 import { CancelAppointmentWorkflow } from './cancel-appointment.workflow';
 import { CheckInAppointmentWorkflow } from './check-in-appointment.workflow';
 import { CompleteQueueEntryWorkflow } from './complete-queue-entry.workflow';
@@ -34,11 +36,12 @@ import { CompleteQueueEntryWorkflow } from './complete-queue-entry.workflow';
  * lives in Queue. If a workflow needs something new from a domain, it is added
  * to that domain's public interface deliberately.
  *
- * The board is the one read here. It is a composition rather than a query —
- * order from Queue, names from Patients, who is still expected from Booking —
- * and the same rule that keeps check-in out of Booking keeps it out of Queue.
+ * Two reads live here as well. The staff board and the parent's own view are
+ * both compositions rather than queries — order from Queue, names from
+ * Patients, today's visit from Booking, the day from Clinic — and the same rule
+ * that keeps check-in out of Booking keeps them out of Queue.
  *
- * This is not a workflow engine, and it is not going to become one. Four
+ * This is not a workflow engine, and it is not going to become one. Five
  * classes, no event bus, no saga, no command bus.
  */
 @Module({
@@ -49,18 +52,20 @@ import { CompleteQueueEntryWorkflow } from './complete-queue-entry.workflow';
     QueueModule,
     PatientsModule,
   ],
-  controllers: [WorkflowsController, QueueBoardController],
+  controllers: [WorkflowsController, QueueBoardController, ParentQueueController],
   providers: [
     CheckInAppointmentWorkflow,
     CompleteQueueEntryWorkflow,
     CancelAppointmentWorkflow,
     ClinicQueueBoardWorkflow,
+    ParentQueueViewWorkflow,
   ],
   exports: [
     CheckInAppointmentWorkflow,
     CompleteQueueEntryWorkflow,
     CancelAppointmentWorkflow,
     ClinicQueueBoardWorkflow,
+    ParentQueueViewWorkflow,
   ],
 })
 export class WorkflowsModule {}
