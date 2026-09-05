@@ -67,6 +67,21 @@ describeWithDatabase('appointments', (fx) => {
       ...overrides,
     });
 
+  /**
+   * A second session later the same day.
+   *
+   * Deliberately `evening`: a doctor has one morning and one evening session
+   * per day, and two `morning` rows on one date is a state the schema refuses.
+   */
+  const laterSession = (
+    overrides: Parameters<typeof openSession>[0] = {},
+  ) =>
+    openSession({
+      startsInMinutes: 300,
+      sessionKind: 'evening',
+      ...overrides,
+    });
+
   describe('booking a window', () => {
     it('lands as a request when the clinic approves bookings', async () => {
       // The pilot's policy: a parent asks, staff accept.
@@ -457,7 +472,7 @@ describeWithDatabase('appointments', (fx) => {
   describe('rescheduling', () => {
     it('moves the family and leaves a trail back', async () => {
       const session = await openSession();
-      const later = await openSession({ startsInMinutes: 300 });
+      const later = await laterSession();
       const original = await book(session);
 
       const moved = await service().reschedule(
@@ -475,7 +490,7 @@ describeWithDatabase('appointments', (fx) => {
 
     it('releases the old seat, so exactly one appointment stays live', async () => {
       const session = await openSession();
-      const later = await openSession({ startsInMinutes: 300 });
+      const later = await laterSession();
       const original = await book(session);
 
       await service().reschedule(
@@ -514,10 +529,7 @@ describeWithDatabase('appointments', (fx) => {
     it('leaves the original untouched when the target is unbookable', async () => {
       const session = await openSession();
       const original = await book(session);
-      const closed = await openSession({
-        startsInMinutes: 300,
-        status: 'closed',
-      });
+      const closed = await laterSession({ status: 'closed' });
 
       await expect(
         service().reschedule(
@@ -537,7 +549,7 @@ describeWithDatabase('appointments', (fx) => {
     it('refuses to reschedule something already completed', async () => {
       const svc = service();
       const session = await openSession();
-      const later = await openSession({ startsInMinutes: 300 });
+      const later = await laterSession();
       const appointment = await book(session);
 
       for (const to of [
@@ -567,7 +579,7 @@ describeWithDatabase('appointments', (fx) => {
       const session = await openSession();
       const upcoming = await book(session);
 
-      const past = await openSession({ startsInMinutes: 300 });
+      const past = await laterSession();
       const finished = await book(past, { childId: fx.siblingId });
       for (const to of [
         AppointmentStatus.Confirmed,

@@ -5,5 +5,10 @@
   "projectType": "library",
   "tags": ["type:data-access", "platform:server", "scope:shared"],
   "// targets": "to see all targets run: nx show project server-clinic --web",
-  "targets": {}
+  "// test": "these tests run against the real database, and the session pooler allows 15 clients. Two suites racing ten parallel transactions each exhaust it, so they take their turn.",
+  "targets": {
+    "test": {
+      "parallelism": false
+    }
+  }
 }

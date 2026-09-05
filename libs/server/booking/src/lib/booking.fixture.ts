@@ -124,6 +124,15 @@ export async function insertSession(
     windowMinutes?: number;
     capacityPerWindow?: number;
     status?: 'scheduled' | 'open' | 'paused' | 'closed';
+    /**
+     * Which half of the day this is.
+     *
+     * `clinic_sessions_day_uq` allows one session per doctor per half-day, so a
+     * test that needs two on the same date has to say which is which. That is
+     * exactly what the column is for, and a test that ignored it would be
+     * asserting against a shape the clinic cannot have.
+     */
+    sessionKind?: 'morning' | 'evening';
   },
 ): Promise<{ id: string; windowStart: string }> {
   const startsIn = input.startsInMinutes ?? 60;
@@ -137,7 +146,7 @@ export async function insertSession(
      values (
        $1, $2,
        ((now() + make_interval(mins => $3)) at time zone 'Africa/Cairo')::date,
-       'morning',
+       $8,
        -- Truncated to the minute so the window boundary is an exact instant;
        -- the booking check requires the offset to divide evenly.
        date_trunc('minute', now() + make_interval(mins => $3)),
@@ -152,6 +161,7 @@ export async function insertSession(
       input.windowMinutes ?? 60,
       input.capacityPerWindow ?? 5,
       input.status ?? 'scheduled',
+      input.sessionKind ?? 'morning',
     ],
   );
 

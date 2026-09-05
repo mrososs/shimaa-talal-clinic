@@ -4,6 +4,7 @@
   "sourceRoot": "apps/api/src",
   "projectType": "application",
   "tags": ["type:app", "platform:server"],
+  "// test": "these tests run against the real database, and the session pooler allows 15 clients. Two suites racing ten parallel transactions each exhaust it, so they take their turn.",
   "targets": {
     "prune-lockfile": {
       "dependsOn": ["build"],
@@ -63,7 +64,8 @@
     "test": {
       "options": {
         "passWithNoTests": true
-      }
+      },
+      "parallelism": false
     }
   }
 }
