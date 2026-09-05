@@ -1,8 +1,9 @@
-import { Logger, ValidationPipe, VersioningType } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { API_PREFIX, API_VERSION } from '@clinic/contracts';
-import { ApiExceptionFilter, ServerConfigService } from '@clinic/server-core';
+import { ServerConfigService } from '@clinic/server-core';
 import { AppModule } from './app/app.module';
+import { configureApp } from './app/configure-app';
 
 /**
  * Bootstrap for the clinic API.
@@ -17,29 +18,14 @@ async function bootstrap(): Promise<void> {
   // process has already failed by this point, with an actionable message.
   const config = app.get(ServerConfigService);
 
-  // Routes resolve as /api/v1/<path>. Both values come from @clinic/contracts,
-  // so the frontends cannot drift from the server.
-  app.setGlobalPrefix(API_PREFIX);
-  app.enableVersioning({
-    type: VersioningType.URI,
-    defaultVersion: API_VERSION,
-  });
+  // Prefix, versioning, validation and the error envelope. Shared with the
+  // test that asserts the security behaviour, so both exercise one pipeline.
+  configureApp(app);
 
   app.enableCors({
     origin: config.corsOrigins === '*' ? true : config.corsOrigins,
     credentials: true,
   });
-
-  app.useGlobalPipes(
-    new ValidationPipe({
-      transform: true,
-      whitelist: true,
-      forbidNonWhitelisted: true,
-    }),
-  );
-
-  // Every error leaves the API in the shared ApiResponse failure shape.
-  app.useGlobalFilters(new ApiExceptionFilter());
 
   // Without this, onModuleDestroy never runs on SIGTERM and the pg pool is
   // torn down by process exit rather than closed cleanly.

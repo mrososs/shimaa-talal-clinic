@@ -8,6 +8,7 @@ import { PaymentsModule } from '@clinic/server-payments';
 import { QueueModule } from '@clinic/server-queue';
 import {
   ApiEnvelopeInterceptor,
+  RolesGuard,
   ServerCoreModule,
   SupabaseAuthGuard,
 } from '@clinic/server-core';
@@ -62,14 +63,15 @@ import { HealthModule } from './health/health.module';
     // arrives with clinic membership and guardian ownership.
     { provide: APP_GUARD, useClass: SupabaseAuthGuard },
 
-    // `RolesGuard` belongs here too, immediately after the one above — global
-    // guards run in registration order, and it reads the user that one sets.
+    // Authorisation, immediately after authentication. Order matters: global
+    // guards run in registration order, and this one reads the user the guard
+    // above attaches.
     //
-    // It is not registered yet because it depends on GUARDIAN_RESOLVER and
-    // CLINIC_MEMBER_RESOLVER, which are ports with no implementation until the
-    // patients and clinic domains land. Registering it now would fail at boot.
-    // When those arrive, this becomes three entries: the two bindings and
-    //   { provide: APP_GUARD, useClass: RolesGuard }
+    // Its two resolvers are bound by the domains that own them —
+    // GUARDIAN_RESOLVER in PatientsModule, CLINIC_MEMBER_RESOLVER in
+    // ClinicModule — so the composition root wires the guard and nothing else.
+    // No domain logic lives here.
+    { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
 export class AppModule {}

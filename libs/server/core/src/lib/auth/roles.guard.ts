@@ -38,10 +38,10 @@ import { ROLES_KEY } from './roles.decorator';
  * proportional: `GET /me` has to work for a user who is neither, and pays
  * nothing for the privilege.
  *
- * NOT REGISTERED GLOBALLY YET. Both resolvers are ports with no implementation
- * until the patients and clinic domains land, and registering a guard whose
- * dependencies cannot resolve would fail at boot. Registration is one entry in
- * `apps/api`'s providers, alongside the two bindings.
+ * Registered as `APP_GUARD` in `apps/api`, immediately after
+ * `SupabaseAuthGuard` — global guards run in registration order, and this one
+ * reads the user that one attaches. The resolvers behind its two ports are
+ * bound by the domains that own them.
  */
 @Injectable()
 export class RolesGuard implements CanActivate {
