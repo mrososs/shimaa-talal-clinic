@@ -6,8 +6,9 @@
     '^.+\\.[tj]s$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
   },
   moduleFileExtensions: ['ts', 'js', 'html'],
-  // These libraries are deliberate empty domain boundaries: no behaviour has
-  // been implemented yet, so there is nothing meaningful to assert.
-  passWithNoTests: true,
+  // Domain suites here talk to a real PostgreSQL: the guarantee under test is
+  // a partial unique index deciding a race, and a mock would only prove the
+  // mock.
+  testTimeout: 30_000,
   coverageDirectory: '../../../coverage/libs/server/booking',
 };

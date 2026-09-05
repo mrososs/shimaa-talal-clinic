@@ -113,35 +113,70 @@ export class ClinicSessionService {
     date: string,
     db: SqlExecutor = this.database,
   ): Promise<ClinicSession[]> {
+    await this.materialise(clinicId, date, date, db);
+    return this.findByDate(clinicId, date, db);
+  }
+
+  /**
+   * The same, for a span of days.
+   *
+   * A booking screen shows a week at once, and materialising day by day would
+   * be seven round trips to answer one question. The insert generates the dates
+   * itself.
+   */
+  async ensureForRange(
+    clinicId: string,
+    from: string,
+    to: string,
+    db: SqlExecutor = this.database,
+  ): Promise<ClinicSession[]> {
+    await this.materialise(clinicId, from, to, db);
+
+    const result = await db.query<SessionRow>(
+      `select ${SESSION_COLUMNS} from clinic.clinic_sessions
+        where clinic_id = $1
+          and session_date between $2::date and $3::date
+        order by session_date, planned_start`,
+      [clinicId, from, to],
+    );
+    return result.rows.map(toSession);
+  }
+
+  private async materialise(
+    clinicId: string,
+    from: string,
+    to: string,
+    db: SqlExecutor,
+  ): Promise<void> {
     await db.query(
       `insert into clinic.clinic_sessions (
          clinic_id, doctor_member_id, session_date, session_kind,
          planned_start, planned_end, window_minutes, capacity_per_window,
          avg_consult_minutes)
-       select distinct on (s.doctor_member_id, s.session_kind)
+       select distinct on (d.day, s.doctor_member_id, s.session_kind)
          s.clinic_id,
          s.doctor_member_id,
-         $2::date,
+         d.day,
          s.session_kind,
-         (($2::date + s.starts_at) at time zone c.timezone),
-         (($2::date + s.ends_at)   at time zone c.timezone),
+         ((d.day + s.starts_at) at time zone c.timezone),
+         ((d.day + s.ends_at)   at time zone c.timezone),
          s.window_minutes,
          s.capacity_per_window,
          c.default_avg_consult_minutes
-       from clinic.clinic_schedules s
+       from generate_series($2::date, $3::date, interval '1 day') as g(day)
+       cross join lateral (select g.day::date as day) d
+       join clinic.clinic_schedules s
+         on s.clinic_id = $1
+        and s.active
+        and s.weekday = extract(dow from d.day)
+        and s.effective_from <= d.day
+        and (s.effective_to is null or s.effective_to >= d.day)
        join clinic.clinics c on c.id = s.clinic_id and c.active
-       where s.clinic_id = $1
-         and s.active
-         and s.weekday = extract(dow from $2::date)
-         and s.effective_from <= $2::date
-         and (s.effective_to is null or s.effective_to >= $2::date)
-       order by s.doctor_member_id, s.session_kind, s.effective_from desc
+       order by d.day, s.doctor_member_id, s.session_kind, s.effective_from desc
        on conflict (clinic_id, doctor_member_id, session_date, session_kind)
        do nothing`,
-      [clinicId, date],
+      [clinicId, from, to],
     );
-
-    return this.findByDate(clinicId, date, db);
   }
 
   /**

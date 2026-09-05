@@ -65,6 +65,58 @@ export class ClinicService {
     );
     return result.rows[0] ? toClinic(result.rows[0]) : null;
   }
+
+  /**
+   * The operating rules other domains enforce on the clinic's behalf.
+   *
+   * Separate from `findById` because these are not for clients. `Clinic` is a
+   * contract a browser receives; these are numbers Booking applies and nobody
+   * renders — a cancellation cutoff is a rule, not a label.
+   *
+   * Booking asks for them here rather than reading `clinic.clinics` itself, so
+   * the columns stay owned by one library.
+   */
+  async findPolicy(
+    clinicId: string,
+    db: SqlExecutor = this.database,
+  ): Promise<ClinicPolicy | null> {
+    const result = await db.query<PolicyRow>(
+      `select auto_confirm_parent_bookings, min_lead_minutes,
+              cancellation_cutoff_minutes, grace_period_minutes,
+              max_self_defers
+         from clinic.clinics where id = $1 and active`,
+      [clinicId],
+    );
+    const row = result.rows[0];
+    return row
+      ? {
+          autoConfirmParentBookings: row.auto_confirm_parent_bookings,
+          minLeadMinutes: row.min_lead_minutes,
+          cancellationCutoffMinutes: row.cancellation_cutoff_minutes,
+          gracePeriodMinutes: row.grace_period_minutes,
+          maxSelfDefers: row.max_self_defers,
+        }
+      : null;
+  }
+}
+
+/** Clinic rules the domains apply. Deliberately not part of any API contract. */
+export interface ClinicPolicy {
+  autoConfirmParentBookings: boolean;
+  /** How close to a window the clinic still accepts a booking. */
+  minLeadMinutes: number;
+  /** How long before a window a parent may still cancel or reschedule. */
+  cancellationCutoffMinutes: number;
+  gracePeriodMinutes: number;
+  maxSelfDefers: number;
+}
+
+interface PolicyRow extends QueryResultRow {
+  auto_confirm_parent_bookings: boolean;
+  min_lead_minutes: number;
+  cancellation_cutoff_minutes: number;
+  grace_period_minutes: number;
+  max_self_defers: number;
 }
 
 function toClinic(row: ClinicRow): Clinic {
