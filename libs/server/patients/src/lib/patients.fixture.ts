@@ -1,6 +1,7 @@
 import {
   createTestDatabase,
   testDatabaseUrl,
+  type ServerConfigService,
   type SqlExecutor,
   type TestDatabase,
 } from '@clinic/server-core';
@@ -154,4 +155,27 @@ export function uniquePhone(): string {
   phoneCounter += 1;
   const suffix = String(10_000_000 + phoneCounter).slice(-8);
   return `010${suffix}`;
+}
+
+/**
+ * The slice of `ServerConfigService` this domain reads.
+ *
+ * Built by hand rather than by booting the configuration module: a suite needs
+ * one value, and standing up Nest's config to get it would couple every domain
+ * test to how the application boots.
+ *
+ * The cast lives here, once, rather than at each call site. Services depend on
+ * the concrete `ServerConfigService` by design — the repo's rule is to inject
+ * it and never `process.env` — so a stub cannot structurally satisfy it.
+ */
+export function testConfig(): ServerConfigService {
+  const pepper = process.env['CLAIM_CODE_PEPPER'];
+  if (pepper === undefined || pepper.length < 32) {
+    throw new Error(
+      'CLAIM_CODE_PEPPER must be set for the patients suite; see .env.example.',
+    );
+  }
+  return {
+    security: { claimCodePepper: pepper },
+  } as unknown as ServerConfigService;
 }

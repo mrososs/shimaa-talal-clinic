@@ -59,6 +59,22 @@ export interface DatabaseConfig {
   ssl: boolean;
 }
 
+/** Secrets that protect application-level credentials, not infrastructure. */
+export interface SecurityConfig {
+  /**
+   * Server-side key for the guardian claim-code HMAC.
+   *
+   * A claim code is six digits — a million possibilities, which a plain digest
+   * gives up in seconds to anyone holding a copy of the table. Keying the hash
+   * with a secret the database does not contain means a stolen table is not
+   * enough: without this value the digests cannot be reversed at all.
+   *
+   * Never given a VITE_ prefix, never sent to a client. Rotating it invalidates
+   * every outstanding claim code, which is a few minutes of inconvenience.
+   */
+  claimCodePepper: string;
+}
+
 export interface ServerConfig {
   nodeEnv: NodeEnvironment;
   port: number;
@@ -66,6 +82,7 @@ export interface ServerConfig {
   corsOrigins: string[] | '*';
   supabase: SupabaseServerConfig;
   database: DatabaseConfig;
+  security: SecurityConfig;
 }
 
 export class ServerConfigError extends Error {
@@ -189,6 +206,27 @@ function readBoolean(
   );
 }
 
+/** Minimum pepper length. A short secret is barely better than none. */
+const MIN_PEPPER_LENGTH = 32;
+
+function readSecurity(env: RawServerEnv): SecurityConfig {
+  const claimCodePepper = requireString(
+    env,
+    'CLAIM_CODE_PEPPER',
+    'Generate one with `openssl rand -base64 48`.',
+  );
+
+  if (claimCodePepper.length < MIN_PEPPER_LENGTH) {
+    throw new ServerConfigError(
+      `CLAIM_CODE_PEPPER must be at least ${MIN_PEPPER_LENGTH} characters.` +
+        ' A short secret leaves claim codes brute-forceable from a stolen' +
+        ' table, which is the whole thing it exists to prevent.',
+    );
+  }
+
+  return { claimCodePepper };
+}
+
 function readSupabase(env: RawServerEnv): SupabaseServerConfig {
   if (
     !optionalString(env, 'SUPABASE_SECRET_KEY') &&
@@ -259,6 +297,7 @@ export function loadServerConfig(
     corsOrigins: readCorsOrigins(env),
     supabase: readSupabase(env),
     database: readDatabase(env),
+    security: readSecurity(env),
   };
 }
 

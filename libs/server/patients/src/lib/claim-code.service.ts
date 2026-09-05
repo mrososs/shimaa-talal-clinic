@@ -1,6 +1,10 @@
-import { createHash, randomInt } from 'node:crypto';
+import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import { DatabaseService, type SqlExecutor } from '@clinic/server-core';
+import {
+  DatabaseService,
+  ServerConfigService,
+  type SqlExecutor,
+} from '@clinic/server-core';
 import type { Guardian, IsoInstant } from '@clinic/contracts';
 import type { PhoneRegion } from '@clinic/phone';
 import { GuardianService } from './guardian.service';
@@ -39,14 +43,16 @@ export interface ClaimInput {
  * provider, no email verification, no social login.
  *
  * The plaintext exists for exactly one moment, in the response to the staff
- * member who issued it. Only a SHA-256 digest is stored, so a database leak
- * yields no usable codes.
+ * member who issued it. What is stored is a keyed HMAC rather than a bare
+ * digest — see `fingerprint` for why that distinction carries the security of
+ * the whole mechanism.
  */
 @Injectable()
 export class ClaimCodeService {
   constructor(
     private readonly database: DatabaseService,
     private readonly guardians: GuardianService,
+    private readonly config: ServerConfigService,
   ) {}
 
   /**
@@ -91,7 +97,7 @@ export class ClaimCodeService {
          returning expires_at`,
         [
           guardianId,
-          fingerprint(code),
+          this.fingerprint(code),
           String(CLAIM_CODE_TTL_MINUTES),
           issuedByMemberId,
         ],
@@ -113,7 +119,8 @@ export class ClaimCodeService {
    * check performed beforehand:
    *
    *   - the attempt counter is incremented by the same UPDATE that reads the
-   *     code, so a wrong guess is recorded even though the attempt fails;
+   *     code, on its own connection, so a wrong guess is durably recorded before
+   *     anything can fail or be rolled back;
    *   - the code is consumed by an UPDATE requiring `consumed_at is null`;
    *   - the guardian is linked by an UPDATE requiring `auth_user_id is null`.
    *
@@ -121,9 +128,17 @@ export class ClaimCodeService {
    * one winner, and the loser gets a conflict rather than a second link.
    */
   async claim(input: ClaimInput, db?: SqlExecutor): Promise<Guardian> {
-    // Recorded outside the transaction below, so a wrong guess still counts
-    // even though the operation that follows it fails and rolls back.
-    const attempt = await (db ?? this.database).query<{
+    // Deliberately `this.database` and never the caller's executor, even when
+    // one is supplied. This is the only write here that must survive the
+    // operation failing: it runs on its own pooled connection, as its own
+    // implicit transaction, and commits before anything below can throw.
+    //
+    // Routing it through a caller's transaction would undo the entire rate
+    // limit — a wrong guess inside a transaction that then rolls back leaves
+    // the counter untouched, so an attacker could guess without limit simply by
+    // calling from inside one. Verified: a probe measured 0 after a rolled-back
+    // attempt and 1 without.
+    const attempt = await this.database.query<{
       id: string;
       code_hash: string;
       attempts: number;
@@ -155,7 +170,7 @@ export class ClaimCodeService {
         'That code has expired. Ask the clinic for a new one.',
       );
     }
-    if (!matches(row.code_hash, input.code)) {
+    if (!this.matches(row.code_hash, input.code)) {
       throw new PatientsError(
         PatientsErrorCode.ClaimCodeInvalid,
         'That code is not valid.',
@@ -215,6 +230,43 @@ export class ClaimCodeService {
     );
     return guardian !== null && !guardian.hasAccount;
   }
+
+  /**
+   * Keyed, not plain.
+   *
+   * A claim code is six digits. A bare `sha256(code)` has a million possible
+   * inputs, so anyone holding a copy of `guardian_claim_codes` recovers every
+   * live code in seconds on a laptop — the digest offers no protection at all
+   * at that size. An HMAC keyed with a secret the database does not contain
+   * makes that search impossible without also stealing the application's
+   * environment, which is a different and much harder compromise.
+   *
+   * This is why a general password hasher (bcrypt, argon2) is not needed here:
+   * their cost factors exist to slow a search that, in this case, cannot start.
+   */
+  private fingerprint(code: string): string {
+    return createHmac('sha256', this.pepper).update(code).digest('hex');
+  }
+
+  /**
+   * Constant-time over the digests.
+   *
+   * Both sides are 64 hex characters by construction, so the lengths always
+   * match and `timingSafeEqual` cannot throw. Comparing with `===` would leak
+   * how many leading characters matched, which is a foothold for narrowing a
+   * guess one position at a time.
+   */
+  private matches(storedHash: string, candidate: string): boolean {
+    const expected = Buffer.from(storedHash, 'hex');
+    const actual = Buffer.from(this.fingerprint(candidate), 'hex');
+    return (
+      expected.length === actual.length && timingSafeEqual(expected, actual)
+    );
+  }
+
+  private get pepper(): string {
+    return this.config.security.claimCodePepper;
+  }
 }
 
 /**
@@ -226,16 +278,4 @@ export class ClaimCodeService {
 function generateCode(): string {
   const max = 10 ** CODE_LENGTH;
   return String(randomInt(0, max)).padStart(CODE_LENGTH, '0');
-}
-
-function fingerprint(code: string): string {
-  return createHash('sha256').update(code).digest('hex');
-}
-
-/**
- * Compared over the digests, which are fixed-length, so the comparison leaks
- * nothing about the code through its duration.
- */
-function matches(storedHash: string, candidate: string): boolean {
-  return storedHash === fingerprint(candidate);
 }

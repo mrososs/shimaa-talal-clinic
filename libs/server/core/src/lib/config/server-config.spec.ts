@@ -4,6 +4,7 @@ const MINIMAL_ENV = {
   SUPABASE_URL: 'http://127.0.0.1:54321',
   SUPABASE_SECRET_KEY: 'sb_secret_for_tests',
   DATABASE_URL: 'postgresql://postgres:postgres@127.0.0.1:54322/postgres',
+  CLAIM_CODE_PEPPER: 'a-test-pepper-of-at-least-thirty-two-characters',
 };
 
 /** The minimal environment with one required variable removed. */
@@ -114,6 +115,28 @@ describe('loadServerConfig', () => {
       expect(() =>
         loadServerConfig({ ...MINIMAL_ENV, DATABASE_POOL_MAX: 'lots' }),
       ).toThrow(ServerConfigError);
+    });
+  });
+
+  describe('claim code pepper', () => {
+    it('is required, because a claim code is six digits', () => {
+      // Without it the stored HMAC degrades to something a leaked table gives
+      // up to an offline search in seconds.
+      expect(() => loadServerConfig(envWithout('CLAIM_CODE_PEPPER'))).toThrow(
+        ServerConfigError,
+      );
+    });
+
+    it('refuses a short secret rather than pretending it is one', () => {
+      expect(() =>
+        loadServerConfig({ ...MINIMAL_ENV, CLAIM_CODE_PEPPER: 'too-short' }),
+      ).toThrow(/at least 32 characters/);
+    });
+
+    it('is exposed on the security section', () => {
+      expect(loadServerConfig(MINIMAL_ENV).security.claimCodePepper).toBe(
+        MINIMAL_ENV.CLAIM_CODE_PEPPER,
+      );
     });
   });
 });

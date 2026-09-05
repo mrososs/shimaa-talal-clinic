@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import {
   CLAIM_CODE_MAX_ATTEMPTS,
   CLAIM_CODE_TTL_MINUTES,
@@ -6,7 +5,12 @@ import {
 } from './claim-code.service';
 import { GuardianService } from './guardian.service';
 import { PatientsErrorCode } from './patients.errors';
-import { REGION, describeWithDatabase, uniquePhone } from './patients.fixture';
+import {
+  REGION,
+  describeWithDatabase,
+  testConfig,
+  uniquePhone,
+} from './patients.fixture';
 
 /**
  * Claiming is the one place a stranger can reach an existing family's records,
@@ -15,7 +19,11 @@ import { REGION, describeWithDatabase, uniquePhone } from './patients.fixture';
 describeWithDatabase('ClaimCodeService', (fx) => {
   const guardians = () => new GuardianService(fx.db.database);
   const claims = () =>
-    new ClaimCodeService(fx.db.database, new GuardianService(fx.db.database));
+    new ClaimCodeService(
+      fx.db.database,
+      new GuardianService(fx.db.database),
+      testConfig(),
+    );
 
   const unclaimedGuardian = (name = 'Unclaimed') =>
     guardians().create({
@@ -51,8 +59,10 @@ describeWithDatabase('ClaimCodeService', (fx) => {
       expect(minutesAway).toBeLessThanOrEqual(CLAIM_CODE_TTL_MINUTES);
     });
 
-    it('stores only a digest, never the code itself', async () => {
-      // A database leak must not hand over a set of working claim codes.
+    it('never stores the code itself', async () => {
+      // A database leak must not hand over a set of working claim codes. That
+      // the stored value is a *keyed* HMAC, and why that matters at six digits,
+      // is asserted in claim-hardening.spec.ts.
       const guardian = await unclaimedGuardian();
       const issued = await claims().issue(
         fx.clinicId,
@@ -66,9 +76,7 @@ describeWithDatabase('ClaimCodeService', (fx) => {
       );
 
       expect(row.rows[0].code_hash).not.toContain(issued.code);
-      expect(row.rows[0].code_hash).toBe(
-        createHash('sha256').update(issued.code).digest('hex'),
-      );
+      expect(row.rows[0].code_hash).toMatch(/^[0-9a-f]{64}$/);
     });
 
     it('replaces a previous code rather than leaving two live', async () => {

@@ -5,6 +5,7 @@ import {
   ServerConfigError,
   type DatabaseConfig,
   type NodeEnvironment,
+  type SecurityConfig,
   type ServerConfig,
   type SupabaseServerConfig,
 } from './server-config';
@@ -42,6 +43,11 @@ export class ServerConfigService {
   /** Direct PostgreSQL access for transactional business data. */
   get database(): DatabaseConfig {
     return this.values.database;
+  }
+
+  /** Application-level secrets. Never reaches a client. */
+  get security(): SecurityConfig {
+    return this.values.security;
   }
 
   private get values(): ServerConfig {
