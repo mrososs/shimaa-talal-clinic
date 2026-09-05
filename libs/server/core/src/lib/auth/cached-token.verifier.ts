@@ -44,6 +44,10 @@ interface CacheEntry {
  *      token's own `exp`, so a cached identity can never be served after the
  *      moment the token itself stopped being valid.
  *
+ * Callers receive a copy, never the retained object. Without that, anything
+ * that wrote to the returned user — resolved roles, for instance — would be
+ * writing into the cache, and one request would leak into the next.
+ *
  * Concurrent first-time requests with the same token will each reach the inner
  * verifier — there is no in-flight de-duplication. That costs a few extra calls
  * on a cold cache and keeps this class simple; add it only if measurements ever
@@ -74,7 +78,7 @@ export class CachedTokenVerifier implements TokenVerifier {
 
     if (cached !== undefined) {
       if (cached.expiresAt > now) {
-        return cached.user;
+        return { ...cached.user };
       }
       this.entries.delete(key);
     }
@@ -85,7 +89,9 @@ export class CachedTokenVerifier implements TokenVerifier {
       return null;
     }
 
-    this.store(key, user, accessToken, now);
+    // Retain a copy and hand back the original, so neither side can reach the
+    // other's object.
+    this.store(key, { ...user }, accessToken, now);
     return user;
   }
 

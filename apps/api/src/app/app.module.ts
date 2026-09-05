@@ -52,6 +52,15 @@ import { HealthModule } from './health/health.module';
     // This answers "who is calling". What they may do is authorisation, and it
     // arrives with clinic membership and guardian ownership.
     { provide: APP_GUARD, useClass: SupabaseAuthGuard },
+
+    // `RolesGuard` belongs here too, immediately after the one above — global
+    // guards run in registration order, and it reads the user that one sets.
+    //
+    // It is not registered yet because it depends on GUARDIAN_RESOLVER and
+    // CLINIC_MEMBER_RESOLVER, which are ports with no implementation until the
+    // patients and clinic domains land. Registering it now would fail at boot.
+    // When those arrive, this becomes three entries: the two bindings and
+    //   { provide: APP_GUARD, useClass: RolesGuard }
   ],
 })
 export class AppModule {}

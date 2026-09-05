@@ -7,6 +7,19 @@ import type { AuthenticatedRequest } from './authenticated-request';
 import type { AuthenticatedUser } from './authenticated-user';
 
 /**
+ * The check, as a plain function — see `current-context.decorator.ts` for why
+ * it is not inlined into the decorator.
+ */
+export function requireUser(
+  user: AuthenticatedUser | undefined,
+): AuthenticatedUser {
+  if (!user) {
+    throw new UnauthorizedException('Authentication required.');
+  }
+  return user;
+}
+
+/**
  * Injects the verified caller into a handler parameter.
  *
  * Non-nullable by design: on any route the global guard protects, a handler
@@ -18,14 +31,8 @@ import type { AuthenticatedUser } from './authenticated-user';
  * no authenticated user — and it fails the request instead of the process.
  */
 export const CurrentUser = createParamDecorator(
-  (_data: unknown, context: ExecutionContext): AuthenticatedUser => {
-    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const user = request?.user;
-
-    if (!user) {
-      throw new UnauthorizedException('Authentication required.');
-    }
-
-    return user;
-  },
+  (_data: unknown, context: ExecutionContext): AuthenticatedUser =>
+    requireUser(
+      context.switchToHttp().getRequest<AuthenticatedRequest>()?.user,
+    ),
 );
