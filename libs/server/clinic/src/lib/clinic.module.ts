@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CLINIC_MEMBER_RESOLVER, ServerCoreModule } from '@clinic/server-core';
+import { ClinicMeController } from './api/clinic-me.controller';
 import { ClinicMemberResolverImpl } from './clinic-member.resolver';
 import { ClinicMemberService } from './clinic-member.service';
 import { ClinicService } from './clinic.service';
@@ -26,7 +27,7 @@ import { ClinicService } from './clinic.service';
  */
 @Module({
   imports: [ServerCoreModule],
-  controllers: [],
+  controllers: [ClinicMeController],
   providers: [
     ClinicService,
     ClinicMemberService,

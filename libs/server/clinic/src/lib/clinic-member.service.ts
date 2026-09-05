@@ -5,13 +5,21 @@ import {
   type QueryResultRow,
   type SqlExecutor,
 } from '@clinic/server-core';
-import type { ClinicMemberRole, ClinicMemberStatus } from '@clinic/contracts';
+import type {
+  ClinicMember,
+  ClinicMemberRole,
+  ClinicMemberStatus,
+} from '@clinic/contracts';
 
 interface MemberRow extends QueryResultRow {
   id: string;
   clinic_id: string;
   role: string;
   status: string;
+}
+
+interface ProfileRow extends MemberRow {
+  display_name: string;
 }
 
 const MEMBER_COLUMNS = 'id, clinic_id, role, status';
@@ -52,6 +60,40 @@ export class ClinicMemberService {
       [authUserId],
     );
     return result.rows[0] ? toContext(result.rows[0]) : null;
+  }
+
+  /**
+   * The member as a person, for the screen that greets them.
+   *
+   * Separate from `findByAuthUserId` on purpose. That one runs on every guarded
+   * staff request and projects only what authorisation needs; this one runs
+   * once, when the dashboard boots, and may afford a display name.
+   *
+   * Clinic-scoped, unlike the resolver: by the time this is called the tenant
+   * is already known from the token, and scoping the read to it means a member
+   * id from anywhere else resolves to nothing.
+   */
+  async findProfile(
+    clinicId: string,
+    memberId: string,
+    db: SqlExecutor = this.database,
+  ): Promise<ClinicMember | null> {
+    const result = await db.query<ProfileRow>(
+      `select id, clinic_id, role, display_name, status
+         from clinic.clinic_members
+        where id = $1 and clinic_id = $2`,
+      [memberId, clinicId],
+    );
+    const row = result.rows[0];
+    return row
+      ? {
+          id: row.id,
+          clinicId: row.clinic_id,
+          role: row.role as ClinicMemberRole,
+          displayName: row.display_name,
+          status: row.status as ClinicMemberStatus,
+        }
+      : null;
   }
 }
 

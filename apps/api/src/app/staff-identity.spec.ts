@@ -688,4 +688,54 @@ const configured =
       expect(allowed.status).toBe(200);
     });
   });
+
+  describe('staff session bootstrap', () => {
+    it('tells a member who they are and which clinic they operate', async () => {
+      const response = await call('GET', '/clinic/me', {
+        token: tokens.reception,
+      });
+
+      expect(response.status).toBe(200);
+      expect(data(response.body)['member']).toMatchObject({
+        role: 'reception',
+        status: 'active',
+        clinicId,
+      });
+      expect(data(response.body)['clinic']).toMatchObject({
+        id: clinicId,
+        // The dashboard reads policy from here rather than hardcoding it.
+        timezone: expect.any(String),
+        gracePeriodMinutes: expect.any(Number),
+        today: expect.any(String),
+      });
+    });
+
+    it('reports the doctor role, so the shell can hide reception controls', async () => {
+      const response = await call('GET', '/clinic/me', {
+        token: tokens.doctor,
+      });
+      expect((data(response.body)['member'] as { role: string }).role).toBe(
+        'doctor',
+      );
+    });
+
+    it('refuses a parent, which is the "no clinic access" screen', async () => {
+      const response = await call('GET', '/clinic/me', {
+        token: tokens.parent,
+      });
+      expect(response.status).toBe(403);
+    });
+
+    it('refuses suspended staff', async () => {
+      const response = await call('GET', '/clinic/me', {
+        token: tokens.suspended,
+      });
+      expect(response.status).toBe(403);
+    });
+
+    it('refuses a request with no token', async () => {
+      const response = await call('GET', '/clinic/me');
+      expect(response.status).toBe(401);
+    });
+  });
 });
