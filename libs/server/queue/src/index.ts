@@ -22,6 +22,13 @@ export {
   QueueCommandService,
   type QueueActor,
 } from './lib/queue-command.service';
-export { QueueError, QueueErrorCode } from './lib/queue.errors';
-export type { QueueBoardResponse } from './lib/api/clinic-queue.controller';
+export {
+  QueueError,
+  QueueErrorCode,
+} from './lib/queue.errors';
+
+// The board is composed a layer up, in @clinic/server-workflows: it mixes this
+// session's entries with the appointments still expected and the names behind
+// both, and this library may not see either.
+export type { QueueSessionEntry } from './lib/queue-entry.service';
 export type { ParentQueueView } from './lib/api/my-queue.controller';

@@ -452,6 +452,28 @@ export class AppointmentService {
   }
 
   /**
+   * Every appointment booked into one session.
+   *
+   * The queue board needs this to show who is still expected — the families
+   * with a confirmed visit and no queue entry yet. Scoped to the session rather
+   * than the day because a board is one half-day: the evening clinic's arrivals
+   * are not the morning's problem.
+   */
+  async listForSession(
+    clinicId: string,
+    sessionId: string,
+    db: SqlExecutor = this.database,
+  ): Promise<Appointment[]> {
+    const result = await db.query<AppointmentRow>(
+      `select ${COLUMNS} from clinic.appointments
+        where clinic_id = $1 and session_id = $2
+        order by window_start, seat_no`,
+      [clinicId, sessionId],
+    );
+    return result.rows.map(toAppointment);
+  }
+
+  /**
    * A guardian's own appointments.
    *
    * Scoped by `guardian_id` in the query rather than filtered afterwards. A

@@ -24,6 +24,8 @@ export type {
   UpdateChildInput,
 } from './lib/child.service';
 
+export { PatientDirectoryService } from './lib/patient-directory.service';
+
 export { GuardianOwnershipService } from './lib/guardian-ownership.service';
 
 export { ClaimCodeService } from './lib/claim-code.service';

@@ -19,21 +19,6 @@ import {
 const trim = ({ value }: TransformFnParams): unknown =>
   typeof value === 'string' ? value.trim() : value;
 
-export class QueueBoardQueryDto {
-  @IsUUID()
-  sessionId!: string;
-
-  /**
-   * The revision the caller already has.
-   *
-   * A poll every five seconds mostly finds nothing new; sending it back lets
-   * the server answer "unchanged" in a few bytes instead of the whole board.
-   */
-  @IsOptional()
-  @IsString()
-  since?: string;
-}
-
 /** A patient with no booking. No appointment row is invented for them. */
 export class WalkInDto {
   @IsUUID()

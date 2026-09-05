@@ -6,6 +6,7 @@ import {
 } from '@clinic/server-core';
 import { ClinicModule } from '@clinic/server-clinic';
 import { ChildService } from './child.service';
+import { PatientDirectoryService } from './patient-directory.service';
 import { ClaimCodeService } from './claim-code.service';
 import { GuardianOwnershipService } from './guardian-ownership.service';
 import { GuardianService } from './guardian.service';
@@ -50,6 +51,7 @@ import { PatientsGuardianResolver } from './patients-guardian.resolver';
   providers: [
     GuardianService,
     ChildService,
+    PatientDirectoryService,
     GuardianOwnershipService,
     ClaimCodeService,
     PatientsGuardianResolver,
@@ -61,6 +63,7 @@ import { PatientsGuardianResolver } from './patients-guardian.resolver';
   exports: [
     GuardianService,
     ChildService,
+    PatientDirectoryService,
     GuardianOwnershipService,
     ClaimCodeService,
     GUARDIAN_RESOLVER,

@@ -1,13 +1,11 @@
 import {
   Body,
   Controller,
-  Get,
   HttpCode,
   HttpStatus,
   Param,
   ParseUUIDPipe,
   Post,
-  Query,
   UseFilters,
 } from '@nestjs/common';
 import {
@@ -15,22 +13,14 @@ import {
   Roles,
   type ClinicMemberContext,
 } from '@clinic/server-core';
-import { ClinicSessionService } from '@clinic/server-clinic';
-import {
-  UserRole,
-  type ClinicSession,
-  type QueueEntry,
-} from '@clinic/contracts';
+import { UserRole, type QueueEntry } from '@clinic/contracts';
 import { QueueCommandService } from '../queue-command.service';
-import { QueueEntryService } from '../queue-entry.service';
-import { QueueError, QueueErrorCode } from '../queue.errors';
 import {
   CallNextDto,
   CancelEntryDto,
   EmergencyDto,
   MissDto,
   MoveEntryDto,
-  QueueBoardQueryDto,
   WalkInDto,
 } from './queue.dto';
 import { QueueExceptionFilter } from './queue-exception.filter';
@@ -55,38 +45,12 @@ import { QueueExceptionFilter } from './queue-exception.filter';
 @Controller({ path: 'clinic/queue', version: '1' })
 @UseFilters(QueueExceptionFilter)
 export class ClinicQueueController {
-  constructor(
-    private readonly entries: QueueEntryService,
-    private readonly commands: QueueCommandService,
-    private readonly sessions: ClinicSessionService,
-  ) {}
+  constructor(private readonly commands: QueueCommandService) {}
 
-  /**
-   * The whole board, in service order.
-   *
-   * `since` is the revision the caller already holds. A five-second poll mostly
-   * finds nothing new, and answering "unchanged" in a few bytes is what keeps
-   * that cadence honest without a socket.
-   */
-  @Roles(UserRole.Reception, UserRole.Admin, UserRole.Doctor)
-  @Get()
-  async board(
-    @CurrentMember() member: ClinicMemberContext,
-    @Query() query: QueueBoardQueryDto,
-  ): Promise<QueueBoardResponse> {
-    const session = await this.requireSession(member.clinicId, query.sessionId);
-
-    if (query.since !== undefined && Number(query.since) === session.revision) {
-      return { revision: session.revision, changed: false, session };
-    }
-
-    return {
-      revision: session.revision,
-      changed: true,
-      session,
-      entries: await this.entries.listForSession(session.id),
-    };
-  }
+  // `GET /clinic/queue` is not here. The board mixes this session's entries
+  // with the appointments still expected and the names behind both, which is
+  // Booking and Patients as much as Queue — so it is composed in
+  // `@clinic/server-workflows` and served on the same path from there.
 
   /**
    * A patient with no booking.
@@ -242,32 +206,4 @@ export class ClinicQueueController {
     );
   }
 
-  private async requireSession(
-    clinicId: string,
-    sessionId: string,
-  ): Promise<ClinicSession> {
-    const session = await this.sessions.findById(clinicId, sessionId);
-    if (session === null) {
-      // A session at another clinic reads as "no such session".
-      throw new QueueError(
-        QueueErrorCode.EntryNotFound,
-        'No such session at this clinic.',
-      );
-    }
-    return session;
-  }
-}
-
-/**
- * The board, or a note saying it has not moved.
- *
- * `changed: false` carries the session anyway — doctor presence and the pace
- * estimate live there, and a poll that learned nothing about them would make
- * the banner stale even while the queue itself was quiet.
- */
-export interface QueueBoardResponse {
-  revision: number;
-  changed: boolean;
-  session: ClinicSession;
-  entries?: QueueEntry[];
 }

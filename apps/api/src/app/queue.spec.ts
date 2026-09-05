@@ -110,7 +110,30 @@ const configured =
     status: string;
     appointmentId: string | null;
     isEmergency: boolean;
+    child?: { id: string; fullName: string };
+    guardian?: { id: string; fullName: string } | null;
+    emergencyReason?: string | null;
   }
+
+  interface Board {
+    revision: number;
+    changed?: false;
+    session?: { id: string; revision: number };
+    entries?: Entry[];
+    notArrived?: { id: string; child: { fullName: string }; isLate: boolean }[];
+  }
+
+  const board = async (since?: number): Promise<Board> => {
+    const query =
+      since === undefined ? '' : `&since=${since}`;
+    const response = await call(
+      'GET',
+      `/clinic/queue?sessionId=${sessionId}${query}`,
+      { token: tokens.doctor },
+    );
+    expect(response.status).toBe(200);
+    return data<Board>(response.body);
+  };
 
   /** A confirmed appointment in today's session, ready to be checked in. */
   async function bookedAppointment(child = childId): Promise<string> {
@@ -497,68 +520,179 @@ const configured =
   });
 
   describe('the board', () => {
-    it('returns the day in service order', async () => {
+    it('names every patient, in service order', async () => {
+      // A board of ticket numbers with no names beside them is unusable at a
+      // desk, and the names live in a domain the queue may not read.
       await walkIn();
       await walkIn(siblingId);
 
-      const response = await call(
-        'GET',
-        `/clinic/queue?sessionId=${sessionId}`,
-        { token: tokens.doctor },
-      );
+      const day = await board();
 
-      expect(response.status).toBe(200);
-      const board = data<{
-        changed: boolean;
-        entries: Entry[];
-        revision: number;
-      }>(response.body);
-      expect(board.changed).toBe(true);
-      expect(board.entries).toHaveLength(2);
-      expect(board.entries.map((e) => e.ticketNumber)).toEqual([1, 2]);
+      expect(day.entries).toHaveLength(2);
+      expect(day.entries?.map((e) => e.ticketNumber)).toEqual([1, 2]);
+      expect(day.entries?.map((e) => e.child?.fullName)).toEqual([
+        'Leen',
+        'Yusuf',
+      ]);
+      expect(day.entries?.[0].guardian?.fullName).toBe('Queue Parent');
     });
 
-    it('answers a poll that is already current without the board', async () => {
-      await walkIn();
-      const first = data<{ revision: number }>(
-        (
-          await call('GET', `/clinic/queue?sessionId=${sessionId}`, {
-            token: tokens.doctor,
-          })
-        ).body,
-      );
+    it('keeps who is still expected out of the queue itself', async () => {
+      // An appointment is not a place in the line. Merging the two lists would
+      // put a patient on the board that "call next" could then announce.
+      await bookedAppointment();
 
-      const again = await call(
-        'GET',
-        `/clinic/queue?sessionId=${sessionId}&since=${first.revision}`,
-        { token: tokens.doctor },
-      );
+      const day = await board();
 
-      const board = data<{ changed: boolean; entries?: Entry[] }>(again.body);
-      expect(board.changed).toBe(false);
-      expect(board.entries).toBeUndefined();
+      expect(day.entries).toHaveLength(0);
+      expect(day.notArrived).toHaveLength(1);
+      expect(day.notArrived?.[0].child.fullName).toBe('Leen');
+      expect(day.notArrived?.[0].isLate).toBe(false);
     });
 
-    it('reports changed once somebody moves', async () => {
+    it('moves them across when they arrive', async () => {
+      const appointmentId = await bookedAppointment();
+      await call('POST', `/clinic/appointments/${appointmentId}/check-in`, {
+        token: tokens.reception,
+      });
+
+      const day = await board();
+
+      expect(day.notArrived).toHaveLength(0);
+      expect(day.entries?.map((e) => e.appointmentId)).toEqual([appointmentId]);
+    });
+
+    it('shows why somebody was moved ahead', async () => {
       const entry = data<Entry>((await walkIn()).body);
-      const before = data<{ revision: number }>(
-        (
-          await call('GET', `/clinic/queue?sessionId=${sessionId}`, {
-            token: tokens.doctor,
-          })
-        ).body,
-      );
+      await call('POST', `/clinic/queue/${entry.id}/emergency`, {
+        token: tokens.doctor,
+        body: { emergency: true, reason: 'صعوبة في التنفس' },
+      });
+
+      const day = await board();
+      expect(day.entries?.[0].emergencyReason).toBe('صعوبة في التنفس');
+    });
+
+    it('answers a poll that is already current in two numbers', async () => {
+      await walkIn();
+      const first = await board();
+
+      const again = await board(first.revision);
+
+      expect(again.changed).toBe(false);
+      expect(again.entries).toBeUndefined();
+      expect(again.notArrived).toBeUndefined();
+    });
+
+    it('sends the board again once somebody moves', async () => {
+      const entry = data<Entry>((await walkIn()).body);
+      const before = await board();
 
       await call('POST', `/clinic/queue/${entry.id}/call`, {
         token: tokens.reception,
       });
 
-      const after = await call(
-        'GET',
-        `/clinic/queue?sessionId=${sessionId}&since=${before.revision}`,
-        { token: tokens.doctor },
+      const after = await board(before.revision);
+      expect(after.changed).toBeUndefined();
+      expect(after.entries?.[0].status).toBe('called');
+    });
+  });
+
+  describe('the day', () => {
+    it('lists today without being told the date', async () => {
+      const response = await call('GET', '/clinic/sessions', {
+        token: tokens.reception,
+      });
+
+      expect(response.status).toBe(200);
+      const sessions = data<{ id: string; status: string }[]>(response.body);
+      // "Today" is a fact about Cairo, not about wherever this runs.
+      expect(sessions.map((session) => session.id)).toContain(sessionId);
+    });
+
+    it('stops the queue advancing while it is paused', async () => {
+      await walkIn();
+      const paused = await call('POST', `/clinic/sessions/${sessionId}/pause`, {
+        token: tokens.reception,
+      });
+      expect(data<{ status: string }>(paused.body).status).toBe('paused');
+
+      const refused = await call('POST', '/clinic/queue/call-next', {
+        token: tokens.reception,
+        body: { sessionId },
+      });
+      expect(refused.status).toBe(409);
+      expect(errorCode(refused.body)).toBe('queue_session_not_running');
+
+      await call('POST', `/clinic/sessions/${sessionId}/resume`, {
+        token: tokens.reception,
+      });
+      const called = await call('POST', '/clinic/queue/call-next', {
+        token: tokens.reception,
+        body: { sessionId },
+      });
+      expect(called.status).toBe(200);
+    });
+
+    it('refuses to reopen a day that was closed', async () => {
+      await call('POST', `/clinic/sessions/${sessionId}/close`, {
+        token: tokens.reception,
+      });
+
+      const response = await call('POST', `/clinic/sessions/${sessionId}/open`, {
+        token: tokens.reception,
+      });
+      expect(response.status).toBe(409);
+      expect(errorCode(response.body)).toBe('session_closed');
+    });
+
+    it('records the doctor running late, and clears it on arrival', async () => {
+      const late = await call(
+        `POST`,
+        `/clinic/sessions/${sessionId}/doctor-presence`,
+        {
+          token: tokens.reception,
+          body: { presence: 'en_route', delayMinutes: 20, note: 'في الطريق' },
+        },
       );
-      expect(data<{ changed: boolean }>(after.body).changed).toBe(true);
+      expect(data<{ delayMinutes: number }>(late.body)).toMatchObject({
+        doctorPresence: 'en_route',
+        delayMinutes: 20,
+      });
+
+      // A stale "20 minutes late" on a doctor who is here is worse than saying
+      // nothing at all.
+      const here = await call(
+        'POST',
+        `/clinic/sessions/${sessionId}/doctor-presence`,
+        { token: tokens.doctor, body: { presence: 'arrived' } },
+      );
+      expect(data<{ delayMinutes: number | null }>(here.body)).toMatchObject({
+        doctorPresence: 'arrived',
+        delayMinutes: null,
+      });
+    });
+
+    it('takes a new pace and refuses an impossible one', async () => {
+      const updated = await call('PATCH', `/clinic/sessions/${sessionId}/pace`, {
+        token: tokens.doctor,
+        body: { avgConsultMinutes: 12 },
+      });
+      expect(data<{ avgConsultMinutes: number }>(updated.body).avgConsultMinutes)
+        .toBe(12);
+
+      const refused = await call('PATCH', `/clinic/sessions/${sessionId}/pace`, {
+        token: tokens.doctor,
+        body: { avgConsultMinutes: 0 },
+      });
+      expect(refused.status).toBe(400);
+    });
+
+    it('is not the parent’s to operate', async () => {
+      const response = await call('POST', `/clinic/sessions/${sessionId}/pause`, {
+        token: tokens.parent,
+      });
+      expect(response.status).toBe(403);
     });
   });
 
@@ -582,14 +716,8 @@ const configured =
         ticketNumber: urgent.ticketNumber,
       });
 
-      const board = data<{ entries: Entry[] }>(
-        (
-          await call('GET', `/clinic/queue?sessionId=${sessionId}`, {
-            token: tokens.doctor,
-          })
-        ).body,
-      );
-      expect(board.entries.map((e) => e.id)).toEqual([urgent.id, first.id]);
+      const day = await board();
+      expect(day.entries?.map((e) => e.id)).toEqual([urgent.id, first.id]);
     });
 
     it('refuses an emergency with no reason', async () => {
@@ -669,15 +797,9 @@ const configured =
       );
       expect(row.rows[0].status).toBe('cancelled');
 
-      const board = data<{ entries: Entry[] }>(
-        (
-          await call('GET', `/clinic/queue?sessionId=${sessionId}`, {
-            token: tokens.doctor,
-          })
-        ).body,
-      );
+      const day = await board();
       expect(
-        board.entries.filter((e) => e.status !== 'cancelled'),
+        day.entries?.filter((e) => e.status !== 'cancelled'),
       ).toHaveLength(0);
     });
   });

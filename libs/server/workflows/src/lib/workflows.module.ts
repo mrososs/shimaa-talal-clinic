@@ -2,7 +2,11 @@ import { Module } from '@nestjs/common';
 import { ServerCoreModule } from '@clinic/server-core';
 import { BookingModule } from '@clinic/server-booking';
 import { QueueModule } from '@clinic/server-queue';
+import { PatientsModule } from '@clinic/server-patients';
+import { ClinicModule } from '@clinic/server-clinic';
+import { QueueBoardController } from './api/queue-board.controller';
 import { WorkflowsController } from './api/workflows.controller';
+import { ClinicQueueBoardWorkflow } from './clinic-queue-board.workflow';
 import { CancelAppointmentWorkflow } from './cancel-appointment.workflow';
 import { CheckInAppointmentWorkflow } from './check-in-appointment.workflow';
 import { CompleteQueueEntryWorkflow } from './complete-queue-entry.workflow';
@@ -30,21 +34,33 @@ import { CompleteQueueEntryWorkflow } from './complete-queue-entry.workflow';
  * lives in Queue. If a workflow needs something new from a domain, it is added
  * to that domain's public interface deliberately.
  *
- * This is not a workflow engine, and it is not going to become one. Three
+ * The board is the one read here. It is a composition rather than a query —
+ * order from Queue, names from Patients, who is still expected from Booking —
+ * and the same rule that keeps check-in out of Booking keeps it out of Queue.
+ *
+ * This is not a workflow engine, and it is not going to become one. Four
  * classes, no event bus, no saga, no command bus.
  */
 @Module({
-  imports: [ServerCoreModule, BookingModule, QueueModule],
-  controllers: [WorkflowsController],
+  imports: [
+    ServerCoreModule,
+    ClinicModule,
+    BookingModule,
+    QueueModule,
+    PatientsModule,
+  ],
+  controllers: [WorkflowsController, QueueBoardController],
   providers: [
     CheckInAppointmentWorkflow,
     CompleteQueueEntryWorkflow,
     CancelAppointmentWorkflow,
+    ClinicQueueBoardWorkflow,
   ],
   exports: [
     CheckInAppointmentWorkflow,
     CompleteQueueEntryWorkflow,
     CancelAppointmentWorkflow,
+    ClinicQueueBoardWorkflow,
   ],
 })
 export class WorkflowsModule {}

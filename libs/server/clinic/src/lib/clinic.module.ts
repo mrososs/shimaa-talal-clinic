@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CLINIC_MEMBER_RESOLVER, ServerCoreModule } from '@clinic/server-core';
 import { ClinicMeController } from './api/clinic-me.controller';
+import { ClinicSessionsController } from './api/clinic-sessions.controller';
 import { ClinicMemberResolverImpl } from './clinic-member.resolver';
 import { ClinicMemberService } from './clinic-member.service';
 import { ClinicScheduleService } from './clinic-schedule.service';
@@ -20,8 +21,9 @@ import { ClinicService } from './clinic.service';
  * Patients binds the guardian side: the implementation choice stays inside the
  * domain that owns it.
  *
- * Schedules, closures and sessions are NOT here. They are the operational day,
- * a separate task, and nothing in this module anticipates them.
+ * It also owns the operational day: schedules, closures and the sessions
+ * materialised from them. That is shared ground on purpose — Booking reads a
+ * session's capacity, Queue writes its status, and neither may see the other.
  *
  * `scope:shared` rather than a domain of its own because booking, queue and
  * patients all need to read a clinic, and a domain may only depend on itself
@@ -29,7 +31,7 @@ import { ClinicService } from './clinic.service';
  */
 @Module({
   imports: [ServerCoreModule],
-  controllers: [ClinicMeController],
+  controllers: [ClinicMeController, ClinicSessionsController],
   providers: [
     ClinicService,
     ClinicMemberService,

@@ -31,6 +31,10 @@ interface EntryRow extends QueryResultRow {
   defer_count: number;
 }
 
+interface SessionEntryRow extends EntryRow {
+  emergency_reason: string | null;
+}
+
 /**
  * `sort_key` and `priority` are absent from this projection on purpose.
  *
@@ -65,6 +69,18 @@ export const EMERGENCY_PRIORITY = 10;
  * beyond a clinic day.
  */
 export const SORT_KEY_GAP = 1000;
+
+/**
+ * An entry as a board shows it, before names are attached.
+ *
+ * `emergencyReason` is here and not on `QueueEntry` because it is staff-facing
+ * by nature: it says why somebody was moved ahead, which is the question a
+ * colleague asks and the one an audit asks later. A parent is told an emergency
+ * came in, never whose or what.
+ */
+export type QueueSessionEntry = QueueEntry & {
+  emergencyReason: string | null;
+};
 
 export interface CreateEntryInput {
   clinicId: string;
@@ -121,18 +137,27 @@ export class QueueEntryService {
     return result.rows.map(toEntry);
   }
 
-  /** Everything that happened in this session, finished rows included. */
+  /**
+   * Everything that happened in this session, finished rows included.
+   *
+   * The board shows the whole half-day, not just who is still waiting: the desk
+   * needs to see that a patient was completed as much as that one is next, and
+   * a row vanishing the moment it finished would read as a mistake.
+   */
   async listForSession(
     sessionId: string,
     db: SqlExecutor = this.database,
-  ): Promise<QueueEntry[]> {
-    const result = await db.query<EntryRow>(
-      `select ${COLUMNS} from clinic.queue_entries
+  ): Promise<QueueSessionEntry[]> {
+    const result = await db.query<SessionEntryRow>(
+      `select ${COLUMNS}, emergency_reason from clinic.queue_entries
         where session_id = $1
         order by priority, sort_key, checked_in_at`,
       [sessionId],
     );
-    return result.rows.map(toEntry);
+    return result.rows.map((row) => ({
+      ...toEntry(row),
+      emergencyReason: row.emergency_reason,
+    }));
   }
 
   /**

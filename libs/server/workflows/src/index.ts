@@ -1,9 +1,10 @@
 /**
  * `@clinic/server-workflows` — cross-domain orchestration.
  *
- * Three classes, each sequencing a change that has to commit across more than
- * one domain. Nothing else belongs here: a rule about what makes a booking
- * valid lives in Booking, and one about who is served next lives in Queue.
+ * Four classes: three that sequence a change committing across more than one
+ * domain, and one that composes the board those changes are made from. Nothing
+ * else belongs here — a rule about what makes a booking valid lives in Booking,
+ * and one about who is served next lives in Queue.
  */
 export * from './lib/workflows.module';
 export {
@@ -18,3 +19,4 @@ export {
   CancelAppointmentWorkflow,
   type CancelInput,
 } from './lib/cancel-appointment.workflow';
+export { ClinicQueueBoardWorkflow } from './lib/clinic-queue-board.workflow';
