@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { BookingModule } from '@clinic/server-booking';
 import { ClinicModule } from '@clinic/server-clinic';
 import { NotificationsModule } from '@clinic/server-notifications';
 import { PatientsModule } from '@clinic/server-patients';
 import { PaymentsModule } from '@clinic/server-payments';
 import { QueueModule } from '@clinic/server-queue';
-import { ServerCoreModule } from '@clinic/server-core';
+import { ServerCoreModule, SupabaseAuthGuard } from '@clinic/server-core';
 import { WorkflowsModule } from '@clinic/server-workflows';
 import { HealthModule } from './health/health.module';
 
@@ -38,6 +39,19 @@ import { HealthModule } from './health/health.module';
     // Cross-domain orchestration. Sits above the domains; the domains stay
     // unaware of it and of each other.
     WorkflowsModule,
+  ],
+  providers: [
+    // Authentication is on by default for every route in every module. A route
+    // opts out with `@Public()`, which is one line in a diff — where forgetting
+    // to protect a route would be an absence nobody notices.
+    //
+    // Registered here rather than in AuthModule because ServerCoreModule is
+    // imported by every domain, and an APP_GUARD provided from a library module
+    // is registered once per import.
+    //
+    // This answers "who is calling". What they may do is authorisation, and it
+    // arrives with clinic membership and guardian ownership.
+    { provide: APP_GUARD, useClass: SupabaseAuthGuard },
   ],
 })
 export class AppModule {}

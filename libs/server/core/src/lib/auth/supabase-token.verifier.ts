@@ -6,9 +6,9 @@ import type { TokenVerifier } from './token-verifier';
 /**
  * Verifies a Supabase access token by asking Supabase Auth who it belongs to.
  *
- * Nothing enforces this yet: no guard is registered, and no route is protected.
- * Wiring it into a guard is a Phase 2 task, deliberately left undone so the
- * foundation ships without a half-built auth flow.
+ * One network round-trip per verification, which is why this sits behind the
+ * `TokenVerifier` interface: a cache and local JWKS verification can replace
+ * it without any caller changing.
  */
 @Injectable()
 export class SupabaseTokenVerifier implements TokenVerifier {

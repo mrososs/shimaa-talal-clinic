@@ -1,5 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import type { HealthCheckResult } from '@clinic/contracts';
+import { Public } from '@clinic/server-core';
 
 /**
  * `GET /api/v1/health`
@@ -14,6 +15,9 @@ import type { HealthCheckResult } from '@clinic/contracts';
  */
 @Controller({ path: 'health', version: '1' })
 export class HealthController {
+  // The one route that opts out of authentication. A probe cannot hold a
+  // token, and a health check that needs one cannot report that auth is down.
+  @Public()
   @Get()
   check(): HealthCheckResult {
     return {

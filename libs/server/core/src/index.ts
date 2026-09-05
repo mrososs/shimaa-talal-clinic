@@ -23,9 +23,13 @@ export * from './lib/database/sql-executor';
 export * from './lib/supabase/supabase.module';
 export * from './lib/supabase/supabase.service';
 
-// auth - token verification seam (not enforced on any route yet)
+// auth - identity: who is calling. Enforced by default; see SupabaseAuthGuard.
 export * from './lib/auth/auth.module';
+export * from './lib/auth/authenticated-request';
 export * from './lib/auth/authenticated-user';
+export * from './lib/auth/current-user.decorator';
+export * from './lib/auth/public.decorator';
+export * from './lib/auth/supabase-auth.guard';
 export * from './lib/auth/supabase-token.verifier';
 export * from './lib/auth/token-verifier';
 

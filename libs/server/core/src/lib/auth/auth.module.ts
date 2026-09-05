@@ -6,8 +6,10 @@ import { TOKEN_VERIFIER } from './token-verifier';
 /**
  * Provides token verification to the rest of the backend.
  *
- * It intentionally registers no guard: Phase 2 decides which routes are
- * protected and how roles are resolved.
+ * It deliberately does not register `SupabaseAuthGuard` as a global guard.
+ * `ServerCoreModule` is imported by every domain module, and an APP_GUARD
+ * provided from here would be registered once per import. Registration
+ * happens once, at the composition root in `apps/api`.
  */
 @Module({
   imports: [SupabaseModule],
