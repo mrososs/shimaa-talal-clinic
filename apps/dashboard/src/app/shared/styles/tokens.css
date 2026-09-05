@@ -1,0 +1,217 @@
+/*
+ * The dashboard's visual system.
+ *
+ * There is no component library here, and none is coming. Six screens of
+ * tables, dialogs and status pills do not justify a dependency that would then
+ * have to be fought over RTL, Arabic typography and Arabic-Indic numerals. What
+ * exists instead is this file: the tokens, and the handful of primitives every
+ * screen composes from.
+ *
+ * The palette is shared with the mobile app on purpose — the same clinic,
+ * looked at from the other side of the desk — but the density is not. Reception
+ * works at a desktop with many rows on screen at once.
+ */
+
+:root {
+  --c-primary: #0e7c7b;
+  --c-primary-strong: #0c6d6c;
+  --c-primary-soft: rgba(14, 124, 123, 0.1);
+
+  --c-accent: #e07a5f;
+  --c-success: #2e7d5b;
+  --c-success-soft: rgba(46, 125, 91, 0.12);
+  --c-warning: #b57614;
+  --c-warning-soft: rgba(181, 118, 20, 0.12);
+  --c-danger: #b3261e;
+  --c-danger-soft: rgba(179, 38, 30, 0.1);
+
+  --c-bg: #f4f2ef;
+  --c-surface: #ffffff;
+  --c-surface-muted: #efeae4;
+  --c-border: #e2dcd4;
+  --c-text: #21201d;
+  --c-text-muted: #6b665e;
+
+  --c-radius: 14px;
+  --c-radius-sm: 8px;
+  --c-space-xs: 4px;
+  --c-space-sm: 8px;
+  --c-space: 16px;
+  --c-space-lg: 24px;
+  --c-space-xl: 32px;
+
+  --c-shadow: 0 1px 2px rgba(33, 32, 29, 0.05),
+    0 8px 24px rgba(33, 32, 29, 0.04);
+
+  --c-font: 'Cairo', 'Tajawal', 'Segoe UI', system-ui, -apple-system,
+    'Noto Sans Arabic', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--c-font);
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+/* Arabic-Indic numerals, as a font feature rather than a string transform. */
+.c-numerals {
+  font-feature-settings: 'anum';
+}
+
+/* --------------------------------------------------------------------------
+ * Primitives. Eight of them, and the list is meant to stay that short.
+ * ----------------------------------------------------------------------- */
+
+.c-card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--c-radius);
+  box-shadow: var(--c-shadow);
+  padding: var(--c-space);
+}
+
+.c-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--c-space);
+}
+
+.c-row {
+  display: flex;
+  align-items: center;
+  gap: var(--c-space-sm);
+}
+
+.c-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.c-muted {
+  color: var(--c-text-muted);
+}
+
+.c-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--c-space-xs);
+}
+
+.c-field__label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--c-text-muted);
+}
+
+.c-input {
+  font: inherit;
+  color: inherit;
+  padding: 10px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--c-radius-sm);
+  background: var(--c-surface);
+  width: 100%;
+}
+
+.c-input:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 1px;
+}
+
+.c-input[aria-invalid='true'] {
+  border-color: var(--c-danger);
+}
+
+.c-btn {
+  font: inherit;
+  font-weight: 600;
+  padding: 10px 18px;
+  border-radius: var(--c-radius-sm);
+  border: 1px solid transparent;
+  background: var(--c-primary);
+  color: #fff;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.c-btn:hover:not(:disabled) {
+  background: var(--c-primary-strong);
+}
+
+.c-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.c-btn--ghost {
+  background: transparent;
+  color: var(--c-text-muted);
+  border-color: var(--c-border);
+}
+
+.c-btn--ghost:hover:not(:disabled) {
+  background: var(--c-surface-muted);
+}
+
+.c-btn--block {
+  width: 100%;
+}
+
+.c-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--c-space-xs);
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: var(--c-surface-muted);
+  color: var(--c-text-muted);
+}
+
+.c-pill--ok {
+  background: var(--c-success-soft);
+  color: var(--c-success);
+}
+
+.c-pill--warn {
+  background: var(--c-warning-soft);
+  color: var(--c-warning);
+}
+
+.c-pill--danger {
+  background: var(--c-danger-soft);
+  color: var(--c-danger);
+}
+
+.c-notice {
+  margin: 0;
+  padding: var(--c-space-sm) var(--c-space);
+  border-radius: var(--c-radius-sm);
+  font-size: 0.9rem;
+  /* Logical, so the accent stays on the reading-start side in either direction. */
+  border-inline-start: 3px solid currentColor;
+}
+
+.c-notice--error {
+  color: var(--c-danger);
+  background: var(--c-danger-soft);
+}
+
+.c-notice--info {
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
+}
+
+.c-notice--success {
+  color: var(--c-success);
+  background: var(--c-success-soft);
+}

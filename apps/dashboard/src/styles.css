@@ -1,6 +1,10 @@
 /*
- * Intentionally empty.
+ * App-level styles.
  *
- * No UI framework, design system, theme or reset has been chosen for the
- * dashboard yet. That is a Phase 2+ decision.
+ * The design system lives in `app/shared/styles/tokens.css`, which main.ts
+ * imports first. This file holds only what belongs to the document itself.
  */
+
+#root {
+  min-height: 100vh;
+}
