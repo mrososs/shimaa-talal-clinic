@@ -24,17 +24,21 @@ clinic-platform/
 │   ├── client/           Frontend-only libraries
 │   │   ├── api-client/   The single HTTP seam to the API
 │   │   ├── auth/         Supabase session boundary
-│   │   └── config/       The single reader of import.meta.env
+│   │   ├── config/       The single reader of import.meta.env
+│   │   ├── session/      The signed-in session, shared by both apps
+│   │   ├── theme/        The design token layer both apps consume
+│   │   └── ui/           What both apps must render identically:
+│   │                     the dialog, and the polling lifecycle
 │   │
 │   └── server/           Backend-only libraries
 │       ├── core/         config · database · supabase · auth · common
-│       ├── clinic/       Tenancy, staff, schedules, sessions  (empty)
-│       ├── booking/      Booking domain boundary        (empty)
-│       ├── queue/        Queue domain boundary          (empty)
-│       ├── payments/     Payments domain boundary       (empty)
-│       ├── patients/     Patients domain boundary       (empty)
-│       ├── notifications/ Notifications boundary        (empty)
-│       └── workflows/    Cross-domain orchestration     (empty)
+│       ├── clinic/       Tenancy, staff, schedules, sessions
+│       ├── booking/      Appointments and availability
+│       ├── queue/        The live queue: ordering and commands
+│       ├── payments/     Payments domain boundary       (empty seam)
+│       ├── patients/     Guardians, children, claim codes
+│       ├── notifications/ Notifications boundary        (empty seam)
+│       └── workflows/    Cross-domain writes, and reads that span domains
 │
 ├── supabase/
 │   ├── migrations/       Source of truth for the database schema

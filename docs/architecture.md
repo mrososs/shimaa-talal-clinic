@@ -322,8 +322,9 @@ it:
    variable. A frontend cannot acquire a database connection or a privileged
    key.
 2. **Network.** Frontends hold only the publishable key. Every business
-   endpoint is on the API, behind CORS and (from Phase 2) an auth guard.
-3. **Database.** The API will connect as a dedicated least-privilege role with
+   endpoint is on the API, behind CORS and a global auth guard — every route is
+   protected unless it declares `@Public()`, which only `/health` does.
+3. **Database.** The API connects as `clinic_api`, a least-privilege role with
    explicit per-table grants — never as the table owner or `postgres` — and
    tables will use `FORCE ROW LEVEL SECURITY` so policies apply even to the
    owner. A missing `where clinic_id = $1` in application code then fails at the
@@ -342,7 +343,9 @@ Frontend structure follows from this. Both apps are thin shells:
 - `libs/client/config` — the only reader of `import.meta.env`.
 - `libs/client/auth` — sessions only, never data.
 - Each app has one `src/app/runtime.ts` composition root that wires those three
-  together. Nothing imports it yet; it is the seam Phase 2 features plug into.
+  together, plus the session store and the typed endpoint modules. A screen
+  imports `session` and an api module from there, never `createClient` or
+  `fetch`.
 
 The two apps are separate on purpose. `apps/mobile` is an Ionic + Capacitor
 shell with a native navigation stack, shipped to app stores; `apps/dashboard`
@@ -354,18 +357,19 @@ not want the same one.
 
 ## 7. What is deliberately absent
 
-Listed explicitly so their absence reads as a decision rather than an oversight:
+Listed explicitly so their absence reads as a decision rather than an oversight.
+What *is* built is recorded in [status.md](status.md); this table is about what
+is deliberately not.
 
 | Not present                                      | Why                                                                                   |
 | ------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| Booking / queue / payment logic                  | Phase 2. Empty module boundaries only.                                                |
+| Payment / notification logic                     | Out of Phase 2. Empty module boundaries only.                                         |
 | Payment provider                                 | No HyperPay, Moyasar, Stripe or Tap anywhere. `PaymentProvider` is the seam.          |
 | Notification provider                            | No Twilio, WhatsApp Business API or FCM. `NotificationChannel` is the seam.           |
-| Clinic database schema                           | One migration, enabling extensions. No invented tables.                               |
-| `clinic_api` role, grants, RLS policies          | They describe tables. They land with the first domain migration.                      |
+| Medical records                                  | No diagnoses, prescriptions, files or growth curves. Operational identity only.        |
 | ORM                                              | Supabase migrations are the source of truth; `pg` owns no schema.                     |
-| Orchestration library                            | Nothing to orchestrate yet. Pattern and the exact lint rule are documented.           |
-| Auth enforcement                                 | `SupabaseTokenVerifier` exists; **no guard is registered and no route is protected.** |
+| Scheduler / cron                                 | Nothing expires on a timer. Grace and no-shows are human-triggered; see docs/status.md. |
+| Supabase Realtime                                | Polling instead. Realtime authorises via RLS on tables the publishable key can reach.  |
 | UI design, component library, CSS system         | Only Ionic's required baseline stylesheets.                                           |
 | Native Capacitor plugins                         | No camera, push, geolocation, filesystem, biometrics.                                 |
 | Redis, Kafka, RabbitMQ, GraphQL, CQRS, event bus | No current problem justifies any of them.                                             |

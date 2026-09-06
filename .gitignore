@@ -81,3 +81,8 @@ supabase/.temp
 
 vite.config.*.timestamp*
 vitest.config.*.timestamp*
+# Design reference exported from the prototype: ~33 MB of HTML with base64
+# fonts embedded in every file, and every computed CSS property inlined on
+# every element. It is read while building a screen and never imported, so it
+# stays out of the history rather than bloating every clone.
+UI/

@@ -1,10 +1,15 @@
 # Cross-domain orchestration
 
-How workflows that touch more than one domain will be coordinated — **without**
-letting domains depend on each other.
+How work that touches more than one domain is coordinated — **without** letting
+domains depend on each other.
 
-The library exists and is empty. The pattern below is settled so the first
-cross-domain workflow has an obvious right answer instead of an improvised one.
+The library holds five classes: three writes that must commit across two
+domains (check in, complete, cancel an appointment) and two reads that no single
+domain could assemble (the staff queue board, and a parent's view of their own
+children's turns). The read case is worth naming, because it is easy to assume
+this layer is only for transactions: the board joins Queue's ordering with
+Patients' names and Booking's expected arrivals, and none of those three may see
+the others.
 
 ---
 
@@ -166,10 +171,9 @@ Three things that make this work:
 
 ## 4. The library, and the layer it needs
 
-`libs/server/workflows` exists, tagged
-`type:workflow,platform:server,scope:orchestration`. It is empty until the
-first _real_ workflow that must write to two domains atomically — Phase 2 brings
-exactly three (check in, complete, cancel).
+`libs/server/workflows` is tagged
+`type:workflow,platform:server,scope:orchestration`. Nothing goes in it that a
+single domain could do alone.
 
 A controller in `apps/api` calling a single domain service is correct and needs
 no workflow. The application stays primarily a composition root: controllers,

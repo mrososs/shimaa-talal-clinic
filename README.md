@@ -3,12 +3,11 @@
 Nx monorepo for the clinic platform: an Ionic Vue mobile app, a Vue staff
 dashboard, and a NestJS API backed by Supabase.
 
-> **Status: architecture foundation.**
-> Booking, queue, payments, patients and notifications exist as _empty,
-> boundary-enforced module skeletons_. There is no business logic, no clinic
-> database schema, no UI design, no payment provider and no notification
-> provider. That is deliberate — see
-> [docs/architecture.md](docs/architecture.md).
+> **Status: Phase 2 — booking and queue are running end to end.**
+> Identity, scheduling, booking and the live queue are built, with the parent
+> app and the staff dashboard on top of them. Payments and notifications remain
+> deliberately empty boundaries. What exists, what does not, and the open
+> product decisions are recorded in [docs/status.md](docs/status.md).
 
 ---
 
@@ -45,12 +44,15 @@ apps/
 
 libs/
   contracts/     Pure TypeScript vocabulary shared by all three
-  client/        api-client · auth · config   (frontend only)
-  server/        core + booking · queue · payments · patients · notifications
+  shared/        phone (E.164 normalisation)
+  client/        api-client · auth · config · session · theme · ui
+  server/        core · clinic · patients · booking · queue · workflows
+                 + payments and notifications as empty seams
                  core = config · database · supabase · auth · common
 
 supabase/        migrations (schema source of truth) · seed.sql · config.toml
-docs/            architecture · project-structure · dependency-rules · local-development
+docs/            status · architecture · project-structure · dependency-rules
+                 · database · cross-domain-orchestration · local-development
 ```
 
 ---
@@ -62,8 +64,8 @@ docs/            architecture · project-structure · dependency-rules · local-
 | `pnpm dev:mobile` / `dev:dashboard` / `dev:api` | Serve one application                                             |
 | `pnpm dev`                                      | Serve all three                                                   |
 | `pnpm build`                                    | Build the three applications                                      |
-| `pnpm lint`                                     | Lint all 13 projects — **this is where architecture is enforced** |
-| `pnpm test`                                     | Run all unit tests                                                |
+| `pnpm lint`                                     | Lint every project — **this is where architecture is enforced**   |
+| `pnpm test`                                     | All tests — the server suites run against a real database         |
 | `pnpm typecheck`                                | Type-check projects exposing a typecheck target                   |
 | `pnpm graph`                                    | Open the interactive project graph                                |
 | `pnpm format`                                   | Format with Prettier via Nx                                       |
@@ -91,8 +93,9 @@ Scope any of them: `pnpm nx test contracts`, `pnpm nx affected -t lint test`.
 4. **Business logic never goes in `apps/api/src`.** The application composes
    modules; domains live in `libs/server/<domain>`.
 
-5. **Domains never import each other.** Cross-domain workflows go through a
-   future orchestration layer, not a relaxed rule.
+5. **Domains never import each other.** Anything spanning two domains — a
+   write like check-in, or a read like the queue board — goes through
+   `libs/server/workflows`, not a relaxed rule.
    [Pattern.](docs/cross-domain-orchestration.md)
 
 Rules 1–5 are backed by
@@ -107,9 +110,10 @@ pipeline.
 
 | Document                                                            | Read it for                                                    |
 | ------------------------------------------------------------------- | -------------------------------------------------------------- |
+| [status.md](docs/status.md)                                         | What is built, what is not, and the open decisions             |
 | [architecture.md](docs/architecture.md)                             | The system diagram and the reasoning behind every major choice |
 | [database.md](docs/database.md)                                     | The transactional data seam, connections, grants and RLS       |
-| [cross-domain-orchestration.md](docs/cross-domain-orchestration.md) | How multi-domain workflows will be coordinated                 |
+| [cross-domain-orchestration.md](docs/cross-domain-orchestration.md) | How multi-domain workflows are coordinated                     |
 | [project-structure.md](docs/project-structure.md)                   | What each app and library owns                                 |
 | [dependency-rules.md](docs/dependency-rules.md)                     | The tags and the enforced boundaries                           |
 | [local-development.md](docs/local-development.md)                   | Setup, environment, Supabase, Capacitor, troubleshooting       |
