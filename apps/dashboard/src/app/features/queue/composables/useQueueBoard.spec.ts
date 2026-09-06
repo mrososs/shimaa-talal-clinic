@@ -1,5 +1,5 @@
 import { effectScope } from 'vue';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiClientError } from '@clinic/api-client';
 import type {
   AppointmentListItem,
@@ -93,6 +93,10 @@ describe('useQueueBoard', () => {
     api.board.mockResolvedValue(board());
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('watches the session that is actually running', async () => {
     api.sessions.mockResolvedValue([
       session({ id: 'closed-one', sessionKind: 'morning', status: 'closed' }),
@@ -174,6 +178,136 @@ describe('useQueueBoard', () => {
     expect(state.failure.value).toBe('تغيّر الطابور للتو — حدَّثنا الشاشة.');
     expect(api.board).toHaveBeenCalledTimes(1);
     dispose();
+  });
+
+  describe('staying current on its own', () => {
+    it('polls at the desk cadence without anybody asking', async () => {
+      vi.useFakeTimers();
+      const { state, dispose } = mount();
+      await state.open();
+      api.board.mockClear();
+
+      await vi.advanceTimersByTimeAsync(15_000);
+
+      // Five seconds: three ticks, no interaction, no refresh button.
+      expect(api.board).toHaveBeenCalledTimes(3);
+      dispose();
+    });
+
+    it('shows what another dashboard did, with no user action', async () => {
+      vi.useFakeTimers();
+      const { state, dispose } = mount();
+      await state.open();
+      expect(state.waiting.value).toHaveLength(1);
+
+      // Somebody at another desk calls the patient.
+      api.board.mockResolvedValue(
+        board({
+          entries: [entry({ id: 'e1', status: 'called' })],
+          revision: 8,
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(state.waiting.value).toHaveLength(0);
+      expect(state.called.value?.id).toBe('e1');
+      dispose();
+    });
+
+    it('refreshes at once after this desk acts, without waiting for a tick', async () => {
+      vi.useFakeTimers();
+      const { state, dispose } = mount();
+      await state.open();
+      api.board.mockClear();
+
+      api.board.mockResolvedValue(
+        board({ entries: [entry({ id: 'e1', status: 'called' })] }),
+      );
+      await state.run('call-next', () => Promise.resolve());
+
+      // No timer was advanced. The board is already current.
+      expect(api.board).toHaveBeenCalledTimes(1);
+      expect(state.called.value?.id).toBe('e1');
+      dispose();
+    });
+
+    it('never lets a slow poll undo a fresh command', async () => {
+      const { state, dispose } = mount();
+      await state.open();
+
+      let releaseSlow: ((value: unknown) => void) | undefined;
+      api.board.mockReturnValueOnce(
+        new Promise((resolve) => {
+          releaseSlow = resolve;
+        }),
+      );
+      const slow = state.refresh();
+
+      api.board.mockResolvedValueOnce(
+        board({
+          entries: [entry({ id: 'e1', status: 'called' })],
+          revision: 9,
+        }),
+      );
+      await state.refresh();
+      expect(state.called.value?.id).toBe('e1');
+
+      releaseSlow?.(board({ entries: [entry({ id: 'e1' })], revision: 4 }));
+      await slow;
+
+      // The stale answer described a waiting patient. It is discarded.
+      expect(state.called.value?.id).toBe('e1');
+      expect(state.revision.value).toBe(9);
+      dispose();
+    });
+
+    it('never blanks the board for a background refresh', async () => {
+      vi.useFakeTimers();
+      const { state, dispose } = mount();
+      await state.open();
+      expect(state.loading.value).toBe(false);
+
+      let release: ((value: unknown) => void) | undefined;
+      api.board.mockReturnValueOnce(
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(state.loading.value).toBe(false);
+      expect(state.entries.value).toHaveLength(1);
+
+      release?.(board());
+      dispose();
+    });
+
+    it('keeps the board on screen when a poll fails', async () => {
+      vi.useFakeTimers();
+      const { state, dispose } = mount();
+      await state.open();
+
+      api.board.mockRejectedValueOnce(
+        new ApiClientError(0, { code: 'network', message: 'offline' }),
+      );
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(state.entries.value).toHaveLength(1);
+      expect(state.failure.value).not.toBeNull();
+      dispose();
+    });
+
+    it('stops when the board is torn down', async () => {
+      vi.useFakeTimers();
+      const { state, dispose } = mount();
+      await state.open();
+      const before = api.board.mock.calls.length;
+
+      dispose();
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(api.board.mock.calls.length).toBe(before);
+    });
   });
 
   it('runs one command at a time', async () => {

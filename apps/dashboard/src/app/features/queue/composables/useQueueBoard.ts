@@ -7,8 +7,8 @@ import {
   type ClinicSession,
   type QueueBoardEntry,
 } from '@clinic/contracts';
+import { createSequence, usePolling } from '@clinic/client-ui';
 import { apiMessage } from '../../../shared/messages';
-import { usePolling } from '../../../shared/composables/usePolling';
 import { queueApi } from '../../../runtime';
 
 /** Five seconds. Long enough to be cheap, short enough that nobody refreshes. */
@@ -73,14 +73,27 @@ export function useQueueBoard() {
 
   // --- reading ----------------------------------------------------------
 
+  /**
+   * Arrival order, so a slow poll cannot undo a fast command.
+   *
+   * A tick and a command's own re-read are in flight together constantly. If
+   * the tick was sent first and lands second, it describes the board as it was
+   * before the command — and the screen would visibly go backwards for one
+   * interval, which is when a receptionist presses the button again.
+   */
+  const sequence = createSequence();
+
   async function read(since?: number): Promise<void> {
     const id = sessionId.value;
     if (id === null) return;
 
+    const ticket = sequence.next();
     const response = await queueApi.board(id, since);
+    if (!sequence.accept(ticket)) return;
+
+    updatedAt.value = Date.now();
     if (isUnchanged(response)) {
       revision.value = response.revision;
-      updatedAt.value = Date.now();
       return;
     }
 
@@ -88,7 +101,6 @@ export function useQueueBoard() {
     entries.value = response.entries;
     notArrived.value = response.notArrived;
     revision.value = response.revision;
-    updatedAt.value = Date.now();
   }
 
   /** A full read. Used after a command, and after the tab comes back. */
@@ -161,7 +173,10 @@ export function useQueueBoard() {
    * somebody else moved first, and the only useful response to that is to show
    * what is actually true now — the board heals instead of arguing.
    */
-  async function run(key: string, command: () => Promise<unknown>): Promise<void> {
+  async function run(
+    key: string,
+    command: () => Promise<unknown>,
+  ): Promise<void> {
     if (working.value !== null) return;
     working.value = key;
     failure.value = null;
