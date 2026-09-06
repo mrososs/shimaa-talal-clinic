@@ -3,12 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiClientError } from '@clinic/api-client';
 import type { ParentQueueItem } from '@clinic/contracts';
 
-const api = { mine: vi.fn() };
+const api = { mine: vi.fn(), defer: vi.fn() };
 vi.mock('../../../runtime', () => ({ queueApi: api }));
 
-const { useLiveQueue, isNear, NEAR_TURN_AHEAD } = await import(
-  './useLiveQueue'
-);
+const { useLiveQueue, isNear, canDefer, defersLeft, NEAR_TURN_AHEAD } =
+  await import('./useLiveQueue');
 
 /**
  * The family's live queue, without a phone or a server.
@@ -246,6 +245,198 @@ describe('useLiveQueue', () => {
     dispose();
   });
 
+
+  describe('skipping a turn', () => {
+    it('asks the server, then re-reads the whole view', async () => {
+      const { state, dispose } = mount();
+      await state.open();
+      api.mine.mockClear();
+      api.defer.mockResolvedValue({});
+
+      await state.defer('e1');
+
+      expect(api.defer).toHaveBeenCalledWith('e1');
+      // Deferring changes where everyone else is, not just this row — the
+      // entry the endpoint returns cannot say that.
+      expect(api.mine).toHaveBeenCalledWith(undefined);
+      expect(state.deferring.value).toBeNull();
+      dispose();
+    });
+
+    it('explains the clinic’s limit in words a parent can read', async () => {
+      const { state, dispose } = mount();
+      await state.open();
+      api.defer.mockRejectedValue(
+        new ApiClientError(409, {
+          code: 'queue_defer_limit_reached',
+          message: 'You have used all your deferrals for today.',
+        }),
+      );
+
+      await state.defer('e1');
+
+      expect(state.failure.value).toBe(
+        'استخدمتِ كل مرات تأجيل الدور المتاحة اليوم.',
+      );
+      expect(state.failure.value).not.toContain('deferrals');
+      dispose();
+    });
+
+    it('re-reads even when it was refused, so the screen is not left stale', async () => {
+      const { state, dispose } = mount();
+      await state.open();
+      api.mine.mockClear();
+      api.defer.mockRejectedValue(
+        new ApiClientError(409, { code: 'queue_conflict', message: 'moved' }),
+      );
+
+      await state.defer('e1');
+
+      expect(api.mine).toHaveBeenCalledTimes(1);
+      dispose();
+    });
+
+    it('sends one request however fast the button is tapped', async () => {
+      const { state, dispose } = mount();
+      await state.open();
+
+      let release: (() => void) | undefined;
+      api.defer.mockReturnValue(
+        new Promise((resolve) => {
+          release = () => resolve({});
+        }),
+      );
+
+      const first = state.defer('e1');
+      await state.defer('e1');
+      expect(api.defer).toHaveBeenCalledTimes(1);
+
+      release?.();
+      await first;
+      dispose();
+    });
+  });
+
+  describe('staying current on its own', () => {
+    it('polls at the parent cadence without anybody asking', async () => {
+      vi.useFakeTimers();
+      const { state, dispose } = mount();
+      await state.open();
+      api.mine.mockClear();
+
+      await vi.advanceTimersByTimeAsync(45_000);
+
+      // Fifteen seconds: three ticks, no interaction, no refresh button.
+      expect(api.mine).toHaveBeenCalledTimes(3);
+      dispose();
+    });
+
+    it('shows what reception changed, with no user action at all', async () => {
+      vi.useFakeTimers();
+      const { state, dispose } = mount();
+      await state.open();
+      expect(state.items.value[0].queueEntry?.aheadCount).toBe(3);
+
+      // Reception completes a patient somewhere else entirely.
+      api.mine.mockResolvedValue(
+        view(
+          [
+            item({
+              queueEntry: {
+                ...(item().queueEntry as NonNullable<
+                  ParentQueueItem['queueEntry']
+                >),
+                aheadCount: 2,
+              },
+            }),
+          ],
+          8,
+        ),
+      );
+      await vi.advanceTimersByTimeAsync(15_000);
+
+      expect(state.items.value[0].queueEntry?.aheadCount).toBe(2);
+      dispose();
+    });
+
+    it('never lets a slow answer undo a fresh one', async () => {
+      const { state, dispose } = mount();
+      await state.open();
+
+      // The poll is sent first and lands last, carrying the old count.
+      let releaseSlow: ((value: unknown) => void) | undefined;
+      api.mine.mockReturnValueOnce(
+        new Promise((resolve) => {
+          releaseSlow = resolve;
+        }),
+      );
+      const slow = state.refresh();
+
+      api.mine.mockResolvedValueOnce(
+        view(
+          [
+            item({
+              queueEntry: {
+                ...(item().queueEntry as NonNullable<
+                  ParentQueueItem['queueEntry']
+                >),
+                aheadCount: 1,
+              },
+            }),
+          ],
+          9,
+        ),
+      );
+      await state.refresh();
+      expect(state.items.value[0].queueEntry?.aheadCount).toBe(1);
+
+      releaseSlow?.(view([item()], 7));
+      await slow;
+
+      // Still 1. The older answer is discarded, not applied.
+      expect(state.items.value[0].queueEntry?.aheadCount).toBe(1);
+      expect(state.revision.value).toBe(9);
+      dispose();
+    });
+
+    it('never blanks the screen for a background refresh', async () => {
+      vi.useFakeTimers();
+      const { state, dispose } = mount();
+      await state.open();
+      expect(state.loading.value).toBe(false);
+
+      let release: ((value: unknown) => void) | undefined;
+      api.mine.mockReturnValueOnce(
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(15_000);
+
+      // Mid-poll: the parent is still reading last answer, not a spinner.
+      expect(state.loading.value).toBe(false);
+      expect(state.items.value).toHaveLength(1);
+
+      release?.(view([item()]));
+      dispose();
+    });
+
+    it('keeps the queue on screen when a poll fails', async () => {
+      vi.useFakeTimers();
+      const { state, dispose } = mount();
+      await state.open();
+
+      api.mine.mockRejectedValueOnce(
+        new ApiClientError(0, { code: 'network', message: 'offline' }),
+      );
+      await vi.advanceTimersByTimeAsync(15_000);
+
+      expect(state.items.value).toHaveLength(1);
+      expect(state.failure.value).not.toBeNull();
+      dispose();
+    });
+  });
+
   it('says nothing is happening when the family has nothing today', async () => {
     api.mine.mockResolvedValue(view([], 0));
     const { state, dispose } = mount();
@@ -255,6 +446,57 @@ describe('useLiveQueue', () => {
     expect(state.session.value).toBeNull();
     expect(state.failure.value).toBeNull();
     dispose();
+  });
+});
+
+describe('canDefer', () => {
+  const withEntry = (over) =>
+    ({
+      childId: 'c',
+      childName: 'x',
+      appointment: null,
+      queueEntry: {
+        id: 'e',
+        ticketNumber: 1,
+        status: 'waiting',
+        aheadCount: 3,
+        calledAt: null,
+        graceExpiresAt: null,
+        estimatedWaitMinutes: null,
+        deferCount: 0,
+        isEmergency: false,
+        ...over,
+      },
+      session: {
+        status: 'open',
+        doctorPresence: 'arrived',
+        delayMinutes: null,
+        avgConsultMinutes: 6,
+        revision: 1,
+      },
+    }) as ParentQueueItem;
+
+  it('is offered while waiting and within the clinic’s limit', () => {
+    expect(canDefer(withEntry({}), 2)).toBe(true);
+    expect(defersLeft(withEntry({}), 2)).toBe(2);
+    expect(defersLeft(withEntry({ deferCount: 1 }), 2)).toBe(1);
+  });
+
+  it('is withdrawn once the limit is used up', () => {
+    // A button the server is going to refuse should not have been drawn.
+    expect(canDefer(withEntry({ deferCount: 2 }), 2)).toBe(false);
+    expect(defersLeft(withEntry({ deferCount: 2 }), 2)).toBe(0);
+  });
+
+  it('is withdrawn the moment the turn is happening', () => {
+    for (const status of ['called', 'in_service', 'missed', 'done']) {
+      expect(canDefer(withEntry({ status }), 2)).toBe(false);
+    }
+  });
+
+  it('is not offered to a family that has no turn at all', () => {
+    const booked = { ...withEntry({}), queueEntry: null } as ParentQueueItem;
+    expect(canDefer(booked, 2)).toBe(false);
   });
 });
 

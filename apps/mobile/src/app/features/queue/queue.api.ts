@@ -1,5 +1,5 @@
 import type { ApiClient } from '@clinic/api-client';
-import type { ParentQueueResponse } from '@clinic/contracts';
+import type { ParentQueueEntry, ParentQueueResponse } from '@clinic/contracts';
 
 /**
  * The one queue endpoint this app reads.
@@ -19,6 +19,16 @@ export function createQueueApi(client: ApiClient) {
      */
     mine: (since?: number): Promise<ParentQueueResponse> =>
       client.get<ParentQueueResponse>('queue/me', { query: { since } }),
+
+    /**
+     * "Let the next person go."
+     *
+     * The only write a parent makes into the queue. The clinic's own limit
+     * decides how often, and the server refuses past it — this does not
+     * pre-empt that decision, it just asks.
+     */
+    defer: (entryId: string): Promise<ParentQueueEntry> =>
+      client.post<ParentQueueEntry>(`queue/${entryId}/defer`),
   };
 }
 

@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import {
+  IonButton,
   IonIcon,
   IonSpinner,
   onIonViewDidLeave,
   onIonViewWillEnter,
 } from '@ionic/vue';
 import { calendarOutline, refreshOutline } from 'ionicons/icons';
+import { ClinicDialog } from '@clinic/client-ui';
 import ScreenShell from '../../../shared/components/ScreenShell.vue';
 import { arabicDigits } from '../../../shared/numerals';
 import { session } from '../../../runtime';
@@ -26,15 +28,32 @@ import TurnCard from '../components/TurnCard.vue';
  * parent who taps to Home is not still asking. Nothing is cached across a visit
  * beyond the last answer, and the first thing every visit does is ask again.
  *
- * There is no "notify me", no "I am on my way", and no skip-my-turn button
- * here. Each is a real product decision that has not been made yet, and a
- * control that does nothing is worse than one that is absent.
+ * Skipping a turn is the one thing a parent may change, and the clinic decides
+ * how often. There is no "notify me" and no "I am on my way": each needs a
+ * product decision nobody has made, and a control that does nothing is worse
+ * than one that is absent.
  */
 
 const queue = useLiveQueue();
 
 const clinic = computed(() => session.state.identity?.clinic ?? null);
 const graceMinutes = computed(() => clinic.value?.gracePeriodMinutes);
+const maxSelfDefers = computed(() => clinic.value?.maxSelfDefers ?? 0);
+
+/**
+ * Skipping a turn is asked about first.
+ *
+ * It is reversible in the sense that the queue keeps moving, but it costs one
+ * of a small number of deferrals and hands the place to somebody else. The
+ * confirmation says both, so nobody spends one by mistake on a scroll.
+ */
+const deferringEntry = ref<string | null>(null);
+
+function confirmDefer(): void {
+  const entryId = deferringEntry.value;
+  deferringEntry.value = null;
+  if (entryId !== null) void queue.defer(entryId);
+}
 
 /** Nothing at all today: no booking, no turn. */
 const idle = computed(
@@ -133,7 +152,10 @@ onIonViewDidLeave(() => queue.close());
             :key="item.childId"
             :item="item"
             :grace-minutes="graceMinutes"
+            :max-self-defers="maxSelfDefers"
+            :deferring="queue.deferring.value !== null"
             @grace-expired="queue.refresh()"
+            @defer="(entryId) => (deferringEntry = entryId)"
           />
 
           <p class="foot">
@@ -147,6 +169,32 @@ onIonViewDidLeave(() => queue.close());
         </template>
       </template>
     </div>
+    <clinic-dialog
+      :open="deferringEntry !== null"
+      title="تخطّي دورك"
+      @close="deferringEntry = null"
+    >
+      <p class="muted confirm">
+        سينتقل دورك خلف المريض التالي، ويبقى حجزك كما هو. هذه المرة ستُحتسب من
+        مرات التأجيل المتاحة لك اليوم.
+      </p>
+
+      <template #actions>
+        <ion-button
+          fill="outline"
+          size="small"
+          @click="deferringEntry = null"
+        >
+          تراجع
+        </ion-button>
+        <ion-button
+          size="small"
+          @click="confirmDefer"
+        >
+          تأكيد التأجيل
+        </ion-button>
+      </template>
+    </clinic-dialog>
   </screen-shell>
 </template>
 
@@ -218,6 +266,11 @@ onIonViewDidLeave(() => queue.close());
   font-weight: 700;
   color: var(--coral-ink);
   text-decoration: none;
+}
+
+.confirm {
+  margin: 0;
+  font-size: 14px;
 }
 
 .foot {

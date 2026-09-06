@@ -3,11 +3,14 @@ import { computed } from 'vue';
 import { IonIcon } from '@ionic/vue';
 import {
   checkmarkCircle,
+  chevronBackOutline,
   informationCircleOutline,
   medkitOutline,
-  peopleOutline,
+  refreshOutline,
+  timeOutline,
 } from 'ionicons/icons';
 import {
+  AppointmentStatus,
   ClinicSessionStatus,
   DoctorPresence,
   QueueStatus,
@@ -15,7 +18,7 @@ import {
 } from '@clinic/contracts';
 import { arabicDigits } from '../../../shared/numerals';
 import { windowLabel } from '../../../shared/format';
-import { isNear } from '../composables/useLiveQueue';
+import { canDefer, defersLeft, isNear } from '../composables/useLiveQueue';
 import GraceCountdown from './GraceCountdown.vue';
 
 /**
@@ -32,17 +35,24 @@ import GraceCountdown from './GraceCountdown.vue';
  * built not to make.
  */
 
-const props = defineProps<{
-  item: ParentQueueItem;
-  graceMinutes?: number;
-}>();
+const props = withDefaults(
+  defineProps<{
+    item: ParentQueueItem;
+    graceMinutes?: number;
+    /** The clinic's own limit on how often a parent may skip their turn. */
+    maxSelfDefers?: number;
+    deferring?: boolean;
+  }>(),
+  { graceMinutes: undefined, maxSelfDefers: 0, deferring: false },
+);
 
-const emit = defineEmits<{ graceExpired: [] }>();
+const emit = defineEmits<{ graceExpired: []; defer: [entryId: string] }>();
 
 const entry = computed(() => props.item.queueEntry);
 const ahead = computed(() => entry.value?.aheadCount ?? 0);
 const near = computed(() => isNear(props.item));
 
+const waiting = computed(() => entry.value?.status === QueueStatus.Waiting);
 const called = computed(() => entry.value?.status === QueueStatus.Called);
 const inService = computed(() => entry.value?.status === QueueStatus.InService);
 const missed = computed(() => entry.value?.status === QueueStatus.Missed);
@@ -61,6 +71,42 @@ const stalled = computed(
 );
 
 const estimate = computed(() => entry.value?.estimatedWaitMinutes ?? null);
+
+/**
+ * A booking the clinic has not accepted yet.
+ *
+ * Its window is shown, because the family asked for it — but unlabelled it
+ * reads as a confirmed time, and the whole point of the `requested` state is
+ * that it is not one.
+ */
+const pending = computed(
+  () => props.item.appointment?.status === AppointmentStatus.Requested,
+);
+
+/**
+ * "Skip my turn" is offered only while it is genuinely theirs to give.
+ *
+ * Once called, the turn is happening. Once the clinic's limit is used up, the
+ * server would refuse — and a button that is going to be refused should not
+ * have been drawn.
+ */
+const deferrable = computed(() => canDefer(props.item, props.maxSelfDefers));
+const remaining = computed(() => defersLeft(props.item, props.maxSelfDefers));
+
+/**
+ * Arabic counts one, two and many differently.
+ *
+ * "متاح ٢ مرات" is what a naive plural produces and not what anyone says; the
+ * dual has its own word. The clinic's limit is small, so the three cases that
+ * matter are spelled out rather than routed through an i18n library the app
+ * does not have.
+ */
+const remainingLabel = computed(() => {
+  const left = remaining.value;
+  if (left === 1) return 'متاح مرة واحدة';
+  if (left === 2) return 'متاح مرتين';
+  return `متاح ${arabicDigits(left)} مرات`;
+});
 </script>
 
 <template>
@@ -80,6 +126,10 @@ const estimate = computed(() => entry.value?.estimatedWaitMinutes ?? null);
           {{
             windowLabel(item.appointment.windowStart, item.appointment.windowEnd)
           }}
+          <span
+            v-if="pending"
+            class="turn__pending"
+          >قيد المراجعة</span>
         </p>
       </div>
       <span
@@ -198,56 +248,77 @@ const estimate = computed(() => entry.value?.estimatedWaitMinutes ?? null);
       </div>
     </div>
 
-    <!-- Waiting: the count is the headline, and it is a fact. -->
+    <!-- Waiting. The counter is the screen, exactly as the prototype has it —
+         one number, large enough to read at arm's length. The prototype's is
+         the ticket being served now; this one is how many are ahead, which is
+         the same fact told from the only side a parent is entitled to see. -->
     <div
       v-else
-      class="turn__body"
+      class="counter"
+      :class="{ 'counter--soon': near }"
     >
+      <span class="counter__label">
+        {{ ahead === 0 ? 'دورك الآن التالي' : 'أمامك في الطابور' }}
+      </span>
+
       <span
-        class="turn__ico"
-        :class="{ 'turn__ico--soon': near }"
+        v-if="ahead > 0"
+        class="counter__num"
+      >{{ arabicDigits(ahead) }}</span>
+      <span
+        v-else
+        class="counter__next"
+      >أنت التالي</span>
+
+      <span
+        v-if="ahead > 0"
+        class="counter__unit"
+      >{{ ahead === 1 ? 'حالة' : 'حالات' }}</span>
+
+      <p class="counter__meta">
+        أنت رقم {{ arabicDigits(entry.ticketNumber) }} · متابعة مباشرة
+      </p>
+
+      <p
+        v-if="near"
+        class="counter__note counter__note--soon"
       >
-        <ion-icon :icon="peopleOutline" />
+        اقترب دورك — يُفضّل أن تكوني في العيادة الآن.
+      </p>
+      <p
+        v-else-if="stalled"
+        class="counter__note"
+      >
+        مكانك محفوظ. سنُحدّث العدد فور أن يتحرّك الطابور.
+      </p>
+      <p
+        v-else
+        class="counter__note"
+      >
+        يتحدّث تلقائياً كلما تحرّك الطابور.
+      </p>
+    </div>
+
+    <!-- Where the prototype put its ticking countdown. A range instead: the
+         clinic cannot promise a minute, and a parent driving in reads a
+         ticking clock as one. -->
+    <div
+      v-if="waiting && estimate"
+      class="eta"
+    >
+      <span class="eta__ico">
+        <ion-icon :icon="timeOutline" />
       </span>
       <div>
-        <p
-          class="turn__headline"
-          :class="{ 'turn__headline--soon': near }"
-        >
-          <template v-if="ahead === 0">
-            أنت التالي
-          </template>
-          <template v-else>
-            أمامك {{ arabicDigits(ahead) }}
-            {{ ahead === 1 ? 'حالة' : 'حالات' }}
-          </template>
-        </p>
-
-        <p
-          v-if="near"
-          class="turn__note turn__note--soon"
-        >
-          اقترب دورك — يُفضّل أن تكوني في العيادة الآن.
-        </p>
-        <p
-          v-else-if="stalled"
-          class="turn__note"
-        >
-          مكانك محفوظ. سنُحدّث العدد فور أن يتحرّك الطابور.
-        </p>
-        <p
-          v-else-if="estimate"
-          class="turn__note"
-        >
+        <p class="eta__label">
           الوقت المتوقّع تقريباً
-          {{ arabicDigits(estimate.from) }}–{{ arabicDigits(estimate.to) }}
-          دقيقة
         </p>
-        <p
-          v-else
-          class="turn__note"
-        >
-          سنُحدّث العدد تلقائياً كلما تحرّك الطابور.
+        <p class="eta__value">
+          {{ arabicDigits(estimate.from) }}–{{ arabicDigits(estimate.to) }}
+          <span class="eta__unit">دقيقة</span>
+        </p>
+        <p class="eta__note">
+          تقدير تقريبي يتغيّر مع حركة الطابور
         </p>
       </div>
     </div>
@@ -258,6 +329,28 @@ const estimate = computed(() => entry.value?.estimatedWaitMinutes ?? null);
     >
       تم تصنيف حالتك كحالة عاجلة من قِبل العيادة.
     </p>
+
+    <!-- The design's own card: an offer, not a warning. -->
+    <button
+      v-if="deferrable && entry"
+      class="defer"
+      type="button"
+      :disabled="deferring"
+      @click="emit('defer', entry.id)"
+    >
+      <span class="defer__ico">
+        <ion-icon :icon="refreshOutline" />
+      </span>
+      <span class="defer__text">
+        <span class="defer__title">عالق في الزحام؟ تخطَّ دورك مرة</span>
+        <span class="defer__note">
+          أجّل دورك مريضاً واحداً دون فقدان حجزك · {{ remainingLabel }}
+        </span>
+      </span>
+      <span class="defer__chev">
+        <ion-icon :icon="chevronBackOutline" />
+      </span>
+    </button>
   </section>
 </template>
 
@@ -291,6 +384,17 @@ const estimate = computed(() => entry.value?.estimatedWaitMinutes ?? null);
   margin: 3px 0 0;
   font-size: 13px;
   opacity: 0.75;
+}
+
+.turn__pending {
+  display: inline-block;
+  margin-inline-start: 6px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--sun-soft);
+  color: var(--sun-ink);
+  font-size: 11.5px;
+  font-weight: 700;
 }
 
 .turn__ticket {
@@ -414,6 +518,177 @@ const estimate = computed(() => entry.value?.estimatedWaitMinutes ?? null);
   border-block-start: 1px solid var(--line);
   font-size: 12.5px;
   color: var(--ink-2);
+}
+
+.counter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding-block: 10px 4px;
+}
+
+.counter__label {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+/* 62px, as the prototype has it: the one number on the screen that a parent
+   should be able to read without looking properly. */
+.counter__num {
+  font-family: var(--ff-display);
+  font-weight: 800;
+  font-size: 62px;
+  line-height: 1.05;
+  color: var(--ink);
+}
+
+.counter--soon .counter__num,
+.counter--soon .counter__next {
+  color: var(--coral-ink);
+}
+
+.counter__next {
+  font-family: var(--ff-display);
+  font-weight: 800;
+  font-size: 34px;
+  line-height: 1.2;
+  padding-block: 8px;
+  color: var(--ink);
+}
+
+.counter__unit {
+  font-family: var(--ff-display);
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--ink-2);
+}
+
+.counter__meta {
+  margin: 10px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.counter__note {
+  margin: 8px 0 0;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--ink-2);
+  text-align: center;
+}
+
+.counter__note--soon {
+  color: var(--coral-ink);
+  font-weight: 600;
+}
+
+.eta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--r-lg);
+  background: var(--surface-2);
+}
+
+.eta__ico {
+  display: grid;
+  place-items: center;
+  inline-size: 42px;
+  block-size: 42px;
+  border-radius: var(--r-pill);
+  background: var(--teal-soft);
+  color: var(--teal-ink);
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.eta__label {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.eta__value {
+  margin: 2px 0 0;
+  font-family: var(--ff-display);
+  font-weight: 800;
+  font-size: 22px;
+  color: var(--ink);
+}
+
+.eta__unit {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.eta__note {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.defer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  inline-size: 100%;
+  padding: 12px 14px;
+  border-radius: var(--r-lg);
+  border: 1.5px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink);
+  text-align: start;
+  font-family: var(--ff-body);
+}
+
+.defer:disabled {
+  opacity: 0.55;
+}
+
+.defer__ico {
+  display: grid;
+  place-items: center;
+  inline-size: 38px;
+  block-size: 38px;
+  border-radius: var(--r-pill);
+  background: var(--coral-soft);
+  color: var(--coral-ink);
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.defer__text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.defer__title {
+  font-family: var(--ff-display);
+  font-weight: 800;
+  font-size: 14.5px;
+}
+
+.defer__note {
+  font-size: 12.5px;
+  color: var(--ink-2);
+  line-height: 1.55;
+}
+
+.defer__chev {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 18px;
+  flex-shrink: 0;
 }
 
 .turn--live .turn__note,

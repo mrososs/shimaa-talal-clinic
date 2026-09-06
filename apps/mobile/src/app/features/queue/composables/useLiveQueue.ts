@@ -6,8 +6,8 @@ import {
   isUnchanged,
   type ParentQueueItem,
 } from '@clinic/contracts';
+import { createSequence, usePolling } from '@clinic/client-ui';
 import { apiMessage } from '../../../shared/messages';
-import { usePolling } from '../../../shared/composables/usePolling';
 import { queueApi } from '../../../runtime';
 
 /**
@@ -50,13 +50,14 @@ export function useLiveQueue() {
   const refreshing = ref(false);
   const failure = ref<string | null>(null);
   const updatedAt = ref<number | null>(null);
+  /** The entry a deferral is in flight for, so exactly one button disables. */
+  const deferring = ref<string | null>(null);
 
   /** Items where the child is actually in the queue right now. */
   const active = computed(() =>
     items.value.filter(
       (item) =>
-        item.queueEntry !== null &&
-        PENDING.includes(item.queueEntry.status),
+        item.queueEntry !== null && PENDING.includes(item.queueEntry.status),
     ),
   );
 
@@ -69,8 +70,7 @@ export function useLiveQueue() {
   const settled = computed(() =>
     items.value.filter(
       (item) =>
-        item.queueEntry !== null &&
-        !PENDING.includes(item.queueEntry.status),
+        item.queueEntry !== null && !PENDING.includes(item.queueEntry.status),
     ),
   );
 
@@ -86,10 +86,22 @@ export function useLiveQueue() {
       session.value.doctorPresence !== DoctorPresence.Arrived,
   );
 
-  async function read(since?: number): Promise<void> {
-    const response = await queueApi.mine(since);
-    updatedAt.value = Date.now();
+  /**
+   * Arrival order, so a slow poll cannot undo a fresh read.
+   *
+   * A fifteen-second tick and the re-read after a deferral overlap easily on a
+   * phone's connection. If the tick was sent first and lands second it carries
+   * the count from before the deferral, and the number a parent is watching
+   * would jump backwards.
+   */
+  const sequence = createSequence();
 
+  async function read(since?: number): Promise<void> {
+    const ticket = sequence.next();
+    const response = await queueApi.mine(since);
+    if (!sequence.accept(ticket)) return;
+
+    updatedAt.value = Date.now();
     if (isUnchanged(response)) {
       revision.value = response.revision;
       return;
@@ -128,6 +140,29 @@ export function useLiveQueue() {
     onResume: () => void refresh(),
   });
 
+  /**
+   * "Let the next person go."
+   *
+   * The clinic's limit is the server's to enforce, and a refusal comes back as
+   * a sentence a parent can read. Either way the view is re-read afterwards:
+   * the whole point of deferring is that the count changes, and the entry the
+   * endpoint returns says nothing about where the rest of the queue now is.
+   */
+  async function defer(entryId: string): Promise<void> {
+    if (deferring.value !== null) return;
+    deferring.value = entryId;
+    failure.value = null;
+    try {
+      await queueApi.defer(entryId);
+      await read();
+    } catch (error) {
+      failure.value = apiMessage(error);
+      await read().catch(() => undefined);
+    } finally {
+      deferring.value = null;
+    }
+  }
+
   /** Entering the screen: read immediately, then keep it current. */
   async function open(): Promise<void> {
     await refresh();
@@ -145,6 +180,7 @@ export function useLiveQueue() {
     refreshing,
     failure,
     updatedAt,
+    deferring,
     active,
     expected,
     settled,
@@ -155,6 +191,7 @@ export function useLiveQueue() {
     open,
     close,
     refresh,
+    defer,
   };
 }
 
@@ -164,6 +201,34 @@ const PENDING: readonly QueueStatus[] = [
   QueueStatus.Called,
   QueueStatus.InService,
 ];
+
+/**
+ * Whether "skip my turn" is offered at all.
+ *
+ * Only while still waiting — once called, the turn is happening and giving it
+ * up is a different decision the clinic makes, not the parent. And only within
+ * the clinic's own limit, so a button that the server would refuse is never
+ * drawn in the first place.
+ */
+export function canDefer(
+  item: ParentQueueItem,
+  maxSelfDefers: number,
+): boolean {
+  const entry = item.queueEntry;
+  return (
+    entry !== null &&
+    entry.status === QueueStatus.Waiting &&
+    entry.deferCount < maxSelfDefers
+  );
+}
+
+/** How many deferrals this family has left today. */
+export function defersLeft(
+  item: ParentQueueItem,
+  maxSelfDefers: number,
+): number {
+  return Math.max(0, maxSelfDefers - (item.queueEntry?.deferCount ?? 0));
+}
 
 /** Nearly their turn — a threshold on the server's count, not a status. */
 export function isNear(item: ParentQueueItem): boolean {

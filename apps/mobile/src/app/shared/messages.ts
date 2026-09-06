@@ -42,6 +42,21 @@ const API_MESSAGES: Record<string, string> = {
   claim_code_locked: 'محاولات كثيرة. اطلبي رمزاً جديداً من الاستقبال.',
   child_not_found: 'لم نعثر على هذا الطفل.',
   guardian_not_found: 'لم نعثر على هذا الملف.',
+
+  // Booking.
+  slot_unavailable: 'امتلأت هذه الفترة للتو. اختاري فترة أخرى.',
+  session_unavailable: 'هذه الفترة غير متاحة للحجز.',
+  window_in_past: 'هذه الفترة بدأت بالفعل.',
+  cancellation_too_late: 'فات وقت الإلغاء المسموح به. تواصلي مع الاستقبال.',
+  appointment_not_found: 'لم نعثر على هذا الموعد.',
+  child_not_accessible: 'لم نعثر على هذا الطفل في ملفك.',
+
+  // The queue. Worded as what to do next, not as a refusal.
+  queue_defer_limit_reached: 'استخدمتِ كل مرات تأجيل الدور المتاحة اليوم.',
+  queue_invalid_transition: 'تغيّر دورك للتو — حدّثنا الشاشة.',
+  queue_entry_not_found: 'لم نعثر على دورك في الطابور.',
+  queue_session_not_running: 'الطابور متوقف مؤقتاً الآن.',
+  queue_conflict: 'تغيّر الطابور للتو — حدّثنا الشاشة.',
 };
 
 export function apiMessage(error: unknown): string {
