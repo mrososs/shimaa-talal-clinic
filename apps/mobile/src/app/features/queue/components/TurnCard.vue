@@ -57,9 +57,7 @@ const called = computed(() => entry.value?.status === QueueStatus.Called);
 const inService = computed(() => entry.value?.status === QueueStatus.InService);
 const missed = computed(() => entry.value?.status === QueueStatus.Missed);
 const done = computed(() => entry.value?.status === QueueStatus.Done);
-const cancelled = computed(
-  () => entry.value?.status === QueueStatus.Cancelled,
-);
+const cancelled = computed(() => entry.value?.status === QueueStatus.Cancelled);
 
 /** The turn is happening, so the card leads with that rather than a count. */
 const highlight = computed(() => called.value || inService.value);
@@ -110,32 +108,23 @@ const remainingLabel = computed(() => {
 </script>
 
 <template>
-  <section
-    class="turn card pop"
-    :class="{ 'turn--live': highlight }"
-  >
+  <section class="turn card pop" :class="{ 'turn--live': highlight }">
     <header class="turn__head">
       <div>
         <p class="turn__child">
           {{ item.childName }}
         </p>
-        <p
-          v-if="item.appointment"
-          class="turn__window"
-        >
+        <p v-if="item.appointment" class="turn__window">
           {{
-            windowLabel(item.appointment.windowStart, item.appointment.windowEnd)
+            windowLabel(
+              item.appointment.windowStart,
+              item.appointment.windowEnd,
+            )
           }}
-          <span
-            v-if="pending"
-            class="turn__pending"
-          >قيد المراجعة</span>
+          <span v-if="pending" class="turn__pending">قيد المراجعة</span>
         </p>
       </div>
-      <span
-        v-if="entry"
-        class="turn__ticket"
-      >
+      <span v-if="entry" class="turn__ticket">
         <span class="turn__ticket-label">رقمك</span>
         <span class="turn__ticket-num">
           {{ arabicDigits(entry.ticketNumber) }}
@@ -144,17 +133,12 @@ const remainingLabel = computed(() => {
     </header>
 
     <!-- Booked, nobody has checked them in. Not a place in the queue. -->
-    <div
-      v-if="!entry"
-      class="turn__body"
-    >
+    <div v-if="!entry" class="turn__body">
       <span class="turn__ico">
         <ion-icon :icon="informationCircleOutline" />
       </span>
       <div>
-        <p class="turn__headline">
-          لم يتم تسجيل الوصول بعد
-        </p>
+        <p class="turn__headline">لم يتم تسجيل الوصول بعد</p>
         <p class="turn__note">
           يبدأ دورك في الطابور بعد أن يسجّل الاستقبال وصولك في العيادة.
         </p>
@@ -162,16 +146,11 @@ const remainingLabel = computed(() => {
     </div>
 
     <!-- Their turn. -->
-    <div
-      v-else-if="called"
-      class="turn__body turn__body--hero"
-    >
+    <div v-else-if="called" class="turn__body turn__body--hero">
       <span class="turn__hero-ico">
         <ion-icon :icon="checkmarkCircle" />
       </span>
-      <h2 class="turn__hero">
-        حان دورك الآن!
-      </h2>
+      <h2 class="turn__hero">حان دورك الآن!</h2>
       <p class="turn__hero-note">
         توجّهي إلى غرفة الكشف — رقمك {{ arabicDigits(entry.ticketNumber) }}
       </p>
@@ -182,151 +161,104 @@ const remainingLabel = computed(() => {
       />
     </div>
 
-    <div
-      v-else-if="inService"
-      class="turn__body turn__body--hero"
-    >
+    <div v-else-if="inService" class="turn__body turn__body--hero">
       <span class="turn__hero-ico">
         <ion-icon :icon="medkitOutline" />
       </span>
-      <h2 class="turn__hero">
-        الكشف جارٍ الآن
-      </h2>
-      <p class="turn__hero-note">
-        نتمنى لكم زيارة موفّقة.
-      </p>
+      <h2 class="turn__hero">الكشف جارٍ الآن</h2>
+      <p class="turn__hero-note">نتمنى لكم زيارة موفّقة.</p>
     </div>
 
-    <div
-      v-else-if="missed"
-      class="turn__body"
-    >
+    <div v-else-if="missed" class="turn__body">
       <span class="turn__ico turn__ico--warn">
         <ion-icon :icon="informationCircleOutline" />
       </span>
       <div>
-        <p class="turn__headline">
-          تم تخطّي دورك
-        </p>
+        <p class="turn__headline">تم تخطّي دورك</p>
         <p class="turn__note">
           راجعي الاستقبال وسيعيدونك إلى الطابور برقم جديد.
         </p>
       </div>
     </div>
 
-    <div
-      v-else-if="done"
-      class="turn__body"
-    >
+    <div v-else-if="done" class="turn__body">
       <span class="turn__ico turn__ico--ok">
         <ion-icon :icon="checkmarkCircle" />
       </span>
       <div>
-        <p class="turn__headline">
-          انتهت زيارتك اليوم
-        </p>
-        <p class="turn__note">
-          نتمنى لطفلك دوام الصحة.
-        </p>
+        <p class="turn__headline">انتهت زيارتك اليوم</p>
+        <p class="turn__note">نتمنى لطفلك دوام الصحة.</p>
       </div>
     </div>
 
-    <div
-      v-else-if="cancelled"
-      class="turn__body"
-    >
+    <div v-else-if="cancelled" class="turn__body">
       <span class="turn__ico turn__ico--warn">
         <ion-icon :icon="informationCircleOutline" />
       </span>
       <div>
-        <p class="turn__headline">
-          تمت إزالتك من طابور اليوم
-        </p>
-        <p class="turn__note">
-          راجعي الاستقبال لمعرفة التفاصيل.
-        </p>
+        <p class="turn__headline">تمت إزالتك من طابور اليوم</p>
+        <p class="turn__note">راجعي الاستقبال لمعرفة التفاصيل.</p>
       </div>
     </div>
 
-    <!-- Waiting. The counter is the screen, exactly as the prototype has it —
-         one number, large enough to read at arm's length. The prototype's is
-         the ticket being served now; this one is how many are ahead, which is
-         the same fact told from the only side a parent is entitled to see. -->
-    <div
-      v-else
-      class="counter"
-      :class="{ 'counter--soon': near }"
-    >
+    <!-- The prototype's concentric live counter, using the private count the
+         parent API owns rather than exposing another patient's ticket. -->
+    <div v-else class="counter" :class="{ 'counter--soon': near }">
       <span class="counter__label">
-        {{ ahead === 0 ? 'دورك الآن التالي' : 'أمامك في الطابور' }}
+        {{ ahead === 0 ? 'دورك هو التالي' : 'أمامك في الطابور' }}
       </span>
 
-      <span
-        v-if="ahead > 0"
-        class="counter__num"
-      >{{ arabicDigits(ahead) }}</span>
-      <span
-        v-else
-        class="counter__next"
-      >أنت التالي</span>
+      <div class="counter__ring">
+        <span class="counter__pulse" />
+        <span class="counter__track" />
+        <span class="counter__centre">
+          <span v-if="ahead > 0" class="counter__num">{{
+            arabicDigits(ahead)
+          }}</span>
+          <span v-else class="counter__next">التالي</span>
+        </span>
+      </div>
 
-      <span
-        v-if="ahead > 0"
-        class="counter__unit"
-      >{{ ahead === 1 ? 'حالة' : 'حالات' }}</span>
+      <p class="counter__position">
+        أنت رقم
+        <strong>{{ arabicDigits(entry.ticketNumber) }}</strong>
+        — يوجد أمامك
+        <b>{{ arabicDigits(ahead) }}</b>
+        {{ ahead === 1 ? 'حالة' : 'حالات' }} الآن
+      </p>
 
       <p class="counter__meta">
-        أنت رقم {{ arabicDigits(entry.ticketNumber) }} · متابعة مباشرة
+        <span class="counter__live-dot" />
+        متابعة مباشرة · يتحدّث تلقائياً
       </p>
 
-      <p
-        v-if="near"
-        class="counter__note counter__note--soon"
-      >
+      <p v-if="near" class="counter__note counter__note--soon">
         اقترب دورك — يُفضّل أن تكوني في العيادة الآن.
       </p>
-      <p
-        v-else-if="stalled"
-        class="counter__note"
-      >
+      <p v-else-if="stalled" class="counter__note">
         مكانك محفوظ. سنُحدّث العدد فور أن يتحرّك الطابور.
       </p>
-      <p
-        v-else
-        class="counter__note"
-      >
-        يتحدّث تلقائياً كلما تحرّك الطابور.
-      </p>
+      <p v-else class="counter__note">يتحدّث تلقائياً كلما تحرّك الطابور.</p>
     </div>
 
     <!-- Where the prototype put its ticking countdown. A range instead: the
          clinic cannot promise a minute, and a parent driving in reads a
          ticking clock as one. -->
-    <div
-      v-if="waiting && estimate"
-      class="eta"
-    >
+    <div v-if="waiting && estimate" class="eta card">
       <span class="eta__ico">
         <ion-icon :icon="timeOutline" />
       </span>
       <div>
-        <p class="eta__label">
-          الوقت المتوقّع تقريباً
-        </p>
+        <p class="eta__label">الوقت المتبقّي لدورك تقريباً</p>
         <p class="eta__value">
           {{ arabicDigits(estimate.from) }}–{{ arabicDigits(estimate.to) }}
           <span class="eta__unit">دقيقة</span>
         </p>
-        <p class="eta__note">
-          تقدير تقريبي يتغيّر مع حركة الطابور
-        </p>
+        <p class="eta__note">تقدير آمن يتغيّر مع حركة الطابور</p>
       </div>
     </div>
 
-    <p
-      v-if="entry?.isEmergency"
-      class="turn__flag"
-    >
+    <p v-if="entry?.isEmergency" class="turn__flag">
       تم تصنيف حالتك كحالة عاجلة من قِبل العيادة.
     </p>
 
@@ -524,8 +456,8 @@ const remainingLabel = computed(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding-block: 10px 4px;
+  padding-block: 4px 2px;
+  text-align: center;
 }
 
 .counter__label {
@@ -534,13 +466,50 @@ const remainingLabel = computed(() => {
   color: var(--ink-2);
 }
 
-/* 62px, as the prototype has it: the one number on the screen that a parent
-   should be able to read without looking properly. */
+.counter__ring {
+  position: relative;
+  width: 172px;
+  height: 172px;
+  margin: 12px auto 6px;
+}
+
+.counter__pulse,
+.counter__track,
+.counter__centre {
+  position: absolute;
+  border-radius: 50%;
+}
+
+.counter__pulse {
+  inset: 0;
+  background: var(--teal);
+  opacity: 0.12;
+  animation: queue-pulse 2.4s ease-out infinite;
+}
+
+.counter__track {
+  inset: 13px;
+  background: conic-gradient(
+    var(--teal) 0deg,
+    var(--sky) 200deg,
+    var(--bg-2) 200deg
+  );
+  mask: radial-gradient(circle 64px at center, transparent 58px, #000 59px);
+}
+
+.counter__centre {
+  inset: 24px;
+  background: var(--surface);
+  box-shadow: var(--sh-sm);
+  display: grid;
+  place-items: center;
+}
+
 .counter__num {
   font-family: var(--ff-display);
   font-weight: 800;
   font-size: 62px;
-  line-height: 1.05;
+  line-height: 1;
   color: var(--ink);
 }
 
@@ -552,24 +521,44 @@ const remainingLabel = computed(() => {
 .counter__next {
   font-family: var(--ff-display);
   font-weight: 800;
-  font-size: 34px;
+  font-size: 28px;
   line-height: 1.2;
   padding-block: 8px;
   color: var(--ink);
 }
 
-.counter__unit {
-  font-family: var(--ff-display);
+.counter__position {
+  margin: 6px 0 0;
+  font-size: 16px;
   font-weight: 700;
-  font-size: 17px;
-  color: var(--ink-2);
+  line-height: 1.55;
+}
+
+.counter__position strong {
+  color: var(--coral-ink);
+  font: 800 19px var(--ff-display);
+}
+
+.counter__position b {
+  color: var(--teal-ink);
+}
+
+.counter__live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+  animation: queue-live 1.6s infinite;
 }
 
 .counter__meta {
-  margin: 10px 0 0;
-  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 7px 0 0;
+  font-size: 12.5px;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--ink-2);
 }
 
 .counter__note {
@@ -589,20 +578,21 @@ const remainingLabel = computed(() => {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 14px;
+  padding: 18px;
   border-radius: var(--r-lg);
-  background: var(--surface-2);
+  background: var(--surface);
+  box-shadow: var(--sh-sm);
 }
 
 .eta__ico {
   display: grid;
   place-items: center;
-  inline-size: 42px;
-  block-size: 42px;
+  inline-size: 76px;
+  block-size: 76px;
   border-radius: var(--r-pill);
-  background: var(--teal-soft);
-  color: var(--teal-ink);
-  font-size: 22px;
+  background: var(--coral-soft);
+  color: var(--coral-ink);
+  font-size: 34px;
   flex-shrink: 0;
 }
 
@@ -617,7 +607,7 @@ const remainingLabel = computed(() => {
   margin: 2px 0 0;
   font-family: var(--ff-display);
   font-weight: 800;
-  font-size: 22px;
+  font-size: 30px;
   color: var(--ink);
 }
 
@@ -695,5 +685,27 @@ const remainingLabel = computed(() => {
 .turn--live .turn__flag {
   color: rgb(255 255 255 / 88%);
   border-color: rgb(255 255 255 / 25%);
+}
+
+@keyframes queue-pulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.35;
+  }
+  70%,
+  100% {
+    transform: scale(1.25);
+    opacity: 0;
+  }
+}
+
+@keyframes queue-live {
+  0% {
+    box-shadow: 0 0 0 0 rgb(47 180 121 / 50%);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 7px rgb(47 180 121 / 0%);
+  }
 }
 </style>

@@ -26,11 +26,7 @@ describe('mobile router', () => {
       .filter((route) => route.meta?.[ROUTE_META_PUBLIC] === true)
       .map((route) => route.name);
 
-    expect(publicNames).toEqual([
-      'sign-in',
-      'sign-up',
-      'reset-password',
-    ]);
+    expect(publicNames).toEqual(['sign-in', 'sign-up', 'reset-password']);
   });
 
   it('marks every onboarding screen as onboarding', () => {
@@ -71,6 +67,7 @@ describe('mobile router', () => {
       'appointment-reschedule',
       'growth',
       'payments',
+      'add-child',
     ]) {
       expect(named(name), name).toBeDefined();
     }
@@ -93,6 +90,7 @@ describe('mobile router', () => {
     expect(tabsShell?.children).not.toContain(named('appointment-reschedule'));
     expect(tabsShell?.children).not.toContain(named('growth'));
     expect(tabsShell?.children).not.toContain(named('payments'));
+    expect(tabsShell?.children).not.toContain(named('add-child'));
   });
 
   it('sends an unknown deep link home rather than to an error', () => {

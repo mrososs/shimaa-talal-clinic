@@ -7,7 +7,8 @@ import {
   onIonViewDidLeave,
   onIonViewWillEnter,
 } from '@ionic/vue';
-import { calendarOutline, refreshOutline } from 'ionicons/icons';
+import { calendarOutline, refreshOutline, timeOutline } from 'ionicons/icons';
+import { AppointmentStatus } from '@clinic/contracts';
 import { ClinicDialog } from '@clinic/client-ui';
 import ScreenShell from '../../../shared/components/ScreenShell.vue';
 import { arabicDigits } from '../../../shared/numerals';
@@ -58,6 +59,19 @@ function confirmDefer(): void {
 /** Nothing at all today: no booking, no turn. */
 const idle = computed(
   () => !queue.loading.value && queue.items.value.length === 0,
+);
+
+const pendingApproval = computed(() =>
+  queue.expected.value.filter(
+    (item) => item.appointment?.status === AppointmentStatus.Requested,
+  ),
+);
+const visibleItems = computed(() =>
+  queue.items.value.filter(
+    (item) =>
+      item.queueEntry !== null ||
+      item.appointment?.status !== AppointmentStatus.Requested,
+  ),
 );
 
 // Ionic keeps a page alive between visits, so entering and leaving are the
@@ -125,12 +139,34 @@ onIonViewDidLeave(() => queue.close());
           <!-- One clinic, one day: the banner is about the session, not about
                a particular child. -->
           <session-banner
-            v-if="queue.session.value"
+            v-if="queue.session.value && visibleItems.length > 0"
             :session="queue.session.value"
           />
 
+          <section
+            v-for="item in pendingApproval"
+            :key="`pending-${item.childId}`"
+            class="card pending-card pop"
+            aria-live="polite"
+          >
+            <span class="pending-card__pulse">
+              <span class="pending-card__icon">
+                <ion-icon :icon="timeOutline" />
+              </span>
+            </span>
+            <h2>حجز {{ item.childName }} قيد المراجعة</h2>
+            <p>
+              تتحقق مساعدة العيادة من طلبك وتؤكّده. سيظهر رقم الدور هنا فور
+              الموافقة وتسجيل الوصول.
+            </p>
+            <span class="pending-card__status">
+              <i />
+              الحالة: بانتظار موافقة العيادة
+            </span>
+          </section>
+
           <turn-card
-            v-for="item in queue.items.value"
+            v-for="item in visibleItems"
             :key="item.childId"
             :item="item"
             :grace-minutes="graceMinutes"
@@ -253,5 +289,97 @@ onIonViewDidLeave(() => queue.close());
   text-align: center;
   font-size: 12.5px;
   color: var(--muted);
+}
+
+.pending-card {
+  padding: 34px 22px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.pending-card__pulse {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  margin-block-end: 18px;
+}
+
+.pending-card__pulse::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--sun);
+  opacity: 0.18;
+  animation: pending-pulse 2.2s ease-out infinite;
+}
+
+.pending-card__icon {
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  background: var(--sun-soft);
+  color: #b8800f;
+  display: grid;
+  place-items: center;
+  font-size: 46px;
+}
+
+.pending-card h2 {
+  margin: 0;
+  font: 800 23px/1.4 var(--ff-display);
+}
+
+.pending-card p {
+  margin: 10px 0 0;
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.7;
+}
+
+.pending-card__status {
+  margin-block-start: 18px;
+  padding: 10px 16px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pending-card__status i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sun);
+  animation: status-live 1.6s infinite;
+}
+
+@keyframes pending-pulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.5;
+  }
+  70%,
+  100% {
+    transform: scale(1.25);
+    opacity: 0;
+  }
+}
+
+@keyframes status-live {
+  0% {
+    box-shadow: 0 0 0 0 rgb(244 165 43 / 50%);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 7px rgb(244 165 43 / 0%);
+  }
 }
 </style>

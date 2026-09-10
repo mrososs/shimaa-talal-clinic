@@ -110,8 +110,7 @@ export const routes: RouteRecordRaw[] = [
       {
         path: 'messages',
         name: 'messages',
-        component: () =>
-          import('../features/messages/pages/MessagesPage.vue'),
+        component: () => import('../features/messages/pages/MessagesPage.vue'),
       },
     ],
   },
@@ -138,6 +137,11 @@ export const routes: RouteRecordRaw[] = [
     path: '/growth',
     name: 'growth',
     component: () => import('../features/growth/pages/GrowthPage.vue'),
+  },
+  {
+    path: '/children/new',
+    name: 'add-child',
+    component: () => import('../features/onboarding/pages/ChildSetupPage.vue'),
   },
   {
     path: '/payments',
