@@ -1,5 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ServerCoreModule } from '@clinic/server-core';
+import { PaymentService } from './payment.service';
+import { PaymentsController } from './api/payments.controller';
+import { ParentPaymentsController } from './api/parent-payments.controller';
 
 /**
  * Payments domain boundary.
@@ -20,8 +23,8 @@ import { ServerCoreModule } from '@clinic/server-core';
  */
 @Module({
   imports: [ServerCoreModule],
-  controllers: [],
-  providers: [],
-  exports: [],
+  controllers: [PaymentsController, ParentPaymentsController],
+  providers: [PaymentService],
+  exports: [PaymentService],
 })
 export class PaymentsModule {}

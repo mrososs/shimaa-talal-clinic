@@ -38,8 +38,6 @@ export class ClinicExceptionFilter implements ExceptionFilter {
     const status =
       STATUS_BY_CODE[exception.code] ?? HttpStatus.INTERNAL_SERVER_ERROR;
 
-    response
-      .status(status)
-      .json(apiFailure(exception.code, exception.message));
+    response.status(status).json(apiFailure(exception.code, exception.message));
   }
 }

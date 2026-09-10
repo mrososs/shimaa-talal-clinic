@@ -3,20 +3,23 @@ import {
   Controller,
   HttpCode,
   HttpStatus,
+  Inject,
   Param,
   ParseUUIDPipe,
   Post,
   UseFilters,
 } from '@nestjs/common';
 import {
+  CHILD_ACCESS_CHECKER,
   CurrentMember,
   Roles,
+  type ChildAccessChecker,
   type ClinicMemberContext,
 } from '@clinic/server-core';
 import { UserRole, type QueueEntry } from '@clinic/contracts';
 import { QueueCommandService } from '../queue-command.service';
+import { QueueError, QueueErrorCode } from '../queue.errors';
 import {
-  CallNextDto,
   CancelEntryDto,
   EmergencyDto,
   MissDto,
@@ -33,9 +36,10 @@ import { QueueExceptionFilter } from './queue-exception.filter';
  * arrive with no explanation of which rule it broke — while these routes only
  * exist for moves that are legal, and each says what it refused and why.
  *
- * Two commands are absent and that is deliberate: check-in and complete both
- * change an appointment as well as a queue entry, so they live in
- * `@clinic/server-workflows`. Queue may not depend on Booking.
+ * Cross-domain commands are absent deliberately: check-in and completion can
+ * change an appointment, while call-next can mark an expired appointment as
+ * no-show. They live in `@clinic/server-workflows`; Queue may not depend on
+ * Booking.
  *
  * Who may do what follows the plan's matrix. Anyone active can run the queue —
  * the doctor calls the next patient when reception is with a family. Removing
@@ -45,7 +49,11 @@ import { QueueExceptionFilter } from './queue-exception.filter';
 @Controller({ path: 'clinic/queue', version: '1' })
 @UseFilters(QueueExceptionFilter)
 export class ClinicQueueController {
-  constructor(private readonly commands: QueueCommandService) {}
+  constructor(
+    private readonly commands: QueueCommandService,
+    @Inject(CHILD_ACCESS_CHECKER)
+    private readonly childAccess: ChildAccessChecker,
+  ) {}
 
   // `GET /clinic/queue` is not here. The board mixes this session's entries
   // with the appointments still expected and the names behind both, which is
@@ -61,10 +69,26 @@ export class ClinicQueueController {
    */
   @Roles(UserRole.Reception, UserRole.Admin)
   @Post('walk-in')
-  walkIn(
+  async walkIn(
     @CurrentMember() member: ClinicMemberContext,
     @Body() body: WalkInDto,
   ): Promise<QueueEntry> {
+    const accessible = body.guardianId
+      ? await this.childAccess.canGuardianAccessChild(
+          member.clinicId,
+          body.guardianId,
+          body.childId,
+        )
+      : await this.childAccess.childExistsInClinic(
+          member.clinicId,
+          body.childId,
+        );
+    if (!accessible) {
+      throw new QueueError(
+        QueueErrorCode.ChildNotAccessible,
+        'That child is not accessible at this clinic.',
+      );
+    }
     return this.commands.admit(
       {
         clinicId: member.clinicId,
@@ -75,19 +99,6 @@ export class ClinicQueueController {
       },
       { memberId: member.id },
     );
-  }
-
-  /** "Next please." Completes whoever is in the room and calls the next. */
-  @Roles(UserRole.Reception, UserRole.Admin, UserRole.Doctor)
-  @Post('call-next')
-  @HttpCode(HttpStatus.OK)
-  callNext(
-    @CurrentMember() member: ClinicMemberContext,
-    @Body() body: CallNextDto,
-  ): Promise<QueueEntry> {
-    return this.commands.callNext(member.clinicId, body.sessionId, {
-      memberId: member.id,
-    });
   }
 
   /** Call one specific patient, out of turn if staff decide to. */
@@ -205,5 +216,4 @@ export class ClinicQueueController {
       { memberId: member.id },
     );
   }
-
 }

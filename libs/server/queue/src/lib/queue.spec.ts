@@ -144,9 +144,7 @@ describeWithDatabase('queue', (fx) => {
     it('gives ten simultaneous arrivals ten distinct numbers', async () => {
       // The session's row lock is what makes this true. Without it, two
       // check-ins read the same "next number" and both take it.
-      const kids = await Promise.all(
-        Array.from({ length: 10 }, () => child()),
-      );
+      const kids = await Promise.all(Array.from({ length: 10 }, () => child()));
       const service = commands();
 
       const admitted = await Promise.all(
@@ -171,10 +169,10 @@ describeWithDatabase('queue', (fx) => {
       const called = await service.callNext(fx.clinicId, sessionId, {
         memberId: fx.doctorMemberId,
       });
-      expect(called.id).toBe(entry.id);
-      expect(called.status).toBe(QueueStatus.Called);
+      expect(called.called?.id).toBe(entry.id);
+      expect(called.called?.status).toBe(QueueStatus.Called);
       // Called means a deadline exists — the grace rule depends on it.
-      expect(called.graceExpiresAt).not.toBeNull();
+      expect(called.called?.graceExpiresAt).not.toBeNull();
 
       const started = await service.start(fx.clinicId, entry.id, {
         memberId: fx.doctorMemberId,
@@ -189,8 +187,7 @@ describeWithDatabase('queue', (fx) => {
       expect(done.completedAt).not.toBeNull();
     });
 
-    it('completes the current patient when the next is called', async () => {
-      // "Next please" is one gesture, so it is one transaction.
+    it('refuses call-next while a patient is still in service', async () => {
       const service = commands();
       const first = await admit();
       const second = await admit();
@@ -202,38 +199,81 @@ describeWithDatabase('queue', (fx) => {
         memberId: fx.doctorMemberId,
       });
 
-      const next = await service.callNext(fx.clinicId, sessionId, {
-        memberId: fx.doctorMemberId,
+      const sessionBefore = await new ClinicSessionService(
+        fx.db.database,
+      ).findById(fx.clinicId, sessionId);
+      await expect(
+        service.callNext(fx.clinicId, sessionId, {
+          memberId: fx.doctorMemberId,
+        }),
+      ).rejects.toMatchObject({
+        code: QueueErrorCode.CurrentPatientStillInService,
       });
 
-      expect(next.id).toBe(second.id);
       const previous = await entries().findById(fx.clinicId, first.id);
-      expect(previous?.status).toBe(QueueStatus.Done);
+      const waiting = await entries().findById(fx.clinicId, second.id);
+      const sessionAfter = await new ClinicSessionService(
+        fx.db.database,
+      ).findById(fx.clinicId, sessionId);
+      expect(previous?.status).toBe(QueueStatus.InService);
+      expect(waiting?.status).toBe(QueueStatus.Waiting);
+      expect(sessionAfter?.revision).toBe(sessionBefore?.revision);
     });
 
-    it('misses a patient who was called but never started', async () => {
+    it('completes the current patient and calls next only via the explicit command', async () => {
       const service = commands();
       const first = await admit();
-      await admit();
+      const second = await admit();
 
       await service.callNext(fx.clinicId, sessionId, {
         memberId: fx.doctorMemberId,
       });
-      // Calling the next name over somebody is exactly what "missed" means.
-      await service.callNext(fx.clinicId, sessionId, {
+      await service.start(fx.clinicId, first.id, {
+        memberId: fx.doctorMemberId,
+      });
+      const result = await service.completeAndCallNext(fx.clinicId, sessionId, {
         memberId: fx.doctorMemberId,
       });
 
-      const skipped = await entries().findById(fx.clinicId, first.id);
-      expect(skipped?.status).toBe(QueueStatus.Missed);
+      expect(result.completed?.id).toBe(first.id);
+      expect(result.called?.id).toBe(second.id);
+      expect((await entries().findById(fx.clinicId, first.id))?.status).toBe(
+        QueueStatus.Done,
+      );
     });
 
-    it('says so plainly when nobody is waiting', async () => {
+    it('returns an empty successful result when nobody is waiting', async () => {
       await expect(
         commands().callNext(fx.clinicId, sessionId, {
           memberId: fx.doctorMemberId,
         }),
-      ).rejects.toMatchObject({ code: QueueErrorCode.QueueEmpty });
+      ).resolves.toEqual({ completed: null, missed: null, called: null });
+    });
+
+    it('resolves only an expired called patient before calling another', async () => {
+      const service = commands();
+      const first = await admit();
+      const second = await admit();
+      await service.callNext(fx.clinicId, sessionId, {
+        memberId: fx.doctorMemberId,
+      });
+      await expect(
+        service.callNext(fx.clinicId, sessionId, {
+          memberId: fx.doctorMemberId,
+        }),
+      ).rejects.toMatchObject({ code: QueueErrorCode.GraceNotExpired });
+
+      await fx.db.database.query(
+        `update clinic.queue_entries
+            set grace_expires_at = now() - interval '1 minute'
+          where id = $1`,
+        [first.id],
+      );
+      const result = await service.callNext(fx.clinicId, sessionId, {
+        memberId: fx.doctorMemberId,
+      });
+      expect(result.missed?.id).toBe(first.id);
+      expect(result.called?.id).toBe(second.id);
     });
 
     it('treats a repeated command as a no-op', async () => {
@@ -252,6 +292,36 @@ describeWithDatabase('queue', (fx) => {
       expect(again.status).toBe(QueueStatus.InService);
     });
 
+    it('does not record or bump a repeated completion', async () => {
+      const service = commands();
+      const entry = await admit();
+      await service.call(fx.clinicId, entry.id, {
+        memberId: fx.doctorMemberId,
+      });
+      await service.start(fx.clinicId, entry.id, {
+        memberId: fx.doctorMemberId,
+      });
+      await service.complete(fx.clinicId, entry.id, {
+        memberId: fx.doctorMemberId,
+      });
+      const sessions = new ClinicSessionService(fx.db.database);
+      const before = await sessions.findById(fx.clinicId, sessionId);
+
+      const again = await service.complete(fx.clinicId, entry.id, {
+        memberId: fx.doctorMemberId,
+      });
+
+      const after = await sessions.findById(fx.clinicId, sessionId);
+      const events = await fx.db.database.query<{ count: string }>(
+        `select count(*)::text as count from clinic.queue_events
+          where entry_id = $1 and event_type = 'completed'`,
+        [entry.id],
+      );
+      expect(again.status).toBe(QueueStatus.Done);
+      expect(after?.revision).toBe(before?.revision);
+      expect(events.rows[0].count).toBe('1');
+    });
+
     it('refuses a move the state machine forbids', async () => {
       const entry = await admit();
       await expect(
@@ -259,6 +329,133 @@ describeWithDatabase('queue', (fx) => {
           memberId: fx.doctorMemberId,
         }),
       ).rejects.toMatchObject({ code: QueueErrorCode.InvalidTransition });
+    });
+  });
+
+  describe('paused means a full queue freeze', () => {
+    it.each([
+      'admit',
+      'callNext',
+      'completeAndCallNext',
+      'call',
+      'start',
+      'complete',
+      'miss',
+      'requeue',
+      'cancel',
+      'emergency',
+      'move',
+      'defer',
+    ])('rejects %s without an event or revision bump', async (command) => {
+      const service = commands();
+      const current = await admit();
+      const called = await admit();
+      const missed = await admit();
+      const waiting = await admit();
+      const neighbour = await admit();
+
+      await service.call(fx.clinicId, current.id, {
+        memberId: fx.doctorMemberId,
+      });
+      await service.start(fx.clinicId, current.id, {
+        memberId: fx.doctorMemberId,
+      });
+      await service.call(fx.clinicId, missed.id, {
+        memberId: fx.doctorMemberId,
+      });
+      await service.miss(fx.clinicId, missed.id, {
+        memberId: fx.doctorMemberId,
+        force: true,
+        reason: 'setup',
+      });
+      await service.call(fx.clinicId, called.id, {
+        memberId: fx.doctorMemberId,
+      });
+      await fx.db.database.query(
+        `update clinic.clinic_sessions set status = 'paused' where id = $1`,
+        [sessionId],
+      );
+
+      const sessions = new ClinicSessionService(fx.db.database);
+      const before = await sessions.findById(fx.clinicId, sessionId);
+      const eventsBefore = await fx.db.database.query<{ count: string }>(
+        `select count(*)::text as count from clinic.queue_events
+          where session_id = $1`,
+        [sessionId],
+      );
+      const actions: Record<string, () => Promise<unknown>> = {
+        admit: () =>
+          service.admit(
+            {
+              clinicId: fx.clinicId,
+              sessionId,
+              childId: current.childId,
+            },
+            { memberId: fx.doctorMemberId },
+          ),
+        callNext: () =>
+          service.callNext(fx.clinicId, sessionId, {
+            memberId: fx.doctorMemberId,
+          }),
+        completeAndCallNext: () =>
+          service.completeAndCallNext(fx.clinicId, sessionId, {
+            memberId: fx.doctorMemberId,
+          }),
+        call: () =>
+          service.call(fx.clinicId, waiting.id, {
+            memberId: fx.doctorMemberId,
+          }),
+        start: () =>
+          service.start(fx.clinicId, called.id, {
+            memberId: fx.doctorMemberId,
+          }),
+        complete: () =>
+          service.complete(fx.clinicId, current.id, {
+            memberId: fx.doctorMemberId,
+          }),
+        miss: () =>
+          service.miss(fx.clinicId, called.id, {
+            memberId: fx.doctorMemberId,
+            force: true,
+            reason: 'paused',
+          }),
+        requeue: () =>
+          service.requeue(fx.clinicId, missed.id, {
+            memberId: fx.doctorMemberId,
+          }),
+        cancel: () =>
+          service.cancel(fx.clinicId, waiting.id, {
+            memberId: fx.doctorMemberId,
+          }),
+        emergency: () =>
+          service.setEmergency(fx.clinicId, waiting.id, true, {
+            memberId: fx.doctorMemberId,
+            reason: 'paused',
+          }),
+        move: () =>
+          service.move(
+            fx.clinicId,
+            waiting.id,
+            { afterEntryId: neighbour.id },
+            { memberId: fx.doctorMemberId },
+          ),
+        defer: () =>
+          service.defer(fx.clinicId, waiting.id, {
+            authUserId: '00000000-0000-0000-0000-000000000001',
+          }),
+      };
+
+      await expect(actions[command]()).rejects.toMatchObject({
+        code: QueueErrorCode.SessionNotRunning,
+      });
+      const after = await sessions.findById(fx.clinicId, sessionId);
+      const eventsAfter = await fx.db.database.query<{ count: string }>(
+        `select count(*)::text as count from clinic.queue_events
+          where session_id = $1`,
+        [sessionId],
+      );
+      expect(after?.revision).toBe(before?.revision);
+      expect(eventsAfter.rows[0].count).toBe(eventsBefore.rows[0].count);
     });
   });
 
@@ -286,15 +483,56 @@ describeWithDatabase('queue', (fx) => {
       );
       expect(called.rows[0].count).toBe('1');
 
-      // Both may succeed — the second legitimately misses the first and calls
-      // the next patient, which is what a real "next please" does. What must
-      // never happen is two people believing it is their turn at once.
+      // The session lock permits one call. The second sees the still-valid
+      // called patient and is refused rather than skipping them early.
       const rejected = outcomes.filter((o) => o.status === 'rejected');
       for (const outcome of rejected) {
         expect((outcome as PromiseRejectedResult).reason).toMatchObject({
           code: expect.stringMatching(/queue_/),
         });
       }
+    }, 30_000);
+
+    it('serializes two complete-and-call-next requests', async () => {
+      const service = commands();
+      const current = await admit();
+      await admit();
+      await admit();
+      await service.callNext(fx.clinicId, sessionId, {
+        memberId: fx.doctorMemberId,
+      });
+      await service.start(fx.clinicId, current.id, {
+        memberId: fx.doctorMemberId,
+      });
+
+      const sessions = new ClinicSessionService(fx.db.database);
+      const before = await sessions.findById(fx.clinicId, sessionId);
+      const outcomes = await Promise.allSettled([
+        service.completeAndCallNext(fx.clinicId, sessionId, {
+          memberId: fx.doctorMemberId,
+        }),
+        service.completeAndCallNext(fx.clinicId, sessionId, {
+          memberId: fx.doctorMemberId,
+        }),
+      ]);
+
+      expect(
+        outcomes.filter((outcome) => outcome.status === 'fulfilled'),
+      ).toHaveLength(1);
+      const counts = await fx.db.database.query<{
+        called: string;
+        completed_events: string;
+      }>(
+        `select
+           count(*) filter (where status = 'called')::text as called,
+           (select count(*)::text from clinic.queue_events
+             where entry_id = $2 and event_type = 'completed') as completed_events
+         from clinic.queue_entries where session_id = $1`,
+        [sessionId, current.id],
+      );
+      const after = await sessions.findById(fx.clinicId, sessionId);
+      expect(counts.rows[0]).toEqual({ called: '1', completed_events: '1' });
+      expect(after?.revision).toBe((before?.revision ?? 0) + 1);
     }, 30_000);
 
     it('never produces two patients in service', async () => {
@@ -474,12 +712,9 @@ describeWithDatabase('queue', (fx) => {
         reason: 'خطأ',
       });
 
-      const cleared = await service.setEmergency(
-        fx.clinicId,
-        entry.id,
-        false,
-        { memberId: fx.doctorMemberId },
-      );
+      const cleared = await service.setEmergency(fx.clinicId, entry.id, false, {
+        memberId: fx.doctorMemberId,
+      });
       expect(cleared.isEmergency).toBe(false);
     });
 
@@ -566,6 +801,62 @@ describeWithDatabase('queue', (fx) => {
         c.ticketNumber,
         b.ticketNumber,
       ]);
+    });
+
+    it('rejects missing, duplicate, self, reversed and foreign neighbours', async () => {
+      const service = commands();
+      const a = await admit();
+      const b = await admit();
+      const c = await admit();
+      const foreignSession = await insertSession(fx.db.database, {
+        clinicId: fx.clinicId,
+        doctorMemberId: fx.doctorMemberId,
+        kind: 'evening',
+        status: 'open',
+      });
+      const foreign = await service.admit(
+        {
+          clinicId: fx.clinicId,
+          sessionId: foreignSession,
+          childId: await child(),
+        },
+        { memberId: fx.doctorMemberId },
+      );
+
+      for (const target of [
+        {},
+        { beforeEntryId: c.id },
+        { beforeEntryId: b.id, afterEntryId: b.id },
+        { beforeEntryId: a.id, afterEntryId: b.id },
+        { beforeEntryId: '00000000-0000-4000-8000-000000000000' },
+        { beforeEntryId: foreign.id },
+      ]) {
+        await expect(
+          service.move(fx.clinicId, c.id, target, {
+            memberId: fx.doctorMemberId,
+          }),
+        ).rejects.toMatchObject({ code: QueueErrorCode.InvalidTransition });
+      }
+
+      await service.call(fx.clinicId, a.id, {
+        memberId: fx.doctorMemberId,
+      });
+      await expect(
+        service.move(
+          fx.clinicId,
+          a.id,
+          { beforeEntryId: b.id },
+          { memberId: fx.doctorMemberId },
+        ),
+      ).rejects.toMatchObject({ code: QueueErrorCode.InvalidTransition });
+      await expect(
+        service.move(
+          fx.clinicId,
+          c.id,
+          { afterEntryId: a.id },
+          { memberId: fx.doctorMemberId },
+        ),
+      ).rejects.toMatchObject({ code: QueueErrorCode.InvalidTransition });
     });
   });
 

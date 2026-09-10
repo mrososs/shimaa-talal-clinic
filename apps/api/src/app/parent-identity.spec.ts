@@ -220,9 +220,10 @@ const configured =
           returning child_id`,
         [createdGuardianIds, createdUserIds],
       );
-      await db.database.query(`delete from clinic.children where id = any($1)`, [
-        links.rows.map((row) => row.child_id),
-      ]);
+      await db.database.query(
+        `delete from clinic.children where id = any($1)`,
+        [links.rows.map((row) => row.child_id)],
+      );
       await db.database.query(
         `delete from clinic.guardians where id = any($1) or auth_user_id = any($2)`,
         [createdGuardianIds, createdUserIds],

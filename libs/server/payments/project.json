@@ -4,6 +4,7 @@
   "sourceRoot": "libs/server/payments/src",
   "projectType": "library",
   "tags": ["type:feature", "platform:server", "scope:payments"],
-  "// targets": "to see all targets run: nx show project server-payments --web",
-  "targets": {}
+  "targets": {
+    "test": { "parallelism": false }
+  }
 }

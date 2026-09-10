@@ -29,6 +29,12 @@ export const QueueErrorCode = {
   /** Nobody is waiting. */
   QueueEmpty: 'queue_empty',
 
+  /** Calling another patient cannot end an active consultation implicitly. */
+  CurrentPatientStillInService: 'queue_current_patient_still_in_service',
+
+  /** The child or guardian-child relationship is outside this clinic. */
+  ChildNotAccessible: 'queue_child_not_accessible',
+
   /**
    * Marking a patient missed before their grace has run out.
    *

@@ -45,7 +45,8 @@ export interface TestDatabase {
 export function createTestDatabase(connectionString: string): TestDatabase {
   const pool = new Pool({
     connectionString,
-    max: 10,
+    // Keep database-backed Nx targets below Supabase's per-role session cap.
+    max: 5,
     connectionTimeoutMillis: 15_000,
     // Hosted Supabase presents a chain Node does not trust by default. The
     // connection is still encrypted.

@@ -25,6 +25,7 @@ import { RolesGuard } from './roles.guard';
 const AUTH_USER: AuthenticatedUser = {
   id: 'auth-user-1',
   email: 'someone@example.test',
+  phone: null,
   roles: [],
 };
 

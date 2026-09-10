@@ -10,6 +10,7 @@ import type { RequestContext } from './request-context';
 const USER: AuthenticatedUser = {
   id: 'auth-user-1',
   email: 'someone@example.test',
+  phone: null,
   roles: [],
 };
 const GUARDIAN: GuardianContext = { id: 'guardian-1', clinicId: 'clinic-1' };

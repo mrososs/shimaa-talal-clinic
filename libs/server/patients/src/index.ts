@@ -29,6 +29,8 @@ export { PatientDirectoryService } from './lib/patient-directory.service';
 export { GuardianOwnershipService } from './lib/guardian-ownership.service';
 
 export { ClaimCodeService } from './lib/claim-code.service';
+export { PatientFileService } from './lib/patient-file.service';
+export type { PatientFileUpload } from './lib/patient-file.service';
 export type { ClaimInput } from './lib/claim-code.service';
 export {
   CLAIM_CODE_MAX_ATTEMPTS,

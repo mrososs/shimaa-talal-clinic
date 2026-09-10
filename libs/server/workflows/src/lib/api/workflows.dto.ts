@@ -1,5 +1,5 @@
 import { Transform, type TransformFnParams } from 'class-transformer';
-import { IsOptional, IsString, Length } from 'class-validator';
+import { IsOptional, IsString, IsUUID, Length } from 'class-validator';
 
 const trim = ({ value }: TransformFnParams): unknown =>
   typeof value === 'string' ? value.trim() : value;
@@ -17,4 +17,10 @@ export class CancelReasonDto {
   @Transform(trim)
   @Length(1, 280)
   reason?: string;
+}
+
+/** A session-scoped queue orchestration command. */
+export class SessionQueueCommandDto {
+  @IsUUID()
+  sessionId!: string;
 }

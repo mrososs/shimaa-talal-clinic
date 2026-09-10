@@ -183,8 +183,7 @@ const configured =
     });
 
   const board = async (since?: number): Promise<Board> => {
-    const query =
-      since === undefined ? '' : `&since=${since}`;
+    const query = since === undefined ? '' : `&since=${since}`;
     const response = await call(
       'GET',
       `/clinic/queue?sessionId=${sessionId}${query}`,
@@ -216,6 +215,23 @@ const configured =
       token: tokens.reception,
       body: { sessionId, childId: child, guardianId },
     });
+
+  async function anotherLinkedChild(name = 'Mariam'): Promise<string> {
+    const child = await db.database.query<{ id: string }>(
+      `insert into clinic.children (clinic_id, full_name)
+       values ($1, $2) returning id`,
+      [clinicId, name],
+    );
+    const id = child.rows[0].id;
+    strangerChildIds.push(id);
+    await db.database.query(
+      `insert into clinic.guardian_children
+         (guardian_id, child_id, relationship)
+       values ($1, $2, 'mother')`,
+      [guardianId, id],
+    );
+    return id;
+  }
 
   beforeAll(async () => {
     db = createTestDatabase(url as string);
@@ -514,9 +530,7 @@ const configured =
       // Whoever loses the appointment's row lock reads it as already checked
       // in. "Not confirmed" would be a true statement and the wrong answer:
       // the patient is in the queue, which is what was asked for.
-      expect(responses.map((r) => r.status)).toEqual([
-        201, 201, 201, 201, 201,
-      ]);
+      expect(responses.map((r) => r.status)).toEqual([201, 201, 201, 201, 201]);
       const ids = new Set(responses.map((r) => data<Entry>(r.body).id));
       expect(ids.size).toBe(1);
 
@@ -589,11 +603,18 @@ const configured =
       // One queue, one sequence. A walk-in is not a second-class entry.
       expect(data<Entry>(second.body).ticketNumber).toBe(2);
     });
+
+    it('refuses a child that is not linked to the supplied guardian', async () => {
+      const response = await walkIn(otherChildId);
+      expect(response.status).toBe(404);
+      expect(errorCode(response.body)).toBe('queue_child_not_accessible');
+    });
   });
 
   describe('running the queue', () => {
     it('calls, starts and completes', async () => {
       const first = data<Entry>((await walkIn()).body);
+      const second = data<Entry>((await walkIn(siblingId)).body);
 
       const called = await call('POST', '/clinic/queue/call-next', {
         token: tokens.reception,
@@ -610,17 +631,19 @@ const configured =
         token: tokens.doctor,
       });
       expect(data<Entry>(done.body).status).toBe('done');
+      expect(
+        (await board()).entries?.find((entry) => entry.id === second.id)
+          ?.status,
+      ).toBe('waiting');
     });
 
     it('completes the appointment behind a checked-in patient', async () => {
       const appointmentId = await bookedAppointment();
       const entry = data<Entry>(
         (
-          await call(
-            'POST',
-            `/clinic/appointments/${appointmentId}/check-in`,
-            { token: tokens.reception },
-          )
+          await call('POST', `/clinic/appointments/${appointmentId}/check-in`, {
+            token: tokens.reception,
+          })
         ).body,
       );
 
@@ -649,6 +672,9 @@ const configured =
       await call('POST', `/clinic/queue/${entry.id}/call`, {
         token: tokens.reception,
       });
+      await call('POST', `/clinic/queue/${entry.id}/start`, {
+        token: tokens.doctor,
+      });
 
       const done = await call('POST', `/clinic/queue/${entry.id}/complete`, {
         token: tokens.doctor,
@@ -657,13 +683,285 @@ const configured =
       expect(data<Entry>(done.body).status).toBe('done');
     });
 
-    it('says plainly when nobody is waiting', async () => {
+    it('returns null when nobody is waiting', async () => {
+      const response = await call('POST', '/clinic/queue/call-next', {
+        token: tokens.reception,
+        body: { sessionId },
+      });
+      expect(response.status).toBe(200);
+      expect(data<null>(response.body)).toBeNull();
+    });
+
+    it('completes the appointment and calls the next patient atomically', async () => {
+      const appointmentId = await bookedAppointment();
+      const current = data<Entry>(
+        (
+          await call('POST', `/clinic/appointments/${appointmentId}/check-in`, {
+            token: tokens.reception,
+          })
+        ).body,
+      );
+      const next = data<Entry>((await walkIn(siblingId)).body);
+      await call('POST', `/clinic/queue/${current.id}/call`, {
+        token: tokens.reception,
+      });
+      await call('POST', `/clinic/queue/${current.id}/start`, {
+        token: tokens.doctor,
+      });
+      const before = await board();
+
+      const response = await call(
+        'POST',
+        '/clinic/queue/complete-and-call-next',
+        { token: tokens.doctor, body: { sessionId } },
+      );
+
+      expect(response.status).toBe(200);
+      expect(data<Entry>(response.body).id).toBe(next.id);
+      const after = await board();
+      expect(after.revision).toBe(before.revision + 1);
+      expect(
+        after.entries?.find((entry) => entry.id === current.id)?.status,
+      ).toBe('done');
+      expect(after.entries?.find((entry) => entry.id === next.id)?.status).toBe(
+        'called',
+      );
+      const appointment = await call(
+        'GET',
+        `/clinic/appointments/${appointmentId}`,
+        { token: tokens.reception },
+      );
+      expect(data<{ status: string }>(appointment.body).status).toBe(
+        'completed',
+      );
+    });
+
+    it('completes the last patient and returns null', async () => {
+      const appointmentId = await bookedAppointment();
+      const current = data<Entry>(
+        (
+          await call('POST', `/clinic/appointments/${appointmentId}/check-in`, {
+            token: tokens.reception,
+          })
+        ).body,
+      );
+      await call('POST', `/clinic/queue/${current.id}/call`, {
+        token: tokens.reception,
+      });
+      await call('POST', `/clinic/queue/${current.id}/start`, {
+        token: tokens.doctor,
+      });
+
+      const response = await call(
+        'POST',
+        '/clinic/queue/complete-and-call-next',
+        { token: tokens.doctor, body: { sessionId } },
+      );
+      expect(response.status).toBe(200);
+      expect(data<null>(response.body)).toBeNull();
+      const appointment = await call(
+        'GET',
+        `/clinic/appointments/${appointmentId}`,
+        { token: tokens.reception },
+      );
+      expect(data<{ status: string }>(appointment.body).status).toBe(
+        'completed',
+      );
+    });
+
+    it('does not mutate anything when call-next finds a patient in service', async () => {
+      const current = data<Entry>((await walkIn()).body);
+      const next = data<Entry>((await walkIn(siblingId)).body);
+      await call('POST', `/clinic/queue/${current.id}/call`, {
+        token: tokens.reception,
+      });
+      await call('POST', `/clinic/queue/${current.id}/start`, {
+        token: tokens.doctor,
+      });
+      const before = await board();
+      const eventsBefore = await db.database.query<{ count: string }>(
+        `select count(*)::text as count from clinic.queue_events
+          where session_id = $1`,
+        [sessionId],
+      );
+
       const response = await call('POST', '/clinic/queue/call-next', {
         token: tokens.reception,
         body: { sessionId },
       });
       expect(response.status).toBe(409);
-      expect(errorCode(response.body)).toBe('queue_empty');
+      expect(errorCode(response.body)).toBe(
+        'queue_current_patient_still_in_service',
+      );
+      const after = await board();
+      expect(after.revision).toBe(before.revision);
+      expect(
+        after.entries?.find((entry) => entry.id === current.id)?.status,
+      ).toBe('in_service');
+      expect(after.entries?.find((entry) => entry.id === next.id)?.status).toBe(
+        'waiting',
+      );
+      const eventsAfter = await db.database.query<{ count: string }>(
+        `select count(*)::text as count from clinic.queue_events
+          where session_id = $1`,
+        [sessionId],
+      );
+      expect(eventsAfter.rows[0].count).toBe(eventsBefore.rows[0].count);
+    });
+
+    it('marks an expired called appointment no-show before calling next', async () => {
+      const appointmentId = await bookedAppointment();
+      const calledEntry = data<Entry>(
+        (
+          await call('POST', `/clinic/appointments/${appointmentId}/check-in`, {
+            token: tokens.reception,
+          })
+        ).body,
+      );
+      const next = data<Entry>((await walkIn(siblingId)).body);
+      await call('POST', `/clinic/queue/${calledEntry.id}/call`, {
+        token: tokens.reception,
+      });
+      await db.database.query(
+        `update clinic.queue_entries
+            set grace_expires_at = now() - interval '1 minute'
+          where id = $1`,
+        [calledEntry.id],
+      );
+
+      const response = await call('POST', '/clinic/queue/call-next', {
+        token: tokens.reception,
+        body: { sessionId },
+      });
+      expect(data<Entry>(response.body).id).toBe(next.id);
+      const appointment = await call(
+        'GET',
+        `/clinic/appointments/${appointmentId}`,
+        { token: tokens.reception },
+      );
+      expect(data<{ status: string }>(appointment.body).status).toBe('no_show');
+    });
+
+    it('completes, resolves an expired call, and calls next in one workflow', async () => {
+      const currentAppointmentId = await bookedAppointment();
+      const expiredAppointmentId = await bookedAppointment(siblingId);
+      const current = data<Entry>(
+        (
+          await call(
+            'POST',
+            `/clinic/appointments/${currentAppointmentId}/check-in`,
+            { token: tokens.reception },
+          )
+        ).body,
+      );
+      const expired = data<Entry>(
+        (
+          await call(
+            'POST',
+            `/clinic/appointments/${expiredAppointmentId}/check-in`,
+            { token: tokens.reception },
+          )
+        ).body,
+      );
+      const thirdChild = await anotherLinkedChild('Salma');
+      const waiting = data<Entry>((await walkIn(thirdChild)).body);
+      await call('POST', `/clinic/queue/${current.id}/call`, {
+        token: tokens.reception,
+      });
+      await call('POST', `/clinic/queue/${current.id}/start`, {
+        token: tokens.doctor,
+      });
+      await call('POST', `/clinic/queue/${expired.id}/call`, {
+        token: tokens.reception,
+      });
+      await db.database.query(
+        `update clinic.queue_entries
+            set grace_expires_at = now() - interval '1 minute'
+          where id = $1`,
+        [expired.id],
+      );
+
+      const response = await call(
+        'POST',
+        '/clinic/queue/complete-and-call-next',
+        { token: tokens.doctor, body: { sessionId } },
+      );
+      expect(response.status).toBe(200);
+      expect(data<Entry>(response.body).id).toBe(waiting.id);
+      const currentAppointment = await call(
+        'GET',
+        `/clinic/appointments/${currentAppointmentId}`,
+        { token: tokens.reception },
+      );
+      const expiredAppointment = await call(
+        'GET',
+        `/clinic/appointments/${expiredAppointmentId}`,
+        { token: tokens.reception },
+      );
+      expect(data<{ status: string }>(currentAppointment.body).status).toBe(
+        'completed',
+      );
+      expect(data<{ status: string }>(expiredAppointment.body).status).toBe(
+        'no_show',
+      );
+      const events = await db.database.query<{
+        entry_id: string;
+        event_type: string;
+      }>(
+        `select entry_id, event_type from clinic.queue_events
+          where entry_id = any($1) and event_type in ('completed', 'missed', 'called')`,
+        [[current.id, expired.id, waiting.id]],
+      );
+      expect(events.rows).toEqual(
+        expect.arrayContaining([
+          { entry_id: current.id, event_type: 'completed' },
+          { entry_id: expired.id, event_type: 'missed' },
+          { entry_id: waiting.id, event_type: 'called' },
+        ]),
+      );
+    });
+
+    it('rolls completion back while another called patient still has grace', async () => {
+      const appointmentId = await bookedAppointment();
+      const current = data<Entry>(
+        (
+          await call('POST', `/clinic/appointments/${appointmentId}/check-in`, {
+            token: tokens.reception,
+          })
+        ).body,
+      );
+      const called = data<Entry>((await walkIn(siblingId)).body);
+      const thirdChild = await anotherLinkedChild();
+      const waiting = data<Entry>((await walkIn(thirdChild)).body);
+      await call('POST', `/clinic/queue/${current.id}/call`, {
+        token: tokens.reception,
+      });
+      await call('POST', `/clinic/queue/${current.id}/start`, {
+        token: tokens.doctor,
+      });
+      await call('POST', `/clinic/queue/${called.id}/call`, {
+        token: tokens.reception,
+      });
+      const before = await board();
+
+      const response = await call(
+        'POST',
+        '/clinic/queue/complete-and-call-next',
+        { token: tokens.doctor, body: { sessionId } },
+      );
+      expect(response.status).toBe(409);
+      expect(errorCode(response.body)).toBe('queue_grace_not_expired');
+      const after = await board();
+      expect(after.revision).toBe(before.revision);
+      expect(
+        after.entries?.find((entry) => entry.id === current.id)?.status,
+      ).toBe('in_service');
+      expect(
+        after.entries?.find((entry) => entry.id === called.id)?.status,
+      ).toBe('called');
+      expect(
+        after.entries?.find((entry) => entry.id === waiting.id)?.status,
+      ).toBe('waiting');
     });
   });
 
@@ -787,9 +1085,13 @@ const configured =
         token: tokens.reception,
       });
 
-      const response = await call('POST', `/clinic/sessions/${sessionId}/open`, {
-        token: tokens.reception,
-      });
+      const response = await call(
+        'POST',
+        `/clinic/sessions/${sessionId}/open`,
+        {
+          token: tokens.reception,
+        },
+      );
       expect(response.status).toBe(409);
       expect(errorCode(response.body)).toBe('session_closed');
     });
@@ -822,17 +1124,26 @@ const configured =
     });
 
     it('takes a new pace and refuses an impossible one', async () => {
-      const updated = await call('PATCH', `/clinic/sessions/${sessionId}/pace`, {
-        token: tokens.doctor,
-        body: { avgConsultMinutes: 12 },
-      });
-      expect(data<{ avgConsultMinutes: number }>(updated.body).avgConsultMinutes)
-        .toBe(12);
+      const updated = await call(
+        'PATCH',
+        `/clinic/sessions/${sessionId}/pace`,
+        {
+          token: tokens.doctor,
+          body: { avgConsultMinutes: 12 },
+        },
+      );
+      expect(
+        data<{ avgConsultMinutes: number }>(updated.body).avgConsultMinutes,
+      ).toBe(12);
 
-      const refused = await call('PATCH', `/clinic/sessions/${sessionId}/pace`, {
-        token: tokens.doctor,
-        body: { avgConsultMinutes: 0 },
-      });
+      const refused = await call(
+        'PATCH',
+        `/clinic/sessions/${sessionId}/pace`,
+        {
+          token: tokens.doctor,
+          body: { avgConsultMinutes: 0 },
+        },
+      );
       expect(refused.status).toBe(400);
     });
 
@@ -863,9 +1174,13 @@ const configured =
     });
 
     it('is not the parent’s to operate', async () => {
-      const response = await call('POST', `/clinic/sessions/${sessionId}/pause`, {
-        token: tokens.parent,
-      });
+      const response = await call(
+        'POST',
+        `/clinic/sessions/${sessionId}/pause`,
+        {
+          token: tokens.parent,
+        },
+      );
       expect(response.status).toBe(403);
     });
   });
@@ -948,11 +1263,9 @@ const configured =
       const appointmentId = await bookedAppointment();
       const entry = data<Entry>(
         (
-          await call(
-            'POST',
-            `/clinic/appointments/${appointmentId}/check-in`,
-            { token: tokens.reception },
-          )
+          await call('POST', `/clinic/appointments/${appointmentId}/check-in`, {
+            token: tokens.reception,
+          })
         ).body,
       );
 
@@ -972,9 +1285,9 @@ const configured =
       expect(row.rows[0].status).toBe('cancelled');
 
       const day = await board();
-      expect(
-        day.entries?.filter((e) => e.status !== 'cancelled'),
-      ).toHaveLength(0);
+      expect(day.entries?.filter((e) => e.status !== 'cancelled')).toHaveLength(
+        0,
+      );
     });
   });
 
@@ -1186,9 +1499,9 @@ const configured =
       await doctorArrived();
 
       // Three ahead at six minutes each: a range, never a countdown.
-      expect((await mine()).items?.[0].queueEntry?.estimatedWaitMinutes).toEqual(
-        { from: 20, to: 30 },
-      );
+      expect(
+        (await mine()).items?.[0].queueEntry?.estimatedWaitMinutes,
+      ).toEqual({ from: 20, to: 30 });
     });
 
     it('lists both children when a family has two in the clinic', async () => {
@@ -1355,6 +1668,7 @@ const configured =
       for (const path of [
         '/clinic/queue/walk-in',
         '/clinic/queue/call-next',
+        '/clinic/queue/complete-and-call-next',
         `/clinic/queue/${entry.id}/call`,
         `/clinic/queue/${entry.id}/start`,
         `/clinic/queue/${entry.id}/miss`,

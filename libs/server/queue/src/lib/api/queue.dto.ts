@@ -38,11 +38,6 @@ export class WalkInDto {
   visitReason?: string;
 }
 
-export class CallNextDto {
-  @IsUUID()
-  sessionId!: string;
-}
-
 export class MissDto {
   /** Skip before the grace deadline. Requires a reason. */
   @IsOptional()
@@ -85,8 +80,8 @@ export class EmergencyDto {
 /**
  * Where to put a patient: between two neighbours, or at one end.
  *
- * Both ids are optional, but at least one has to be present or the move has no
- * target. The service treats "neither" as a move to the tail.
+ * Both ids are optional at the transport boundary, but the domain requires at
+ * least one and verifies the supplied neighbours inside the transaction.
  */
 export class MoveEntryDto {
   @IsOptional()

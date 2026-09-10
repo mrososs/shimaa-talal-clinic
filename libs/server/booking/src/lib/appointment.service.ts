@@ -76,6 +76,7 @@ const TRANSITIONS: Record<AppointmentStatus, readonly AppointmentStatus[]> = {
   [AppointmentStatus.CheckedIn]: [
     AppointmentStatus.Completed,
     AppointmentStatus.Cancelled,
+    AppointmentStatus.NoShow,
   ],
   [AppointmentStatus.Completed]: [],
   [AppointmentStatus.Cancelled]: [],
@@ -303,14 +304,7 @@ export class AppointmentService {
     }
 
     const updated = toAppointment(row);
-    await this.recordEvent(
-      updated.id,
-      to,
-      current.status,
-      to,
-      actor,
-      db,
-    );
+    await this.recordEvent(updated.id, to, current.status, to, actor, db);
     return updated;
   }
 
@@ -447,6 +441,26 @@ export class AppointmentService {
              where clinic_id = $1 and session_date = $2::date)
         order by a.window_start, a.created_at`,
       [clinicId, date],
+    );
+    return result.rows.map(toAppointment);
+  }
+
+  /** A bounded staff calendar range, ordered exactly as the calendar renders. */
+  async listForRange(
+    clinicId: string,
+    from: string,
+    to: string,
+    db: SqlExecutor = this.database,
+  ): Promise<Appointment[]> {
+    const result = await db.query<AppointmentRow>(
+      `select ${COLUMNS} from clinic.appointments a
+        where a.clinic_id = $1
+          and a.session_id in (
+            select id from clinic.clinic_sessions
+             where clinic_id = $1
+               and session_date between $2::date and $3::date)
+        order by a.window_start, a.created_at`,
+      [clinicId, from, to],
     );
     return result.rows.map(toAppointment);
   }
@@ -597,7 +611,19 @@ export class AppointmentService {
          and mod(
                extract(epoch from ($3::timestamptz - s.planned_start))::bigint,
                s.window_minutes * 60
-             ) = 0`,
+             ) = 0
+         and not exists (
+           select 1
+             from clinic.clinic_closures closure
+            where closure.clinic_id = s.clinic_id
+              and (closure.doctor_member_id is null
+                   or closure.doctor_member_id = s.doctor_member_id)
+              and closure.starts_at < least(
+                    $3::timestamptz + make_interval(mins => s.window_minutes),
+                    s.planned_end
+                  )
+              and closure.ends_at > $3::timestamptz
+         )`,
       [sessionId, clinicId, windowStart],
     );
 

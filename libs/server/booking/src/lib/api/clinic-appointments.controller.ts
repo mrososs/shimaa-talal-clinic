@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Inject,
   Param,
   ParseUUIDPipe,
   Post,
@@ -11,8 +12,10 @@ import {
   UseFilters,
 } from '@nestjs/common';
 import {
+  CHILD_ACCESS_CHECKER,
   CurrentMember,
   Roles,
+  type ChildAccessChecker,
   type ClinicMemberContext,
 } from '@clinic/server-core';
 import { ClinicService } from '@clinic/server-clinic';
@@ -28,7 +31,6 @@ import { AvailabilityService } from '../availability.service';
 import { BookingError, BookingErrorCode } from '../booking.errors';
 import {
   CancelAppointmentDto,
-  ClinicDayQueryDto,
   CreateClinicAppointmentDto,
   RescheduleAppointmentDto,
   StaffAvailabilityQueryDto,
@@ -55,6 +57,8 @@ export class ClinicAppointmentsController {
     private readonly appointments: AppointmentService,
     private readonly availability: AvailabilityService,
     private readonly clinics: ClinicService,
+    @Inject(CHILD_ACCESS_CHECKER)
+    private readonly childAccess: ChildAccessChecker,
   ) {}
 
   /**
@@ -76,17 +80,6 @@ export class ClinicAppointmentsController {
     });
   }
 
-  /** The day list. Defaults to the clinic's today, not the browser's. */
-  @Roles(UserRole.Reception, UserRole.Admin, UserRole.Doctor)
-  @Get('appointments')
-  async listDay(
-    @CurrentMember() member: ClinicMemberContext,
-    @Query() query: ClinicDayQueryDto,
-  ): Promise<Appointment[]> {
-    const clinic = await this.requireClinic(member.clinicId);
-    return this.appointments.listForDay(clinic.id, query.date ?? clinic.today);
-  }
-
   @Roles(UserRole.Reception, UserRole.Admin, UserRole.Doctor)
   @Get('appointments/:appointmentId')
   async detail(
@@ -105,10 +98,21 @@ export class ClinicAppointmentsController {
    */
   @Roles(UserRole.Reception, UserRole.Admin, UserRole.Doctor)
   @Post('appointments')
-  create(
+  async create(
     @CurrentMember() member: ClinicMemberContext,
     @Body() body: CreateClinicAppointmentDto,
   ): Promise<Appointment> {
+    const accessible = await this.childAccess.canGuardianAccessChild(
+      member.clinicId,
+      body.guardianId,
+      body.childId,
+    );
+    if (!accessible) {
+      throw new BookingError(
+        BookingErrorCode.ChildNotAccessible,
+        'That guardian cannot book for this child at this clinic.',
+      );
+    }
     return this.appointments.create({
       clinicId: member.clinicId,
       sessionId: body.sessionId,

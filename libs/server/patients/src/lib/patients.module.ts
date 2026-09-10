@@ -17,6 +17,8 @@ import {
 import { MeController } from './api/me.controller';
 import { PatientsChildAccessChecker } from './patients-child-access';
 import { PatientsGuardianResolver } from './patients-guardian.resolver';
+import { PatientFileService } from './patient-file.service';
+import { ClinicPatientFilesController } from './api/clinic-patient-files.controller';
 
 /**
  * Patients domain boundary.
@@ -47,6 +49,7 @@ import { PatientsGuardianResolver } from './patients-guardian.resolver';
     MeController,
     ClinicGuardiansController,
     ClinicChildrenController,
+    ClinicPatientFilesController,
   ],
   providers: [
     GuardianService,
@@ -54,6 +57,7 @@ import { PatientsGuardianResolver } from './patients-guardian.resolver';
     PatientDirectoryService,
     GuardianOwnershipService,
     ClaimCodeService,
+    PatientFileService,
     PatientsGuardianResolver,
     { provide: GUARDIAN_RESOLVER, useExisting: PatientsGuardianResolver },
     // Booking asks whether a child is this family's before it holds a seat.
@@ -66,6 +70,7 @@ import { PatientsGuardianResolver } from './patients-guardian.resolver';
     PatientDirectoryService,
     GuardianOwnershipService,
     ClaimCodeService,
+    PatientFileService,
     GUARDIAN_RESOLVER,
     CHILD_ACCESS_CHECKER,
     // Exported as a class as well as behind its token, so the composition root

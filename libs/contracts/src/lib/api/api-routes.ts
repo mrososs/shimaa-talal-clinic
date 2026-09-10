@@ -34,6 +34,10 @@ export const ApiResource = {
   Clinic: 'clinic',
   Guardians: 'guardians',
   Sessions: 'sessions',
+  Messages: 'messages',
+  UrgentCases: 'urgent-cases',
+  Payments: 'payments',
+  Reports: 'reports',
   Availability: 'availability',
 } as const;
 
@@ -76,6 +80,7 @@ export const ApiCommand = {
   Claim: 'claim',
   ClaimRequest: 'claim-request',
   ClaimCode: 'claim-code',
+  Refund: 'refund',
 } as const;
 
 export type ApiCommand = (typeof ApiCommand)[keyof typeof ApiCommand];

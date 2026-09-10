@@ -58,7 +58,8 @@ const configured =
    */
   const createdGuardianIds: string[] = [];
 
-  const tokens: Record<'parent' | 'reception' | 'foreign', string> = {} as never;
+  const tokens: Record<'parent' | 'reception' | 'foreign', string> =
+    {} as never;
 
   async function account(label: string): Promise<string> {
     const email = `${tag}-${label}@example.test`;
@@ -164,6 +165,53 @@ const configured =
       },
     });
 
+  /** Remove only sessions owned by members this suite created. */
+  async function clearTestSessions(): Promise<void> {
+    const doctors = [doctorMemberId, otherDoctorMemberId];
+    await db.database.query(
+      `delete from clinic.queue_events
+        where entry_id in (
+          select qe.id from clinic.queue_entries qe
+          join clinic.clinic_sessions s on s.id = qe.session_id
+          where s.doctor_member_id = any($1))`,
+      [doctors],
+    );
+    await db.database.query(
+      `delete from clinic.queue_entries
+        where session_id in (
+          select id from clinic.clinic_sessions
+          where doctor_member_id = any($1))`,
+      [doctors],
+    );
+    await db.database.query(
+      `delete from clinic.appointment_events
+        where appointment_id in (
+          select a.id from clinic.appointments a
+          join clinic.clinic_sessions s on s.id = a.session_id
+          where s.doctor_member_id = any($1))`,
+      [doctors],
+    );
+    await db.database.query(
+      `update clinic.appointments
+          set rescheduled_from_appointment_id = null
+        where session_id in (
+          select id from clinic.clinic_sessions
+          where doctor_member_id = any($1))`,
+      [doctors],
+    );
+    await db.database.query(
+      `delete from clinic.appointments
+        where session_id in (
+          select id from clinic.clinic_sessions
+          where doctor_member_id = any($1))`,
+      [doctors],
+    );
+    await db.database.query(
+      `delete from clinic.clinic_sessions where doctor_member_id = any($1)`,
+      [doctors],
+    );
+  }
+
   beforeAll(async () => {
     db = createTestDatabase(url as string);
     admin = createClient(supabaseUrl as string, secretKey as string, {
@@ -246,33 +294,14 @@ const configured =
   }, 120_000);
 
   afterEach(async () => {
-    const clinics = [clinicId, otherClinicId];
-    await db.database.query(
-      `delete from clinic.appointment_events
-        where appointment_id in (
-          select id from clinic.appointments where clinic_id = any($1))`,
-      [clinics],
-    );
-    await db.database.query(
-      `update clinic.appointments set rescheduled_from_appointment_id = null
-        where clinic_id = any($1)`,
-      [clinics],
-    );
-    await db.database.query(
-      `delete from clinic.appointments where clinic_id = any($1)`,
-      [clinics],
-    );
-    await db.database.query(
-      `delete from clinic.clinic_sessions where clinic_id = any($1)`,
-      [clinics],
-    );
+    await clearTestSessions();
   });
 
   afterAll(async () => {
     if (app !== undefined) await app.close();
     if (db !== undefined) {
-      const clinics = [clinicId, otherClinicId];
       const throwaway = [...createdGuardianIds, guardianId];
+      await clearTestSessions();
       await db.database.query(
         `delete from clinic.appointment_events
           where appointment_id in (
@@ -296,16 +325,13 @@ const configured =
         `delete from clinic.children where id = any($1)`,
         [[childId, foreignChildId]],
       );
-      await db.database.query(`delete from clinic.guardians where id = any($1)`, [
-        throwaway,
-      ]);
+      await db.database.query(
+        `delete from clinic.guardians where id = any($1)`,
+        [throwaway],
+      );
       await db.database.query(
         `delete from clinic.clinic_members where auth_user_id = any($1)`,
         [createdUserIds],
-      );
-      await db.database.query(
-        `delete from clinic.clinic_sessions where clinic_id = any($1)`,
-        [clinics],
       );
       await db.database.query(`delete from clinic.clinics where id = $1`, [
         otherClinicId,
@@ -329,7 +355,9 @@ const configured =
       const days = data<Day[]>(response.body);
       const windows = days.flatMap((day) => day.windows);
       expect(windows.length).toBeGreaterThan(0);
-      expect(windows[0]).toMatchObject({
+      expect(
+        windows.find((window) => window.sessionId === session.id),
+      ).toMatchObject({
         sessionId: session.id,
         capacity: 5,
         remaining: 5,
@@ -436,13 +464,34 @@ const configured =
     it('reports a full window as a conflict a screen can act on', async () => {
       const session = await makeSession(clinicId, doctorMemberId, 1);
 
+      const family = await db.database.query<{
+        guardian_id: string;
+        child_id: string;
+      }>(
+        `with guardian as (
+           insert into clinic.guardians (clinic_id, full_name, phone_e164)
+           values ($1, 'Capacity Family', $2) returning id
+         ), child as (
+           insert into clinic.children (clinic_id, full_name)
+           values ($1, 'Capacity Child') returning id
+         ), linked as (
+           insert into clinic.guardian_children
+             (guardian_id, child_id, relationship)
+           select guardian.id, child.id, 'mother' from guardian, child
+         )
+         select guardian.id as guardian_id, child.id as child_id
+           from guardian, child`,
+        [clinicId, `+2012${String(Date.now()).slice(-7)}`],
+      );
+      createdGuardianIds.push(family.rows[0].guardian_id);
+
       // Asserted, not assumed: if the setup booking silently failed, the real
       // assertion below would pass for the wrong reason.
       const taken = await call('POST', '/clinic/appointments', {
         token: tokens.reception,
         body: {
-          childId: foreignChildId,
-          guardianId,
+          childId: family.rows[0].child_id,
+          guardianId: family.rows[0].guardian_id,
           sessionId: session.id,
           windowStart: session.windowStart,
           visitType: 'new_visit',
@@ -489,6 +538,23 @@ const configured =
       ).toBe(receptionMemberId);
     });
 
+    it('cannot pair a guardian with a child they cannot access', async () => {
+      const session = await makeSession(clinicId, doctorMemberId);
+      const response = await call('POST', '/clinic/appointments', {
+        token: tokens.reception,
+        body: {
+          childId: foreignChildId,
+          guardianId,
+          sessionId: session.id,
+          windowStart: session.windowStart,
+          visitType: 'new_visit',
+        },
+      });
+
+      expect(response.status).toBe(404);
+      expect(errorCode(response.body)).toBe('child_not_accessible');
+    });
+
     it('works for a family with no app account at all', async () => {
       // The load-bearing requirement: mobile adoption is never required for the
       // clinic to operate.
@@ -524,7 +590,38 @@ const configured =
 
       expect(response.status).toBe(201);
       expect(data<{ status: string }>(response.body).status).toBe('confirmed');
+    });
 
+    it('lists the child and guardian identity staff need to approve a request', async () => {
+      const session = await makeSession(clinicId, doctorMemberId);
+      const booked = await bookAs(tokens.parent, session);
+      const appointmentId = data<{ id: string }>(booked.body).id;
+      const day = await db.database.query<{ session_date: string }>(
+        `select session_date::text as session_date
+           from clinic.clinic_sessions where id = $1`,
+        [session.id],
+      );
+
+      const response = await call(
+        'GET',
+        `/clinic/appointments?date=${day.rows[0].session_date}`,
+        { token: tokens.reception },
+      );
+
+      expect(response.status).toBe(200);
+      const appointment = data<
+        Array<{
+          id: string;
+          child: { id: string; fullName: string };
+          guardian: { id: string; fullName: string };
+          isLate: boolean;
+        }>
+      >(response.body).find((item) => item.id === appointmentId);
+      expect(appointment).toMatchObject({
+        child: { id: childId, fullName: 'Leen' },
+        guardian: { id: guardianId, fullName: 'Booking Parent' },
+        isLate: expect.any(Boolean),
+      });
     });
 
     it('approves a request, and the parent sees it confirmed', async () => {

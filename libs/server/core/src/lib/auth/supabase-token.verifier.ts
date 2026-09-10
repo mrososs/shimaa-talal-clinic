@@ -29,6 +29,9 @@ export class SupabaseTokenVerifier implements TokenVerifier {
     return {
       id: data.user.id,
       email: data.user.email ?? null,
+      // Supabase currently serializes a missing phone as an empty string for
+      // email identities. Keep the domain shape honest: absent means null.
+      phone: data.user.phone?.trim() || null,
       roles: [],
     };
   }

@@ -19,6 +19,13 @@ export interface QueueActor {
   reason?: string | null;
 }
 
+/** Queue-only result consumed by cross-domain workflows. */
+export interface QueueAdvanceResult {
+  completed: QueueEntry | null;
+  missed: QueueEntry | null;
+  called: QueueEntry | null;
+}
+
 /**
  * Everything that moves a patient through the queue.
  *
@@ -35,8 +42,9 @@ export interface QueueActor {
  *      double-clicking is not a failure, and a stale dashboard should heal
  *      rather than complain.
  *
- * Every command writes exactly one `queue_events` row and bumps the session's
- * revision, both inside the same transaction as the change.
+ * Every actual transition writes one `queue_events` row. A compound command
+ * may write several events but bumps the session revision only once, inside
+ * the same transaction as every change.
  */
 @Injectable()
 export class QueueCommandService {
@@ -97,46 +105,69 @@ export class QueueCommandService {
     });
   }
 
-  /**
-   * "Next please."
-   *
-   * One gesture, so one transaction: whoever is in service is completed, and
-   * the next patient is called. Splitting it would leave a window where nobody
-   * is being served and a second receptionist could call somebody else.
-   */
+  /** Call the next patient without implicitly ending an active consultation. */
   async callNext(
     clinicId: string,
     sessionId: string,
     actor: QueueActor,
     db?: SqlExecutor,
-  ): Promise<QueueEntry> {
+  ): Promise<QueueAdvanceResult> {
     return this.inTransaction(db, async (tx) => {
-      await this.requireRunningSession(clinicId, sessionId, tx);
-
-      // Anyone still called has not come. Calling the next name over them is
-      // exactly what "missed" means.
-      await tx.query(
-        `update clinic.queue_entries
-            set status = 'missed'
-          where session_id = $1 and status = 'called'`,
-        [sessionId],
+      const session = await this.requireRunningSession(clinicId, sessionId, tx);
+      const inService = await this.entries.findByStatus(
+        sessionId,
+        QueueStatus.InService,
+        tx,
       );
-      await tx.query(
-        `update clinic.queue_entries
-            set status = 'done', completed_at = now()
-          where session_id = $1 and status = 'in_service'`,
-        [sessionId],
-      );
-
-      const next = await this.entries.nextWaiting(sessionId, tx);
-      if (next === null) {
+      if (inService !== null) {
         throw new QueueError(
-          QueueErrorCode.QueueEmpty,
-          'There is nobody waiting.',
+          QueueErrorCode.CurrentPatientStillInService,
+          'The current consultation must be completed first.',
         );
       }
 
-      return this.callEntry(clinicId, next.id, actor, tx);
+      return this.advanceAfterCompletion(clinicId, session.id, null, actor, tx);
+    });
+  }
+
+  /** Complete the current patient, then call the next one as one queue command. */
+  async completeAndCallNext(
+    clinicId: string,
+    sessionId: string,
+    actor: QueueActor,
+    db?: SqlExecutor,
+  ): Promise<QueueAdvanceResult> {
+    return this.inTransaction(db, async (tx) => {
+      const session = await this.requireRunningSession(clinicId, sessionId, tx);
+      const inService = await this.entries.findByStatus(
+        sessionId,
+        QueueStatus.InService,
+        tx,
+      );
+      const completed =
+        inService === null
+          ? null
+          : await this.applyTransition(
+              clinicId,
+              inService.id,
+              {
+                to: QueueStatus.Done,
+                from: [QueueStatus.InService],
+                assignment: `set status = 'done', completed_at = now()`,
+                event: 'completed',
+              },
+              actor,
+              tx,
+              false,
+            );
+
+      return this.advanceAfterCompletion(
+        clinicId,
+        session.id,
+        completed,
+        actor,
+        tx,
+      );
     });
   }
 
@@ -184,7 +215,7 @@ export class QueueCommandService {
   ): Promise<QueueEntry> {
     return this.transition(clinicId, entryId, actor, db, {
       to: QueueStatus.Done,
-      from: [QueueStatus.InService, QueueStatus.Called],
+      from: [QueueStatus.InService],
       assignment: `set status = 'done', completed_at = now()`,
       event: 'completed',
     });
@@ -206,7 +237,7 @@ export class QueueCommandService {
   ): Promise<QueueEntry> {
     return this.inTransaction(db, async (tx) => {
       const entry = await this.requireEntry(clinicId, entryId, tx);
-      await this.sessions.lockForUpdate(clinicId, entry.sessionId, tx);
+      await this.requireRunningSession(clinicId, entry.sessionId, tx);
 
       const lapsed =
         entry.graceExpiresAt !== null &&
@@ -336,11 +367,18 @@ export class QueueCommandService {
   ): Promise<QueueEntry> {
     return this.inTransaction(db, async (tx) => {
       const entry = await this.requireEntry(clinicId, entryId, tx);
-      const session = await this.sessions.lockForUpdate(
+      const session = await this.requireRunningSession(
         clinicId,
         entry.sessionId,
         tx,
       );
+
+      if (entry.status !== QueueStatus.Waiting) {
+        throw new QueueError(
+          QueueErrorCode.InvalidTransition,
+          'Only a waiting patient can change emergency priority.',
+        );
+      }
 
       const reason = (actor.reason ?? '').trim();
       if (emergency && reason === '') {
@@ -395,7 +433,7 @@ export class QueueCommandService {
   ): Promise<QueueEntry> {
     return this.inTransaction(db, async (tx) => {
       const entry = await this.requireEntry(clinicId, entryId, tx);
-      const session = await this.sessions.lockForUpdate(
+      const session = await this.requireRunningSession(
         clinicId,
         entry.sessionId,
         tx,
@@ -403,6 +441,7 @@ export class QueueCommandService {
 
       const sortKey = await this.entries.midpointSortKey(
         entry.sessionId,
+        entry.id,
         target.beforeEntryId ?? null,
         target.afterEntryId ?? null,
         tx,
@@ -414,7 +453,14 @@ export class QueueCommandService {
       );
 
       const updated = await this.requireEntry(clinicId, entryId, tx);
-      await this.record(updated, 'moved', entry.status, updated.status, actor, tx);
+      await this.record(
+        updated,
+        'moved',
+        entry.status,
+        updated.status,
+        actor,
+        tx,
+      );
       await this.sessions.bumpRevision(session.id, tx);
       return updated;
     });
@@ -435,7 +481,7 @@ export class QueueCommandService {
   ): Promise<QueueEntry> {
     return this.inTransaction(db, async (tx) => {
       const entry = await this.requireEntry(clinicId, entryId, tx);
-      const session = await this.sessions.lockForUpdate(
+      const session = await this.requireRunningSession(
         clinicId,
         entry.sessionId,
         tx,
@@ -510,17 +556,18 @@ export class QueueCommandService {
     entryId: string,
     actor: QueueActor,
     tx: SqlExecutor,
+    bumpRevision = true,
   ): Promise<QueueEntry> {
     const policy = await this.clinics.findPolicy(clinicId, tx);
     const graceMinutes = policy?.gracePeriodMinutes ?? 10;
 
     return this.applyTransition(
-        clinicId,
-        entryId,
-        {
-          to: QueueStatus.Called,
-          from: [QueueStatus.Waiting],
-          assignment: `set status = 'called',
+      clinicId,
+      entryId,
+      {
+        to: QueueStatus.Called,
+        from: [QueueStatus.Waiting],
+        assignment: `set status = 'called',
                            called_at = now(),
                            grace_expires_at =
                              now() + make_interval(mins => ${graceMinutes})`,
@@ -528,7 +575,62 @@ export class QueueCommandService {
       },
       actor,
       tx,
+      bumpRevision,
     );
+  }
+
+  /** Resolve an expired call, then call the next waiting entry. */
+  private async advanceAfterCompletion(
+    clinicId: string,
+    sessionId: string,
+    completed: QueueEntry | null,
+    actor: QueueActor,
+    tx: SqlExecutor,
+  ): Promise<QueueAdvanceResult> {
+    const previouslyCalled = await this.entries.findByStatus(
+      sessionId,
+      QueueStatus.Called,
+      tx,
+    );
+    let missed: QueueEntry | null = null;
+
+    if (previouslyCalled !== null) {
+      const lapsed =
+        previouslyCalled.graceExpiresAt !== null &&
+        Date.parse(previouslyCalled.graceExpiresAt) <= Date.now();
+      if (!lapsed) {
+        throw new QueueError(
+          QueueErrorCode.GraceNotExpired,
+          'The called patient still has time to arrive.',
+          undefined,
+          { graceExpiresAt: previouslyCalled.graceExpiresAt },
+        );
+      }
+      missed = await this.applyTransition(
+        clinicId,
+        previouslyCalled.id,
+        {
+          to: QueueStatus.Missed,
+          from: [QueueStatus.Called],
+          assignment: `set status = 'missed', grace_expires_at = null`,
+          event: 'missed',
+        },
+        actor,
+        tx,
+        false,
+      );
+    }
+
+    const next = await this.entries.nextWaiting(sessionId, tx);
+    const called =
+      next === null
+        ? null
+        : await this.callEntry(clinicId, next.id, actor, tx, false);
+
+    if (completed !== null || missed !== null || called !== null) {
+      await this.sessions.bumpRevision(sessionId, tx);
+    }
+    return { completed, missed, called };
   }
 
   private async transition(
@@ -540,7 +642,7 @@ export class QueueCommandService {
   ): Promise<QueueEntry> {
     return this.inTransaction(db, async (tx) => {
       const entry = await this.requireEntry(clinicId, entryId, tx);
-      await this.sessions.lockForUpdate(clinicId, entry.sessionId, tx);
+      await this.requireRunningSession(clinicId, entry.sessionId, tx);
       return this.applyTransition(clinicId, entryId, spec, actor, tx);
     });
   }
@@ -559,6 +661,7 @@ export class QueueCommandService {
     spec: TransitionSpec,
     actor: QueueActor,
     tx: SqlExecutor,
+    bumpRevision = true,
   ): Promise<QueueEntry> {
     const before = await this.requireEntry(clinicId, entryId, tx);
 
@@ -606,7 +709,9 @@ export class QueueCommandService {
 
     const updated = await this.requireEntry(clinicId, entryId, tx);
     await this.record(updated, spec.event, before.status, spec.to, actor, tx);
-    await this.sessions.bumpRevision(updated.sessionId, tx);
+    if (bumpRevision) {
+      await this.sessions.bumpRevision(updated.sessionId, tx);
+    }
     return updated;
   }
 

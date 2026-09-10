@@ -14,10 +14,16 @@ export const PatientsErrorCode = {
   GuardianNotFound: 'guardian_not_found',
   /** The phone could not be read as a number in the clinic's region. */
   InvalidPhone: 'invalid_phone',
+  /** A phone-auth account attempted to act on a different number. */
+  VerifiedPhoneMismatch: 'verified_phone_mismatch',
 
   ChildNotFound: 'child_not_found',
   /** Another guardian is already the primary caregiver for this child. */
   PrimaryGuardianTaken: 'primary_guardian_taken',
+
+  PatientFileNotFound: 'patient_file_not_found',
+  InvalidPatientFile: 'invalid_patient_file',
+  PatientFileStorageFailed: 'patient_file_storage_failed',
 
   /** The guardian is already linked to an account. */
   GuardianAlreadyClaimed: 'guardian_already_claimed',

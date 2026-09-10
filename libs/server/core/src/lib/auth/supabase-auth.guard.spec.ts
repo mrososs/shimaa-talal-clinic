@@ -15,6 +15,7 @@ import type { TokenVerifier } from './token-verifier';
 const USER: AuthenticatedUser = {
   id: 'auth-user-1',
   email: 'parent@example.test',
+  phone: null,
   roles: [],
 };
 

@@ -7,6 +7,8 @@ import { ClinicMemberService } from './clinic-member.service';
 import { ClinicScheduleService } from './clinic-schedule.service';
 import { ClinicSessionService } from './clinic-session.service';
 import { ClinicService } from './clinic.service';
+import { ClinicSettingsService } from './clinic-settings.service';
+import { ClinicSettingsController } from './api/clinic-settings.controller';
 
 /**
  * Clinic boundary — tenancy, staff and (later) the operational day.
@@ -31,12 +33,17 @@ import { ClinicService } from './clinic.service';
  */
 @Module({
   imports: [ServerCoreModule],
-  controllers: [ClinicMeController, ClinicSessionsController],
+  controllers: [
+    ClinicMeController,
+    ClinicSessionsController,
+    ClinicSettingsController,
+  ],
   providers: [
     ClinicService,
     ClinicMemberService,
     ClinicScheduleService,
     ClinicSessionService,
+    ClinicSettingsService,
     ClinicMemberResolverImpl,
     { provide: CLINIC_MEMBER_RESOLVER, useExisting: ClinicMemberResolverImpl },
   ],
@@ -45,6 +52,7 @@ import { ClinicService } from './clinic.service';
     ClinicMemberService,
     ClinicScheduleService,
     ClinicSessionService,
+    ClinicSettingsService,
     CLINIC_MEMBER_RESOLVER,
   ],
 })

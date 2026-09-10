@@ -2,6 +2,7 @@ module.exports = {
   displayName: 'server-clinic',
   preset: '../../../jest.preset.js',
   testEnvironment: 'node',
+  maxWorkers: 1,
   transform: {
     '^.+\\.[tj]s$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
   },

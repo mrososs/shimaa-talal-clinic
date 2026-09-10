@@ -13,12 +13,14 @@ import type { AuthenticatedUser } from './authenticated-user';
 const USER: AuthenticatedUser = {
   id: 'auth-user-1',
   email: 'parent@example.test',
+  phone: null,
   roles: [],
 };
 
 const OTHER_USER: AuthenticatedUser = {
   id: 'auth-user-2',
   email: 'reception@example.test',
+  phone: null,
   roles: [],
 };
 

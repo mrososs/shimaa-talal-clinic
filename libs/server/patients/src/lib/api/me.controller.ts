@@ -27,7 +27,11 @@ import {
   type GuardianChild,
   type MeResponse,
 } from '@clinic/contracts';
-import { isPhoneRegion, type PhoneRegion } from '@clinic/phone';
+import {
+  isPhoneRegion,
+  normalizeToE164,
+  type PhoneRegion,
+} from '@clinic/phone';
 import { ChildService } from '../child.service';
 import { ClaimCodeService } from '../claim-code.service';
 import { GuardianOwnershipService } from '../guardian-ownership.service';
@@ -111,6 +115,7 @@ export class MeController {
     }
 
     const clinic = await this.deploymentClinic();
+    this.assertVerifiedPhone(user, body.phone, clinic);
 
     // One INSERT, not a create followed by a link: a guardian committed
     // without its account would be unreachable by the person who just
@@ -154,9 +159,11 @@ export class MeController {
   @Post('guardian/claim-request')
   @HttpCode(HttpStatus.OK)
   async claimRequest(
+    @CurrentUser() user: AuthenticatedUser,
     @Body() body: ClaimRequestDto,
   ): Promise<ClaimRequestResponse> {
     const clinic = await this.deploymentClinic();
+    this.assertVerifiedPhone(user, body.phone, clinic);
     const matchFound = await this.claims.hasUnclaimedGuardianForPhone(
       clinic.id,
       body.phone,
@@ -168,9 +175,9 @@ export class MeController {
   /**
    * Link this account to a family the clinic already knows.
    *
-   * A matching phone number grants nothing on its own — phone ownership is
-   * unverified in this MVP. The code, issued by reception, is what authorises
-   * the link.
+   * A matching phone number grants nothing on its own. Phone OTP proves control
+   * of the number, while the clinic-issued code separately authorises linking
+   * the existing medical family to this auth account.
    */
   @Post('guardian/claim')
   @HttpCode(HttpStatus.OK)
@@ -179,6 +186,7 @@ export class MeController {
     @Body() body: ClaimDto,
   ): Promise<Guardian> {
     const clinic = await this.deploymentClinic();
+    this.assertVerifiedPhone(user, body.phone, clinic);
     const target = await this.guardians.findByPhone(
       clinic.id,
       body.phone,
@@ -281,6 +289,29 @@ export class MeController {
       throw new Error(`Clinic ${clinicId} is missing or inactive.`);
     }
     return clinic;
+  }
+
+  /** Phone-auth sessions may only onboard or claim the number they proved. */
+  private assertVerifiedPhone(
+    user: AuthenticatedUser,
+    submittedPhone: string,
+    clinic: Clinic,
+  ): void {
+    if (user.phone === null) return;
+
+    const normalized = normalizeToE164(submittedPhone, regionOf(clinic));
+    if (normalized === null) {
+      throw new PatientsError(
+        PatientsErrorCode.InvalidPhone,
+        'The phone number is not valid for this clinic.',
+      );
+    }
+    if (normalized !== user.phone) {
+      throw new PatientsError(
+        PatientsErrorCode.VerifiedPhoneMismatch,
+        'Use the phone number verified by this auth session.',
+      );
+    }
   }
 }
 

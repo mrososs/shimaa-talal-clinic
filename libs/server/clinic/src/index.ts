@@ -13,3 +13,4 @@ export { ClinicMemberService } from './lib/clinic-member.service';
 export { ClinicScheduleService } from './lib/clinic-schedule.service';
 export { ClinicSessionService } from './lib/clinic-session.service';
 export { ClinicError, ClinicErrorCode } from './lib/clinic.errors';
+export { ClinicSettingsService } from './lib/clinic-settings.service';

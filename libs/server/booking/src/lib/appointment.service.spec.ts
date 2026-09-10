@@ -22,6 +22,10 @@ describeWithDatabase('appointments', (fx) => {
 
   afterEach(async () => {
     await fx.db.database.query(
+      `delete from clinic.clinic_closures where clinic_id = any($1)`,
+      [[fx.clinicId, fx.otherClinicId]],
+    );
+    await fx.db.database.query(
       `delete from clinic.appointment_events
         where appointment_id in (
           select id from clinic.appointments where clinic_id = any($1))`,
@@ -73,9 +77,7 @@ describeWithDatabase('appointments', (fx) => {
    * Deliberately `evening`: a doctor has one morning and one evening session
    * per day, and two `morning` rows on one date is a state the schema refuses.
    */
-  const laterSession = (
-    overrides: Parameters<typeof openSession>[0] = {},
-  ) =>
+  const laterSession = (overrides: Parameters<typeof openSession>[0] = {}) =>
     openSession({
       startsInMinutes: 300,
       sessionKind: 'evening',
@@ -150,9 +152,9 @@ describeWithDatabase('appointments', (fx) => {
         new Date(session.windowStart).getTime() + 7 * 60_000,
       ).toISOString();
 
-      await expect(book({ ...session, windowStart: stray })).rejects.toMatchObject(
-        { code: BookingErrorCode.SessionUnavailable },
-      );
+      await expect(
+        book({ ...session, windowStart: stray }),
+      ).rejects.toMatchObject({ code: BookingErrorCode.SessionUnavailable });
     });
 
     it('refuses a window that has already started', async () => {
@@ -164,6 +166,21 @@ describeWithDatabase('appointments', (fx) => {
 
     it('refuses a closed session', async () => {
       const session = await openSession({ status: 'closed' });
+      await expect(book(session)).rejects.toMatchObject({
+        code: BookingErrorCode.SessionUnavailable,
+      });
+    });
+
+    it('refuses a window that overlaps a clinic closure', async () => {
+      const session = await openSession();
+      await fx.db.database.query(
+        `insert into clinic.clinic_closures
+           (clinic_id, starts_at, ends_at, reason)
+         values ($1, $2::timestamptz - interval '10 minutes',
+                 $2::timestamptz + interval '30 minutes', 'break')`,
+        [fx.clinicId, session.windowStart],
+      );
+
       await expect(book(session)).rejects.toMatchObject({
         code: BookingErrorCode.SessionUnavailable,
       });
@@ -272,11 +289,15 @@ describeWithDatabase('appointments', (fx) => {
           memberId: fx.doctorMemberId,
         });
 
-      expect((await move(AppointmentStatus.Confirmed)).status).toBe('confirmed');
+      expect((await move(AppointmentStatus.Confirmed)).status).toBe(
+        'confirmed',
+      );
       expect((await move(AppointmentStatus.CheckedIn)).status).toBe(
         'checked_in',
       );
-      expect((await move(AppointmentStatus.Completed)).status).toBe('completed');
+      expect((await move(AppointmentStatus.Completed)).status).toBe(
+        'completed',
+      );
     });
 
     it.each([

@@ -105,12 +105,5 @@ export class AppointmentScopeQueryDto {
   scope?: 'upcoming' | 'past';
 }
 
-export class ClinicDayQueryDto {
-  @IsOptional()
-  @IsString()
-  @Matches(ISO_DATE, { message: 'date must be YYYY-MM-DD' })
-  date?: string;
-}
-
 /** Only ever `clinic` here — staff cancelling — but declared so it validates. */
 export const CANCELLED_BY = Object.values(AppointmentCancelledBy);

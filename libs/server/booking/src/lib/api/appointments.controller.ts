@@ -33,7 +33,6 @@ import { BookingError, BookingErrorCode } from '../booking.errors';
 import {
   AppointmentScopeQueryDto,
   AvailabilityQueryDto,
-  CancelAppointmentDto,
   CreateAppointmentDto,
   RescheduleAppointmentDto,
 } from './booking.dto';

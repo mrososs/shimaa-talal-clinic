@@ -29,6 +29,8 @@ const STATUS_BY_CODE: Record<QueueErrorCode, number> = {
 
   [QueueErrorCode.SessionNotRunning]: HttpStatus.CONFLICT,
   [QueueErrorCode.QueueEmpty]: HttpStatus.CONFLICT,
+  [QueueErrorCode.CurrentPatientStillInService]: HttpStatus.CONFLICT,
+  [QueueErrorCode.ChildNotAccessible]: HttpStatus.NOT_FOUND,
 
   // The patient still has time. Not a fault, a deadline.
   [QueueErrorCode.GraceNotExpired]: HttpStatus.CONFLICT,

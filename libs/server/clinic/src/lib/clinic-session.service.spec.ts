@@ -237,7 +237,10 @@ describeWithDatabase('clinic sessions', (fx) => {
         endsAt: '16:00',
       });
 
-      const [session] = await sessions().ensureForDate(fx.farEastClinicId, DATE);
+      const [session] = await sessions().ensureForDate(
+        fx.farEastClinicId,
+        DATE,
+      );
 
       expect(session.plannedStart).toBe('2030-03-11T20:00:00.000Z');
       expect(session.plannedEnd).toBe('2030-03-12T02:00:00.000Z');
@@ -254,7 +257,10 @@ describeWithDatabase('clinic sessions', (fx) => {
         weekday: tuesday,
       });
 
-      const [session] = await sessions().ensureForDate(fx.farEastClinicId, DATE);
+      const [session] = await sessions().ensureForDate(
+        fx.farEastClinicId,
+        DATE,
+      );
       expect(session.sessionDate).toBe(DATE);
       expect(typeof session.sessionDate).toBe('string');
     });

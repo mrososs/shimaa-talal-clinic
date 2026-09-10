@@ -6,6 +6,9 @@ import {
 import { apiFailure } from '@clinic/server-core';
 import { BookingError } from '@clinic/server-booking';
 import { QueueError } from '@clinic/server-queue';
+import { PatientsError } from '@clinic/server-patients';
+import { ClinicalError } from '@clinic/server-clinical';
+import { MessagesError } from '@clinic/server-notifications';
 
 /** Structural subset of the response, so this file needs no HTTP driver types. */
 interface JsonResponse {
@@ -37,17 +40,50 @@ const STATUS: Record<string, number> = {
   queue_invalid_transition: 409,
   queue_session_not_running: 409,
   queue_empty: 409,
+  queue_current_patient_still_in_service: 409,
+  queue_child_not_accessible: 404,
   queue_grace_not_expired: 409,
   queue_defer_limit_reached: 409,
   queue_reason_required: 400,
+
+  // Patients (for cross-domain family reads and commands)
+  guardian_not_found: 404,
+  child_not_found: 404,
+
+  // Clinical
+  clinical_encounter_finalized: 409,
+  clinical_encounter_not_found: 404,
+  clinical_invalid_measurement: 400,
+
+  // Messages and urgent triage
+  message_thread_not_found: 404,
+  message_thread_closed: 409,
+  message_no_doctor_available: 409,
+  urgent_case_not_found: 404,
+  urgent_case_already_decided: 409,
+  message_invalid_participant: 400,
 };
 
-@Catch(BookingError, QueueError)
+@Catch(BookingError, QueueError, PatientsError, ClinicalError, MessagesError)
 export class WorkflowsExceptionFilter implements ExceptionFilter {
-  catch(exception: BookingError | QueueError, host: ArgumentsHost): void {
+  catch(
+    exception:
+      | BookingError
+      | QueueError
+      | PatientsError
+      | ClinicalError
+      | MessagesError,
+    host: ArgumentsHost,
+  ): void {
     const response = host.switchToHttp().getResponse<JsonResponse>();
     response
       .status(STATUS[exception.code] ?? 500)
-      .json(apiFailure(exception.code, exception.message, exception.details));
+      .json(
+        apiFailure(
+          exception.code,
+          exception.message,
+          'details' in exception ? exception.details : undefined,
+        ),
+      );
   }
 }

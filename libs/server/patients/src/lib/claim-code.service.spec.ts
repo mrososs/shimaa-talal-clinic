@@ -17,6 +17,10 @@ import {
  * so almost every assertion here is about refusal.
  */
 describeWithDatabase('ClaimCodeService', (fx) => {
+  // The hosted database and the Jest runner do not share a clock. The expiry
+  // is computed by PostgreSQL, so allow a small transport/clock-skew margin
+  // while still proving that the code is not issued for materially longer.
+  const CLOCK_SKEW_TOLERANCE_MINUTES = 1;
   const guardians = () => new GuardianService(fx.db.database);
   const claims = () =>
     new ClaimCodeService(
@@ -56,7 +60,9 @@ describeWithDatabase('ClaimCodeService', (fx) => {
       expect(issued.code).toMatch(/^\d{6}$/);
       const minutesAway = (Date.parse(issued.expiresAt) - Date.now()) / 60_000;
       expect(minutesAway).toBeGreaterThan(CLAIM_CODE_TTL_MINUTES - 2);
-      expect(minutesAway).toBeLessThanOrEqual(CLAIM_CODE_TTL_MINUTES);
+      expect(minutesAway).toBeLessThanOrEqual(
+        CLAIM_CODE_TTL_MINUTES + CLOCK_SKEW_TOLERANCE_MINUTES,
+      );
     });
 
     it('never stores the code itself', async () => {

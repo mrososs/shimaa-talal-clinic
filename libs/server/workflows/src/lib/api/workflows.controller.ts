@@ -26,11 +26,13 @@ import { UserRole, type Appointment, type QueueEntry } from '@clinic/contracts';
 import { CancelAppointmentWorkflow } from '../cancel-appointment.workflow';
 import { CheckInAppointmentWorkflow } from '../check-in-appointment.workflow';
 import { CompleteQueueEntryWorkflow } from '../complete-queue-entry.workflow';
-import { CancelReasonDto } from './workflows.dto';
+import { CallNextWorkflow } from '../call-next.workflow';
+import { CompleteAndCallNextWorkflow } from '../complete-and-call-next.workflow';
+import { CancelReasonDto, SessionQueueCommandDto } from './workflows.dto';
 import { WorkflowsExceptionFilter } from './workflows-exception.filter';
 
 /**
- * The four routes whose work spans two domains.
+ * The routes whose work spans two domains.
  *
  * They live here rather than in Booking or Queue for the reason those two
  * libraries exist separately at all: neither may depend on the other, so
@@ -49,6 +51,8 @@ export class WorkflowsController {
   constructor(
     private readonly checkIn: CheckInAppointmentWorkflow,
     private readonly completion: CompleteQueueEntryWorkflow,
+    private readonly callNextWorkflow: CallNextWorkflow,
+    private readonly completeAndCallNextWorkflow: CompleteAndCallNextWorkflow,
     private readonly cancellation: CancelAppointmentWorkflow,
     private readonly appointments: AppointmentService,
   ) {}
@@ -90,6 +94,36 @@ export class WorkflowsController {
     return this.completion.execute({
       clinicId: member.clinicId,
       entryId,
+      memberId: member.id,
+    });
+  }
+
+  /** Call the next patient; an active consultation must be ended explicitly. */
+  @Roles(UserRole.Reception, UserRole.Admin, UserRole.Doctor)
+  @Post('clinic/queue/call-next')
+  @HttpCode(HttpStatus.OK)
+  callNext(
+    @CurrentMember() member: ClinicMemberContext,
+    @Body() body: SessionQueueCommandDto,
+  ): Promise<QueueEntry | null> {
+    return this.callNextWorkflow.execute({
+      clinicId: member.clinicId,
+      sessionId: body.sessionId,
+      memberId: member.id,
+    });
+  }
+
+  /** End the active consultation and call the next patient atomically. */
+  @Roles(UserRole.Reception, UserRole.Admin, UserRole.Doctor)
+  @Post('clinic/queue/complete-and-call-next')
+  @HttpCode(HttpStatus.OK)
+  completeAndCallNext(
+    @CurrentMember() member: ClinicMemberContext,
+    @Body() body: SessionQueueCommandDto,
+  ): Promise<QueueEntry | null> {
+    return this.completeAndCallNextWorkflow.execute({
+      clinicId: member.clinicId,
+      sessionId: body.sessionId,
       memberId: member.id,
     });
   }

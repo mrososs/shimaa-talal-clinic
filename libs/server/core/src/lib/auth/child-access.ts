@@ -16,6 +16,9 @@
  * answer, and it changes nothing.
  */
 export interface ChildAccessChecker {
+  /** Whether the child belongs to the clinic, without exposing other tenants. */
+  childExistsInClinic(clinicId: string, childId: string): Promise<boolean>;
+
   /**
    * Whether the guardian may act for the child, within one clinic.
    *

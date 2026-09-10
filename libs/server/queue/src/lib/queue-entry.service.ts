@@ -334,6 +334,21 @@ export class QueueEntryService {
     return result.rows[0] ? toEntry(result.rows[0]) : null;
   }
 
+  /** The single entry in a session holding an exclusive operational status. */
+  async findByStatus(
+    sessionId: string,
+    status: QueueStatus,
+    db: SqlExecutor = this.database,
+  ): Promise<QueueEntry | null> {
+    const result = await db.query<EntryRow>(
+      `select ${COLUMNS} from clinic.queue_entries
+        where session_id = $1 and status = $2
+        limit 1`,
+      [sessionId, status],
+    );
+    return result.rows[0] ? toEntry(result.rows[0]) : null;
+  }
+
   /**
    * A sort key past everyone currently in the queue.
    *
@@ -358,34 +373,99 @@ export class QueueEntryService {
    */
   async midpointSortKey(
     sessionId: string,
+    entryId: string,
     beforeEntryId: string | null,
     afterEntryId: string | null,
     db: SqlExecutor,
   ): Promise<string> {
-    const bounds = await db.query<{ lower: string | null; upper: string | null }>(
-      `select
-         (select sort_key::text from clinic.queue_entries
-           where id = $2 and session_id = $1) as upper,
-         (select sort_key::text from clinic.queue_entries
-           where id = $3 and session_id = $1) as lower`,
-      [sessionId, beforeEntryId, afterEntryId],
+    if (
+      (beforeEntryId === null && afterEntryId === null) ||
+      beforeEntryId === entryId ||
+      afterEntryId === entryId ||
+      (beforeEntryId !== null && beforeEntryId === afterEntryId)
+    ) {
+      throw invalidMove();
+    }
+
+    const result = await db.query<{
+      id: string;
+      priority: number;
+      sort_key: string;
+    }>(
+      `select id, priority, sort_key::text as sort_key
+         from clinic.queue_entries
+        where session_id = $1 and status = 'waiting'
+        order by priority, sort_key
+        for update`,
+      [sessionId],
     );
 
-    const upper = bounds.rows[0]?.upper;
-    const lower = bounds.rows[0]?.lower;
+    const moving = result.rows.find((row) => row.id === entryId);
+    if (moving === undefined) throw invalidMove();
 
-    if (upper !== null && upper !== undefined && lower !== null && lower !== undefined) {
-      return ((Number(lower) + Number(upper)) / 2).toString();
+    const line = result.rows.filter((row) => row.id !== entryId);
+    const beforeIndex =
+      beforeEntryId === null
+        ? -1
+        : line.findIndex((row) => row.id === beforeEntryId);
+    const afterIndex =
+      afterEntryId === null
+        ? -1
+        : line.findIndex((row) => row.id === afterEntryId);
+
+    if (
+      (beforeEntryId !== null && beforeIndex < 0) ||
+      (afterEntryId !== null && afterIndex < 0)
+    ) {
+      throw invalidMove();
     }
-    if (upper !== null && upper !== undefined) {
-      // Placing before the first neighbour: halve the gap below it.
-      return (Number(upper) / 2).toString();
+
+    if (
+      (beforeIndex >= 0 && line[beforeIndex].priority !== moving.priority) ||
+      (afterIndex >= 0 && line[afterIndex].priority !== moving.priority)
+    ) {
+      throw invalidMove();
     }
-    if (lower !== null && lower !== undefined) {
-      return (Number(lower) + SORT_KEY_GAP).toString();
+
+    let lower: (typeof line)[number] | undefined;
+    let upper: (typeof line)[number] | undefined;
+
+    if (beforeIndex >= 0 && afterIndex >= 0) {
+      if (afterIndex + 1 !== beforeIndex) throw invalidMove();
+      lower = line[afterIndex];
+      upper = line[beforeIndex];
+    } else if (beforeIndex >= 0) {
+      upper = line[beforeIndex];
+      lower = line[beforeIndex - 1];
+    } else {
+      lower = line[afterIndex];
+      upper = line[afterIndex + 1];
     }
-    return this.tailSortKey(sessionId, db);
+
+    if (lower?.priority !== undefined && lower.priority !== moving.priority) {
+      lower = undefined;
+    }
+    if (upper?.priority !== undefined && upper.priority !== moving.priority) {
+      upper = undefined;
+    }
+
+    const lowerKey = lower ? Number(lower.sort_key) : null;
+    const upperKey = upper ? Number(upper.sort_key) : null;
+    if (lowerKey !== null && upperKey !== null) {
+      return ((lowerKey + upperKey) / 2).toString();
+    }
+    if (upperKey !== null) return (upperKey / 2).toString();
+    if (lowerKey !== null) return (lowerKey + SORT_KEY_GAP).toString();
+
+    return SORT_KEY_GAP.toString();
   }
+}
+
+function invalidMove(): QueueError {
+  return new QueueError(
+    QueueErrorCode.InvalidTransition,
+    'The requested queue position is not valid.',
+  );
 }
 
 function toEntry(row: EntryRow): QueueEntry {

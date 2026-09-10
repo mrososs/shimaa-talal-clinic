@@ -28,9 +28,14 @@ const STATUS_BY_CODE: Record<PatientsErrorCode, number> = {
   [PatientsErrorCode.GuardianPhoneTaken]: HttpStatus.CONFLICT,
   [PatientsErrorCode.GuardianNotFound]: HttpStatus.NOT_FOUND,
   [PatientsErrorCode.InvalidPhone]: HttpStatus.BAD_REQUEST,
+  [PatientsErrorCode.VerifiedPhoneMismatch]: HttpStatus.BAD_REQUEST,
 
   [PatientsErrorCode.ChildNotFound]: HttpStatus.NOT_FOUND,
   [PatientsErrorCode.PrimaryGuardianTaken]: HttpStatus.CONFLICT,
+
+  [PatientsErrorCode.PatientFileNotFound]: HttpStatus.NOT_FOUND,
+  [PatientsErrorCode.InvalidPatientFile]: HttpStatus.BAD_REQUEST,
+  [PatientsErrorCode.PatientFileStorageFailed]: HttpStatus.BAD_GATEWAY,
 
   [PatientsErrorCode.GuardianAlreadyClaimed]: HttpStatus.CONFLICT,
   [PatientsErrorCode.AuthUserAlreadyLinked]: HttpStatus.CONFLICT,

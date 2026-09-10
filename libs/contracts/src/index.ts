@@ -18,11 +18,18 @@
 
 export * from './lib/api/api-response';
 export * from './lib/api/api-routes';
+export * from './lib/api/dashboard';
 export * from './lib/api/health';
 export * from './lib/api/me';
+export * from './lib/api/messages';
 export * from './lib/api/pagination';
+export * from './lib/api/patient-files';
+export * from './lib/api/payments';
+export * from './lib/api/clinical';
+export * from './lib/api/clinic-settings';
 export * from './lib/api/queue-views';
 export * from './lib/api/staff-identity';
+export * from './lib/api/staff-family-record';
 
 export * from './lib/domain/appointment';
 export * from './lib/domain/appointment-status';

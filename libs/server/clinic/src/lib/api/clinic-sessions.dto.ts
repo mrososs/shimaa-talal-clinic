@@ -46,7 +46,9 @@ export class DoctorPresenceDto {
    * sending a delay alongside `arrived` is a contradiction rather than an
    * instruction.
    */
-  @ValidateIf((dto: DoctorPresenceDto) => dto.presence !== DoctorPresence.Arrived)
+  @ValidateIf(
+    (dto: DoctorPresenceDto) => dto.presence !== DoctorPresence.Arrived,
+  )
   @IsOptional()
   @Type(() => Number)
   @IsInt()
