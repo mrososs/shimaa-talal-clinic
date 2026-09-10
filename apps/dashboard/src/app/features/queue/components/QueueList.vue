@@ -21,6 +21,10 @@ const props = defineProps<{
   entries: readonly QueueBoardEntry[];
   /** Reception and admin only: removing and reordering are desk decisions. */
   canManage: boolean;
+  /** The narrowed doctor view advances with Call Next, not an arbitrary row. */
+  canCall?: boolean;
+  /** Capturing vitals is allowed for all active clinic staff. */
+  canRecordMeasurements?: boolean;
   working: string | null;
 }>();
 
@@ -30,6 +34,7 @@ const emit = defineEmits<{
   clearEmergency: [entry: QueueBoardEntry];
   remove: [entry: QueueBoardEntry];
   move: [entry: QueueBoardEntry, direction: -1 | 1];
+  recordMeasurements: [entry: QueueBoardEntry];
 }>();
 
 const busy = computed(() => props.working !== null);
@@ -38,27 +43,21 @@ const busy = computed(() => props.working !== null);
 <template>
   <section class="dcard">
     <header class="dcard__head">
-      <h2 class="dcard__title">
-        في الانتظار
-      </h2>
+      <h2 class="dcard__title">في الانتظار</h2>
       <span class="dpill">{{ arabicDigits(entries.length) }}</span>
     </header>
 
-    <p
-      v-if="entries.length === 0"
-      class="dcard--pad dmuted centre"
-    >
+    <p v-if="entries.length === 0" class="dcard--pad dmuted centre">
       لا أحد في الانتظار.
     </p>
 
-    <div
-      v-else
-      class="dtable"
-    >
+    <div v-else class="dtable">
       <div
         v-for="(entry, index) in entries"
         :key="entry.id"
         class="dtable__row row"
+        :data-entry-id="entry.id"
+        :data-appointment-id="entry.appointmentId ?? undefined"
         :class="{ 'row--urgent': entry.isEmergency }"
       >
         <span class="row__ticket">
@@ -80,19 +79,26 @@ const busy = computed(() => props.working !== null);
             v-if="entry.isEmergency"
             class="dpill dpill--danger"
             :title="entry.emergencyReason ?? undefined"
-          >عاجل</span>
-          <span
-            v-if="entry.source === 'walk_in'"
-            class="dpill"
-          >بدون موعد</span>
-          <span
-            v-if="entry.deferCount > 0"
-            class="dpill"
-          >تخطّى {{ arabicDigits(entry.deferCount) }}</span>
+            >عاجل</span
+          >
+          <span v-if="entry.source === 'walk_in'" class="dpill">بدون موعد</span>
+          <span v-if="entry.deferCount > 0" class="dpill"
+            >تخطّى {{ arabicDigits(entry.deferCount) }}</span
+          >
         </div>
 
         <div class="row__actions">
           <button
+            v-if="canRecordMeasurements"
+            class="dbtn dbtn--ghost dbtn--sm"
+            type="button"
+            :disabled="busy"
+            @click="emit('recordMeasurements', entry)"
+          >
+            تسجيل القياسات
+          </button>
+          <button
+            v-if="canCall !== false"
             class="dbtn dbtn--soft dbtn--sm"
             :disabled="busy"
             @click="emit('call', entry)"
@@ -100,24 +106,24 @@ const busy = computed(() => props.working !== null);
             نداء
           </button>
 
-          <button
-            v-if="entry.isEmergency"
-            class="dbtn dbtn--ghost dbtn--sm"
-            :disabled="busy"
-            @click="emit('clearEmergency', entry)"
-          >
-            إلغاء العاجل
-          </button>
-          <button
-            v-else
-            class="dbtn dbtn--ghost dbtn--sm"
-            :disabled="busy"
-            @click="emit('emergency', entry)"
-          >
-            عاجل
-          </button>
-
           <template v-if="canManage">
+            <button
+              v-if="entry.isEmergency"
+              class="dbtn dbtn--ghost dbtn--sm"
+              :disabled="busy"
+              @click="emit('clearEmergency', entry)"
+            >
+              إلغاء العاجل
+            </button>
+            <button
+              v-else
+              class="dbtn dbtn--ghost dbtn--sm"
+              :disabled="busy"
+              @click="emit('emergency', entry)"
+            >
+              عاجل
+            </button>
+
             <button
               class="diconbtn"
               type="button"

@@ -10,12 +10,12 @@ export default defineConfig(() => ({
   envDir: '../../',
   cacheDir: '../../node_modules/.vite/apps/dashboard',
   server: {
-    // 4201 so the dashboard and the mobile app can run side by side.
-    port: 4201,
+    // Keep the documented clinic URLs stable for browser journeys and staff.
+    port: 4203,
     host: 'localhost',
   },
   preview: {
-    port: 4301,
+    port: 4303,
     host: 'localhost',
   },
   plugins: [vue()],

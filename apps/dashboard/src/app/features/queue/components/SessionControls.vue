@@ -22,6 +22,7 @@ const props = defineProps<{
   sessions: readonly ClinicSession[];
   timezone: string;
   working: string | null;
+  operational?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -72,12 +73,10 @@ function stepPace(by: number): void {
         <span
           class="dpill"
           :class="status.tone ? `dpill--${status.tone}` : ''"
-        >{{ status.label }}</span>
-
-        <span
-          v-if="session"
-          class="dmuted controls__hours"
+          >{{ status.label }}</span
         >
+
+        <span v-if="session" class="dmuted controls__hours">
           {{ KIND[session.sessionKind] ?? session.sessionKind }} ·
           {{ timeLabel(session.plannedStart, timezone) }} –
           {{ timeLabel(session.plannedEnd, timezone) }}
@@ -85,14 +84,12 @@ function stepPace(by: number): void {
       </div>
 
       <!-- Only shown when the clinic actually runs two half-days. -->
-      <div
-        v-if="sessions.length > 1"
-        class="dtabs"
-      >
+      <div v-if="sessions.length > 1" class="dtabs">
         <button
           v-for="option in sessions"
           :key="option.id"
           type="button"
+          :data-session-id="option.id"
           :class="{ on: option.id === session?.id }"
           @click="emit('select', option.id)"
         >
@@ -103,41 +100,43 @@ function stepPace(by: number): void {
 
     <div class="controls__row">
       <div class="drow">
-        <button
-          v-if="session?.status === ClinicSessionStatus.Scheduled"
-          class="dbtn dbtn--teal dbtn--sm"
-          :disabled="busy"
-          @click="emit('open')"
-        >
-          بدء اليوم
-        </button>
-        <button
-          v-if="session?.status === ClinicSessionStatus.Open"
-          class="dbtn dbtn--ghost dbtn--sm"
-          :disabled="busy"
-          @click="emit('pause')"
-        >
-          إيقاف مؤقت
-        </button>
-        <button
-          v-if="session?.status === ClinicSessionStatus.Paused"
-          class="dbtn dbtn--teal dbtn--sm"
-          :disabled="busy"
-          @click="emit('resume')"
-        >
-          استئناف
-        </button>
-        <button
-          v-if="session && session.status !== ClinicSessionStatus.Closed"
-          class="dbtn dbtn--ghost dbtn--sm"
-          :disabled="busy"
-          @click="emit('close')"
-        >
-          إنهاء اليوم
-        </button>
+        <template v-if="operational !== false">
+          <button
+            v-if="session?.status === ClinicSessionStatus.Scheduled"
+            class="dbtn dbtn--teal dbtn--sm"
+            :disabled="busy"
+            @click="emit('open')"
+          >
+            بدء اليوم
+          </button>
+          <button
+            v-if="session?.status === ClinicSessionStatus.Open"
+            class="dbtn dbtn--ghost dbtn--sm"
+            :disabled="busy"
+            @click="emit('pause')"
+          >
+            إيقاف مؤقت
+          </button>
+          <button
+            v-if="session?.status === ClinicSessionStatus.Paused"
+            class="dbtn dbtn--teal dbtn--sm"
+            :disabled="busy"
+            @click="emit('resume')"
+          >
+            استئناف
+          </button>
+          <button
+            v-if="session && session.status !== ClinicSessionStatus.Closed"
+            class="dbtn dbtn--ghost dbtn--sm"
+            :disabled="busy"
+            @click="emit('close')"
+          >
+            إنهاء اليوم
+          </button>
+        </template>
       </div>
 
-      <div class="drow controls__pace">
+      <div v-if="operational !== false" class="drow controls__pace">
         <span class="dfield__label">مدة الكشف</span>
         <button
           class="diconbtn"
@@ -163,7 +162,10 @@ function stepPace(by: number): void {
       </div>
     </div>
 
-    <div class="controls__row controls__row--start">
+    <div
+      v-if="operational !== false"
+      class="controls__row controls__row--start"
+    >
       <span class="dfield__label">الطبيبة</span>
       <div class="dtabs">
         <button
@@ -177,10 +179,7 @@ function stepPace(by: number): void {
           {{ option.label }}
         </button>
       </div>
-      <span
-        v-if="session?.delayMinutes"
-        class="dpill dpill--warn"
-      >
+      <span v-if="session?.delayMinutes" class="dpill dpill--warn">
         تأخير {{ arabicDigits(session.delayMinutes) }} د
       </span>
     </div>

@@ -1,0 +1,22 @@
+{
+  "name": "dashboard-e2e",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/dashboard-e2e/src",
+  "implicitDependencies": ["api", "dashboard", "mobile"],
+  "tags": ["type:e2e", "platform:e2e"],
+  "targets": {
+    "e2e": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "playwright test --config apps/dashboard-e2e/playwright.config.ts"
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p apps/dashboard-e2e/tsconfig.json --noEmit"
+      }
+    }
+  }
+}

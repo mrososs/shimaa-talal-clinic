@@ -8,13 +8,8 @@ import { ageLabel } from '../../../shared/format';
  * Who is in the room, and who has just been called.
  *
  * The one panel a doctor looks at between patients, so it holds exactly what
- * she needs to start: the name, the age, why they came, and the two buttons
- * that move the visit along.
- *
- * "Next please" is one gesture and one request. It completes whoever is in the
- * room and calls the next name in a single transaction — splitting it would
- * leave a moment where nobody is being served and a second receptionist could
- * call somebody else.
+ * she needs to start: the name, the age, why they came, and explicit buttons
+ * that never hide the fact that a consultation is being ended.
  */
 
 const props = defineProps<{
@@ -25,13 +20,21 @@ const props = defineProps<{
   working: string | null;
   /** Reception may skip a patient; the doctor calls, starts and completes. */
   canMiss: boolean;
+  /** Only roles authorised by the API to end a consultation. */
+  canComplete: boolean;
+  /** Clinical notes are doctor/admin only even though reception can complete. */
+  canOpenClinical?: boolean;
+  /** All staff may capture vitals; only doctor/admin may read their history. */
+  canRecordMeasurements?: boolean;
 }>();
 
 const emit = defineEmits<{
   callNext: [];
   start: [entryId: string];
   complete: [entryId: string];
+  completeAndCallNext: [];
   miss: [entry: QueueBoardEntry];
+  recordMeasurements: [entry: QueueBoardEntry];
 }>();
 
 const busy = computed(() => props.working !== null);
@@ -46,15 +49,19 @@ const graceLapsed = computed(() => {
 <template>
   <section class="dcard dcard--pad now">
     <header class="now__head">
-      <h2 class="dcard__title">
-        الآن
-      </h2>
+      <h2 class="dcard__title">الآن</h2>
       <button
+        v-if="!inService"
         class="dbtn dbtn--primary"
-        :disabled="busy || !running || waitingCount === 0"
+        :disabled="
+          busy ||
+          !running ||
+          waitingCount === 0 ||
+          (called !== null && !graceLapsed)
+        "
         @click="emit('callNext')"
       >
-        نداء التالي
+        استدعاء التالي
       </button>
     </header>
 
@@ -62,8 +69,12 @@ const graceLapsed = computed(() => {
     <div
       v-if="inService"
       class="now__patient now__patient--serving"
+      :data-entry-id="inService.id"
+      :data-appointment-id="inService.appointmentId ?? undefined"
     >
-      <span class="now__ticket">{{ arabicDigits(inService.ticketNumber) }}</span>
+      <span class="now__ticket">{{
+        arabicDigits(inService.ticketNumber)
+      }}</span>
       <div class="now__who">
         <strong>{{ inService.child.fullName }}</strong>
         <span class="dmuted">
@@ -74,26 +85,59 @@ const graceLapsed = computed(() => {
         </span>
       </div>
       <span class="dpill dpill--ok">في الكشف</span>
-      <button
-        class="dbtn dbtn--teal dbtn--sm"
-        :disabled="busy"
-        @click="emit('complete', inService.id)"
-      >
-        إنهاء الكشف
-      </button>
+      <div v-if="canComplete" class="now__actions">
+        <button
+          v-if="canRecordMeasurements"
+          class="dbtn dbtn--ghost dbtn--sm"
+          type="button"
+          :disabled="busy"
+          @click="emit('recordMeasurements', inService)"
+        >
+          تسجيل القياسات
+        </button>
+        <RouterLink
+          v-if="canOpenClinical && inService.appointmentId"
+          class="dbtn dbtn--ghost dbtn--sm"
+          :to="{
+            name: 'consultation',
+            params: { appointmentId: inService.appointmentId },
+            query: { childName: inService.child.fullName },
+          }"
+        >
+          فتح جلسة الكشف
+        </RouterLink>
+        <button
+          class="dbtn dbtn--teal dbtn--sm"
+          :disabled="busy || !running"
+          @click="emit('complete', inService.id)"
+        >
+          إنهاء الكشف
+        </button>
+        <button
+          class="dbtn dbtn--primary dbtn--sm"
+          :disabled="busy || !running || waitingCount === 0"
+          @click="emit('completeAndCallNext')"
+        >
+          إنهاء واستدعاء التالي
+        </button>
+      </div>
     </div>
 
     <!-- Called, and we are waiting for them to walk in. -->
     <div
       v-if="called"
       class="now__patient"
+      :data-entry-id="called.id"
+      :data-appointment-id="called.appointmentId ?? undefined"
     >
       <span class="now__ticket">{{ arabicDigits(called.ticketNumber) }}</span>
       <div class="now__who">
         <strong>{{ called.child.fullName }}</strong>
         <span class="dmuted">
           {{ ageLabel(called.child.dateOfBirth) ?? '—' }}
-          <template v-if="called.guardian"> · {{ called.guardian.fullName }}</template>
+          <template v-if="called.guardian">
+            · {{ called.guardian.fullName }}</template
+          >
         </span>
       </div>
       <span
@@ -103,6 +147,15 @@ const graceLapsed = computed(() => {
         {{ graceLapsed ? 'انتهت المهلة' : 'تم النداء' }}
       </span>
       <div class="now__actions">
+        <button
+          v-if="canRecordMeasurements"
+          class="dbtn dbtn--ghost dbtn--sm"
+          type="button"
+          :disabled="busy"
+          @click="emit('recordMeasurements', called)"
+        >
+          تسجيل القياسات
+        </button>
         <button
           class="dbtn dbtn--teal dbtn--sm"
           :disabled="busy"
@@ -121,13 +174,8 @@ const graceLapsed = computed(() => {
       </div>
     </div>
 
-    <p
-      v-if="!inService && !called"
-      class="dmuted now__empty"
-    >
-      <template v-if="!running">
-        الطابور غير مفعّل الآن.
-      </template>
+    <p v-if="!inService && !called" class="dmuted now__empty">
+      <template v-if="!running"> الطابور غير مفعّل الآن. </template>
       <template v-else-if="waitingCount === 0">
         لا يوجد مرضى في الانتظار.
       </template>

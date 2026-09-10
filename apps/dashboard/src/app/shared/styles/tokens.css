@@ -51,7 +51,13 @@ p {
 
 .dash-side {
   width: 256px;
-  flex-shrink: 0;
+  height: 100vh;
+  height: 100dvh;
+  position: fixed;
+  inset-block: 0;
+  inset-inline-start: 0;
+  z-index: 20;
+  overflow: hidden;
   background: var(--surface);
   /* Logical, so the sidebar sits on the reading-start side either way. */
   border-inline-end: 1px solid var(--line);
@@ -97,7 +103,7 @@ p {
 .dash-nav {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 18px;
   flex: 1;
   margin: 6px -4px;
   padding: 0 4px;
@@ -107,7 +113,7 @@ p {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
+  padding: 7px 8px;
   border: none;
   background: none;
   cursor: pointer;
@@ -134,9 +140,19 @@ p {
   color: var(--coral-ink);
 }
 
+.dash-navbtn:focus-visible,
+.diconbtn:focus-visible,
+.dbtn:focus-visible,
+.dtabs button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--coral) 35%, transparent);
+  outline-offset: 2px;
+}
+
 .dash-main {
   flex: 1;
   min-width: 0;
+  min-height: 100vh;
+  margin-inline-start: 256px;
   display: flex;
   flex-direction: column;
 }
@@ -150,6 +166,9 @@ p {
   background: rgba(255, 255, 255, 0.78);
   backdrop-filter: blur(12px);
   flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .dash-top__title h1 {
@@ -168,6 +187,17 @@ p {
   flex: 1;
   overflow-x: auto;
   padding: 24px 28px 40px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
 
 /* --------------------------------------------------------------------------

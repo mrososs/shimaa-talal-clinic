@@ -6,6 +6,12 @@ import type {
   QueueEntry,
 } from '@clinic/contracts';
 
+export interface WalkInInput {
+  childId: string;
+  guardianId: string;
+  visitReason?: string;
+}
+
 /**
  * The queue endpoints, typed.
  *
@@ -40,7 +46,10 @@ export function createQueueApi(client: ApiClient) {
       id: string,
       input: { presence: DoctorPresence; delayMinutes?: number; note?: string },
     ): Promise<ClinicSession> =>
-      client.post<ClinicSession>(`clinic/sessions/${id}/doctor-presence`, input),
+      client.post<ClinicSession>(
+        `clinic/sessions/${id}/doctor-presence`,
+        input,
+      ),
 
     setPace: (id: string, avgConsultMinutes: number): Promise<ClinicSession> =>
       client.patch<ClinicSession>(`clinic/sessions/${id}/pace`, {
@@ -66,8 +75,16 @@ export function createQueueApi(client: ApiClient) {
     checkIn: (appointmentId: string): Promise<QueueEntry> =>
       client.post<QueueEntry>(`clinic/appointments/${appointmentId}/check-in`),
 
-    callNext: (sessionId: string): Promise<QueueEntry> =>
-      client.post<QueueEntry>('clinic/queue/call-next', { sessionId }),
+    walkIn: (input: WalkInInput & { sessionId: string }): Promise<QueueEntry> =>
+      client.post<QueueEntry>('clinic/queue/walk-in', input),
+
+    callNext: (sessionId: string): Promise<QueueEntry | null> =>
+      client.post<QueueEntry | null>('clinic/queue/call-next', { sessionId }),
+
+    completeAndCallNext: (sessionId: string): Promise<QueueEntry | null> =>
+      client.post<QueueEntry | null>('clinic/queue/complete-and-call-next', {
+        sessionId,
+      }),
 
     call: (entryId: string): Promise<QueueEntry> =>
       client.post<QueueEntry>(`clinic/queue/${entryId}/call`),

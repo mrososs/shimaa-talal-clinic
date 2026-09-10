@@ -8,6 +8,22 @@ import { createSessionStore, type SessionStore } from '@clinic/client-session';
 import type { ClinicMeResponse } from '@clinic/contracts';
 import { createClinicApi, type ClinicApi } from './features/clinic/clinic.api';
 import { createQueueApi, type QueueApi } from './features/queue/queue.api';
+import {
+  createMessagesApi,
+  type MessagesApi,
+} from './features/messages/messages.api';
+import {
+  createPaymentsApi,
+  type PaymentsApi,
+} from './features/payments/payments.api';
+import {
+  createReportsApi,
+  type ReportsApi,
+} from './features/reports/reports.api';
+import {
+  createSettingsApi,
+  type SettingsApi,
+} from './features/settings/settings.api';
 
 /**
  * Composition root for everything this app talks to.
@@ -32,6 +48,10 @@ export const apiClient: ApiClient = createApiClient({
 
 export const clinicApi: ClinicApi = createClinicApi(apiClient);
 export const queueApi: QueueApi = createQueueApi(apiClient);
+export const messagesApi: MessagesApi = createMessagesApi(apiClient);
+export const paymentsApi: PaymentsApi = createPaymentsApi(apiClient);
+export const reportsApi: ReportsApi = createReportsApi(apiClient);
+export const settingsApi: SettingsApi = createSettingsApi(apiClient);
 
 /**
  * The staff session: the account, and the membership that makes it staff.
@@ -61,6 +81,10 @@ function unconfiguredAuth(): AuthProvider {
     restoreSession: async () => null,
     signInWithPassword: fail,
     signUp: fail,
+    startPhoneOtp: fail,
+    verifyPhoneOtp: fail,
+    requestPasswordReset: fail,
+    updatePassword: fail,
     onAuthStateChange: () => () => undefined,
     signOut: async () => undefined,
   };

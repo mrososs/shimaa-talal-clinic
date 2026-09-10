@@ -1,9 +1,17 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
-import { AppointmentStatus, type Appointment } from '@clinic/contracts';
+import { computed, onMounted, ref, shallowRef, watch } from 'vue';
+import { RouterLink } from 'vue-router';
+import {
+  AppointmentStatus,
+  ClinicMemberRole,
+  type Appointment,
+  type AppointmentListItem,
+} from '@clinic/contracts';
 import { apiMessage } from '../../../shared/messages';
 import { arabicDigits } from '../../../shared/numerals';
 import { clinicApi, session } from '../../../runtime';
+import AppointmentIdentity from '../components/AppointmentIdentity.vue';
+import RescheduleAppointmentDialog from '../components/RescheduleAppointmentDialog.vue';
 
 /**
  * The clinic's day: who is coming, and what still needs deciding.
@@ -20,20 +28,71 @@ import { clinicApi, session } from '../../../runtime';
 const state = session.state;
 
 const date = ref('');
-const items = ref<Appointment[]>([]);
+const items = ref<AppointmentListItem[]>([]);
 const loading = ref(true);
 const failure = ref<string | null>(null);
 const working = ref<string | null>(null);
+const rescheduling = ref<AppointmentListItem | null>(null);
+const query = shallowRef('');
+const statusFilter = shallowRef<string>('all');
+const viewMode = shallowRef<'day' | 'week' | 'month'>('day');
 
 const clinic = computed(() => state.identity?.clinic ?? null);
 const timezone = computed(() => clinic.value?.timezone ?? 'Africa/Cairo');
 
+const canBook = computed(
+  () =>
+    state.identity?.member.role === ClinicMemberRole.Reception ||
+    state.identity?.member.role === ClinicMemberRole.Admin,
+);
+
+const filtered = computed(() => {
+  const term = query.value.trim().toLocaleLowerCase('ar');
+  return items.value.filter((appointment) => {
+    const matchesStatus =
+      statusFilter.value === 'all' || appointment.status === statusFilter.value;
+    const matchesSearch =
+      term.length === 0 ||
+      appointment.child.fullName.toLocaleLowerCase('ar').includes(term) ||
+      appointment.guardian.fullName.toLocaleLowerCase('ar').includes(term) ||
+      appointment.guardian.phoneE164.includes(term);
+    return matchesStatus && matchesSearch;
+  });
+});
+
 const pending = computed(() =>
-  items.value.filter((a) => a.status === AppointmentStatus.Requested),
+  filtered.value.filter((a) => a.status === AppointmentStatus.Requested),
 );
 const rest = computed(() =>
-  items.value.filter((a) => a.status !== AppointmentStatus.Requested),
+  filtered.value.filter((a) => a.status !== AppointmentStatus.Requested),
 );
+
+const FILTERS = [
+  { value: 'all', label: 'الكل' },
+  { value: AppointmentStatus.Requested, label: 'بانتظار الموافقة' },
+  { value: AppointmentStatus.Confirmed, label: 'مؤكد' },
+  { value: AppointmentStatus.CheckedIn, label: 'في العيادة' },
+  { value: AppointmentStatus.Completed, label: 'مكتمل' },
+  { value: AppointmentStatus.Cancelled, label: 'ملغي' },
+  { value: AppointmentStatus.NoShow, label: 'لم يحضر' },
+] as const;
+
+const VIEW_MODES = [
+  { value: 'day', label: 'يوم' },
+  { value: 'week', label: 'أسبوع' },
+  { value: 'month', label: 'شهر' },
+] as const;
+
+const listTitle = computed(() => {
+  switch (viewMode.value) {
+    case 'week':
+      return 'مواعيد الأسبوع';
+    case 'month':
+      return 'مواعيد الشهر';
+    default:
+      return 'مواعيد اليوم';
+  }
+});
 
 const STATUS: Record<string, { label: string; tone: string }> = {
   requested: { label: 'قيد المراجعة', tone: 'warn' },
@@ -58,16 +117,24 @@ function windowLabel(appointment: Appointment): string {
     minute: '2-digit',
     timeZone: timezone.value,
   });
-  return `${format.format(new Date(appointment.windowStart))} – ${format.format(
+  const time = `${format.format(new Date(appointment.windowStart))} – ${format.format(
     new Date(appointment.windowEnd),
   )}`;
+  if (viewMode.value === 'day') return time;
+  const day = new Intl.DateTimeFormat('ar-EG', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: timezone.value,
+  }).format(new Date(appointment.windowStart));
+  return `${day} · ${time}`;
 }
 
 async function load(): Promise<void> {
   loading.value = true;
   failure.value = null;
   try {
-    items.value = await clinicApi.appointments(date.value || undefined);
+    const range = calendarRange(date.value, viewMode.value);
+    items.value = await clinicApi.appointments(range.from, range.to);
   } catch (error) {
     failure.value = apiMessage(error);
   } finally {
@@ -75,7 +142,7 @@ async function load(): Promise<void> {
   }
 }
 
-/** Run a command and fold the fresh row back in, so the table self-heals. */
+/** Fold command state into the read model without dropping its identity data. */
 async function run(
   id: string,
   command: (id: string) => Promise<Appointment>,
@@ -84,7 +151,11 @@ async function run(
   failure.value = null;
   try {
     const updated = await command(id);
-    items.value = items.value.map((a) => (a.id === updated.id ? updated : a));
+    items.value = items.value.map((appointment) =>
+      appointment.id === updated.id
+        ? { ...appointment, ...updated }
+        : appointment,
+    );
   } catch (error) {
     failure.value = apiMessage(error);
     // The row moved underneath us — re-read rather than leave a stale table.
@@ -94,55 +165,114 @@ async function run(
   }
 }
 
-watch(date, load);
+function acceptReschedule(updated: Appointment): void {
+  const original = rescheduling.value;
+  rescheduling.value = null;
+  if (original === null) return;
+  items.value = items.value.map((appointment) =>
+    appointment.id === original.id
+      ? {
+          ...original,
+          ...updated,
+          child: original.child,
+          guardian: original.guardian,
+          isLate: false,
+        }
+      : appointment,
+  );
+}
+
+watch([date, viewMode], load);
 onMounted(() => {
   date.value = clinic.value?.today ?? '';
-  void load();
 });
+
+function calendarRange(
+  selected: string,
+  mode: 'day' | 'week' | 'month',
+): { from?: string; to?: string } {
+  if (!selected) return {};
+  if (mode === 'day') return { from: selected };
+  const value = new Date(`${selected}T12:00:00Z`);
+  if (mode === 'week') {
+    value.setUTCDate(value.getUTCDate() + 6);
+    return { from: selected, to: value.toISOString().slice(0, 10) };
+  }
+  const year = value.getUTCFullYear();
+  const month = value.getUTCMonth();
+  const from = new Date(Date.UTC(year, month, 1, 12));
+  const to = new Date(Date.UTC(year, month + 1, 0, 12));
+  return {
+    from: from.toISOString().slice(0, 10),
+    to: to.toISOString().slice(0, 10),
+  };
+}
 </script>
 
 <template>
   <div class="dstack">
-    <div class="drow toolbar">
-      <label class="dfield__label">اليوم</label>
-      <input
-        v-model="date"
-        class="dinput day"
-        type="date"
+    <div class="toolbar">
+      <div class="dtabs toolbar__modes" aria-label="نطاق عرض المواعيد">
+        <button
+          v-for="mode in VIEW_MODES"
+          :key="mode.value"
+          type="button"
+          :class="{ on: viewMode === mode.value }"
+          @click="viewMode = mode.value"
+        >
+          {{ mode.label }}
+        </button>
+      </div>
+      <div class="toolbar__date">
+        <label class="dfield__label" for="appointments-day">اليوم</label>
+        <input
+          id="appointments-day"
+          v-model="date"
+          class="dinput day"
+          type="date"
+        />
+      </div>
+      <label class="toolbar__search">
+        <span class="sr-only">البحث في المواعيد</span>
+        <input
+          v-model="query"
+          class="dinput"
+          type="search"
+          placeholder="ابحثي باسم الطفل أو ولي الأمر"
+        />
+      </label>
+      <RouterLink
+        v-if="canBook"
+        class="dbtn dbtn--primary"
+        :to="{ name: 'reception-booking' }"
       >
+        موعد يدوي جديد
+      </RouterLink>
+    </div>
+
+    <div class="dtabs appointment-filters" aria-label="تصفية حالة الموعد">
       <button
-        class="dbtn dbtn--ghost dbtn--sm"
-        @click="load"
+        v-for="filter in FILTERS"
+        :key="filter.value"
+        type="button"
+        :class="{ on: statusFilter === filter.value }"
+        @click="statusFilter = filter.value"
       >
-        تحديث
+        {{ filter.label }}
       </button>
     </div>
 
-    <p
-      v-if="failure"
-      class="dnotice dnotice--error"
-      role="alert"
-    >
+    <p v-if="failure" class="dnotice dnotice--error" role="alert">
       {{ failure }}
     </p>
 
-    <div
-      v-if="loading"
-      class="dcard dcard--pad centre"
-    >
-      جارٍ التحميل…
-    </div>
+    <div v-if="loading" class="dcard dcard--pad centre">جارٍ التحميل…</div>
 
     <template v-else>
       <!-- The only rows that need a decision. -->
-      <section
-        v-if="pending.length > 0"
-        class="dcard"
-      >
+      <section v-if="pending.length > 0" class="dcard">
         <header class="dcard__head">
-          <h2 class="dcard__title">
-            طلبات بانتظار الموافقة
-          </h2>
+          <h2 class="dcard__title">طلبات بانتظار الموافقة</h2>
           <span class="dpill dpill--warn">
             {{ arabicDigits(pending.length) }}
           </span>
@@ -152,13 +282,29 @@ onMounted(() => {
           <div
             v-for="appointment in pending"
             :key="appointment.id"
-            class="dtable__row row"
+            class="dtable__row row row--pending"
+            :data-appointment-id="appointment.id"
           >
+            <AppointmentIdentity
+              :child="appointment.child"
+              :guardian="appointment.guardian"
+            />
             <span class="row__time">{{ windowLabel(appointment) }}</span>
             <span class="row__type">
               {{ VISIT_LABEL[appointment.visitType] ?? appointment.visitType }}
             </span>
             <div class="row__actions">
+              <button
+                v-if="
+                  appointment.status === 'requested' ||
+                  appointment.status === 'confirmed'
+                "
+                class="dbtn dbtn--soft dbtn--sm"
+                :disabled="working === appointment.id"
+                @click="rescheduling = appointment"
+              >
+                تغيير الموعد
+              </button>
               <button
                 class="dbtn dbtn--teal dbtn--sm"
                 :disabled="working === appointment.id"
@@ -178,26 +324,24 @@ onMounted(() => {
         </div>
       </section>
 
-      <section class="dcard">
+      <section v-if="rest.length > 0 || pending.length === 0" class="dcard">
         <header class="dcard__head">
           <h2 class="dcard__title">
-            مواعيد اليوم
+            {{ listTitle }}
           </h2>
           <span class="dpill">{{ arabicDigits(rest.length) }}</span>
         </header>
 
         <div
-          v-if="rest.length === 0"
+          v-if="rest.length === 0 && pending.length === 0"
           class="dcard--pad dmuted"
         >
-          لا توجد مواعيد في هذا اليوم.
+          لا توجد مواعيد تطابق البحث أو الفلتر الحالي.
         </div>
 
-        <div
-          v-else
-          class="dtable"
-        >
+        <div v-else class="dtable">
           <div class="dtable__row dtable__row--head row">
+            <span>المريض</span>
             <span>الفترة</span>
             <span>نوع الزيارة</span>
             <span>الحالة</span>
@@ -207,7 +351,12 @@ onMounted(() => {
             v-for="appointment in rest"
             :key="appointment.id"
             class="dtable__row row"
+            :data-appointment-id="appointment.id"
           >
+            <AppointmentIdentity
+              :child="appointment.child"
+              :guardian="appointment.guardian"
+            />
             <span class="row__time">{{ windowLabel(appointment) }}</span>
             <span class="row__type">
               {{ VISIT_LABEL[appointment.visitType] ?? appointment.visitType }}
@@ -234,7 +383,7 @@ onMounted(() => {
               <button
                 v-if="
                   appointment.status === 'confirmed' ||
-                    appointment.status === 'checked_in'
+                  appointment.status === 'checked_in'
                 "
                 class="dbtn dbtn--ghost dbtn--sm"
                 :disabled="working === appointment.id"
@@ -247,16 +396,59 @@ onMounted(() => {
         </div>
       </section>
     </template>
+
+    <RescheduleAppointmentDialog
+      :open="rescheduling !== null"
+      :appointment="rescheduling"
+      :timezone="timezone"
+      :today="clinic?.today ?? date"
+      @close="rescheduling = null"
+      @rescheduled="acceptReschedule"
+    />
   </div>
 </template>
 
 <style scoped>
 .toolbar {
-  gap: 10px;
+  display: grid;
+  grid-template-columns: auto auto minmax(220px, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.toolbar__modes {
+  align-self: end;
+}
+
+.toolbar__date {
+  display: grid;
+  gap: 6px;
+}
+
+.toolbar__search {
+  display: block;
 }
 
 .day {
   width: 190px;
+}
+
+.appointment-filters {
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .centre {
@@ -265,7 +457,11 @@ onMounted(() => {
 }
 
 .row {
-  grid-template-columns: 150px 1fr 120px auto;
+  grid-template-columns: minmax(180px, 1.3fr) 150px 1fr 120px auto;
+}
+
+.row--pending {
+  grid-template-columns: minmax(180px, 1.3fr) 150px 1fr auto;
 }
 
 .row__time {
@@ -285,6 +481,14 @@ onMounted(() => {
 }
 
 @media (max-width: 860px) {
+  .toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .day {
+    width: 100%;
+  }
+
   .row {
     grid-template-columns: 1fr 1fr;
     row-gap: 8px;

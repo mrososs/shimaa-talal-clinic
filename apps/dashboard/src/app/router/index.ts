@@ -54,6 +54,15 @@ export const routes: RouteRecordRaw[] = [
         },
       },
       {
+        path: 'messages',
+        name: 'messages',
+        component: () => import('../features/messages/pages/MessagesPage.vue'),
+        meta: {
+          title: 'الرسائل والحالات العاجلة',
+          subtitle: 'متابعة رسائل الأسر والتقييمات التي تحتاج قرارًا سريعًا',
+        },
+      },
+      {
         path: 'booking',
         name: 'reception-booking',
         component: () =>
@@ -65,6 +74,51 @@ export const routes: RouteRecordRaw[] = [
             ClinicMemberRole.Reception,
             ClinicMemberRole.Admin,
           ],
+        },
+      },
+      {
+        path: 'patients',
+        name: 'patients',
+        component: () => import('../features/patients/pages/PatientsPage.vue'),
+        meta: {
+          title: 'المرضى والعائلات',
+          subtitle: 'بيانات التواصل والأطفال وسجل الزيارات التشغيلي',
+        },
+      },
+      {
+        path: 'payments', name: 'payments',
+        component: () => import('../features/payments/pages/PaymentsPage.vue'),
+        meta: { title: 'المدفوعات', subtitle: 'التحصيل ومراجعة إيصالات InstaPay' },
+      },
+      {
+        path: 'reports', name: 'reports',
+        component: () => import('../features/reports/pages/ReportsPage.vue'),
+        meta: { title: 'التقارير', subtitle: 'نشاط العيادة والأداء خلال الفترة' },
+      },
+      {
+        path: 'settings', name: 'settings',
+        component: () => import('../features/settings/pages/SettingsPage.vue'),
+        meta: { title: 'الإعدادات والفريق', subtitle: 'سياسات العيادة والجداول والصلاحيات وسجل التدقيق', [ROUTE_META_ROLES]: [ClinicMemberRole.Doctor, ClinicMemberRole.Admin] },
+      },
+      {
+        path: 'consultation/:appointmentId',
+        name: 'consultation',
+        component: () =>
+          import('../features/clinical/pages/ConsultationPage.vue'),
+        meta: {
+          title: 'جلسة الكشف',
+          subtitle: 'التشخيص وخطة العلاج والملخص',
+          [ROUTE_META_ROLES]: [ClinicMemberRole.Doctor, ClinicMemberRole.Admin],
+        },
+      },
+      {
+        path: 'growth/:childId',
+        name: 'growth',
+        component: () => import('../features/clinical/pages/GrowthPage.vue'),
+        meta: {
+          title: 'متابعة النمو',
+          subtitle: 'الوزن والطول ومحيط الرأس',
+          [ROUTE_META_ROLES]: [ClinicMemberRole.Doctor, ClinicMemberRole.Admin],
         },
       },
     ],

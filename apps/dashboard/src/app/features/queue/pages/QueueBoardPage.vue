@@ -4,10 +4,11 @@ import {
   ClinicMemberRole,
   QueueStatus,
   type AppointmentListItem,
+  type CreateClinicalMeasurementInput,
   type DoctorPresence,
   type QueueBoardEntry,
 } from '@clinic/contracts';
-import { queueApi, session as staffSession } from '../../../runtime';
+import { clinicApi, queueApi, session as staffSession } from '../../../runtime';
 import { agoLabel } from '../../../shared/format';
 import { arabicDigits } from '../../../shared/numerals';
 import ConfirmDialog from '../../../shared/components/ConfirmDialog.vue';
@@ -17,6 +18,9 @@ import ExpectedList from '../components/ExpectedList.vue';
 import NowServingPanel from '../components/NowServingPanel.vue';
 import QueueList from '../components/QueueList.vue';
 import SessionControls from '../components/SessionControls.vue';
+import WalkInDialog from '../components/WalkInDialog.vue';
+import RecordMeasurementDialog from '../../clinical/components/RecordMeasurementDialog.vue';
+import type { WalkInInput } from '../queue.api';
 
 /**
  * The screen the clinic day is run from.
@@ -42,6 +46,19 @@ const role = computed(() => state.identity?.member.role ?? null);
 const canManage = computed(
   () =>
     role.value === ClinicMemberRole.Reception ||
+    role.value === ClinicMemberRole.Admin,
+);
+
+const canComplete = computed(
+  () =>
+    role.value === ClinicMemberRole.Reception ||
+    role.value === ClinicMemberRole.Admin ||
+    role.value === ClinicMemberRole.Doctor,
+);
+const isDoctor = computed(() => role.value === ClinicMemberRole.Doctor);
+const canOpenClinical = computed(
+  () =>
+    role.value === ClinicMemberRole.Doctor ||
     role.value === ClinicMemberRole.Admin,
 );
 
@@ -123,6 +140,14 @@ function callNext(): void {
   void board.run('call-next', () => queueApi.callNext(id));
 }
 
+function completeAndCallNext(): void {
+  const id = board.sessionId.value;
+  if (id === null) return;
+  void board.run('complete-and-call-next', () =>
+    queueApi.completeAndCallNext(id),
+  );
+}
+
 /**
  * "Did not come."
  *
@@ -178,6 +203,8 @@ function sessionCommand(
  * left-to-right over an Arabic screen.
  */
 const closing = ref(false);
+const addingWalkIn = ref(false);
+const measuringEntry = ref<QueueBoardEntry | null>(null);
 
 const closeMessage = computed(() => {
   const waiting = board.waiting.value.length;
@@ -193,6 +220,30 @@ function confirmClose(): void {
 
 function setPresence(presence: DoctorPresence): void {
   sessionCommand('presence', (id) => queueApi.setPresence(id, { presence }));
+}
+
+function admitWalkIn(input: WalkInInput): void {
+  const sessionId = board.sessionId.value;
+  if (sessionId === null) return;
+  void board
+    .run('walk-in', () => queueApi.walkIn({ sessionId, ...input }))
+    .then(() => {
+      if (board.failure.value === null) addingWalkIn.value = false;
+    });
+}
+
+async function recordMeasurements(
+  input: CreateClinicalMeasurementInput,
+): Promise<void> {
+  const entry = measuringEntry.value;
+  if (entry === null) return;
+  await board.run(`measurements-${entry.id}`, () =>
+    clinicApi.addMeasurement(entry.childId, {
+      ...input,
+      appointmentId: entry.appointmentId,
+    }),
+  );
+  if (board.failure.value === null) measuringEntry.value = null;
 }
 </script>
 
@@ -226,6 +277,7 @@ function setPresence(presence: DoctorPresence): void {
         :sessions="board.sessions.value"
         :timezone="timezone"
         :working="board.working.value"
+        :operational="!isDoctor"
         @select="board.select"
         @open="sessionCommand('open', (id) => queueApi.openSession(id))"
         @pause="sessionCommand('pause', (id) => queueApi.pauseSession(id))"
@@ -238,6 +290,20 @@ function setPresence(presence: DoctorPresence): void {
         "
       />
 
+      <div
+        v-if="canManage"
+        class="queue-tools"
+      >
+        <button
+          class="dbtn dbtn--primary"
+          type="button"
+          :disabled="!board.running.value || board.working.value !== null"
+          @click="addingWalkIn = true"
+        >
+          تسجيل مريض بدون موعد
+        </button>
+      </div>
+
       <NowServingPanel
         :in-service="board.inService.value"
         :called="board.called.value"
@@ -245,17 +311,26 @@ function setPresence(presence: DoctorPresence): void {
         :running="board.running.value"
         :working="board.working.value"
         :can-miss="canManage"
+        :can-complete="canComplete"
+        :can-open-clinical="canOpenClinical"
+        :can-record-measurements="canComplete"
         @call-next="callNext"
+        @complete-and-call-next="completeAndCallNext"
         @start="(id) => board.run(id, () => queueApi.start(id))"
         @complete="(id) => board.run(id, () => queueApi.complete(id))"
         @miss="miss"
+        @record-measurements="(entry) => (measuringEntry = entry)"
       />
 
       <div class="lists">
         <QueueList
-          :entries="board.waiting.value"
+          :entries="
+            isDoctor ? board.waiting.value.slice(0, 4) : board.waiting.value
+          "
           :can-manage="canManage"
+          :can-call="!isDoctor"
           :working="board.working.value"
+          :can-record-measurements="canComplete"
           @call="(entry) => board.run(entry.id, () => queueApi.call(entry.id))"
           @emergency="(entry) => (ask = { kind: 'emergency', entry })"
           @clear-emergency="
@@ -264,9 +339,11 @@ function setPresence(presence: DoctorPresence): void {
           "
           @remove="(entry) => (ask = { kind: 'remove', entry })"
           @move="moveEntry"
+          @record-measurements="(entry) => (measuringEntry = entry)"
         />
 
         <ExpectedList
+          v-if="!isDoctor"
           :items="board.notArrived.value"
           :timezone="timezone"
           :can-check-in="canManage"
@@ -278,7 +355,7 @@ function setPresence(presence: DoctorPresence): void {
       <!-- Finished, missed and removed. Kept visible so the desk can see what
            happened, and so a missed patient can be put back. -->
       <section
-        v-if="board.settled.value.length > 0"
+        v-if="!isDoctor && board.settled.value.length > 0"
         class="dcard"
       >
         <header class="dcard__head">
@@ -358,6 +435,24 @@ function setPresence(presence: DoctorPresence): void {
       @confirm="resolveAsk"
       @cancel="ask = null"
     />
+
+    <WalkInDialog
+      :open="addingWalkIn"
+      :working="board.working.value === 'walk-in'"
+      @close="addingWalkIn = false"
+      @submit="admitWalkIn"
+    />
+
+    <RecordMeasurementDialog
+      :open="measuringEntry !== null"
+      :child-name="measuringEntry?.child.fullName"
+      :working="
+        measuringEntry !== null &&
+          board.working.value === `measurements-${measuringEntry.id}`
+      "
+      @close="measuringEntry = null"
+      @submit="recordMeasurements"
+    />
   </div>
 </template>
 
@@ -394,6 +489,11 @@ function setPresence(presence: DoctorPresence): void {
   margin: 0;
   text-align: center;
   font-size: 12.5px;
+}
+
+.queue-tools {
+  display: flex;
+  justify-content: flex-end;
 }
 
 @media (max-width: 1100px) {

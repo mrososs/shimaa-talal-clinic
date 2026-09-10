@@ -36,33 +36,25 @@ const late = computed(() => props.items.filter((item) => item.isLate).length);
 <template>
   <section class="dcard">
     <header class="dcard__head">
-      <h2 class="dcard__title">
-        بانتظار الوصول
-      </h2>
+      <h2 class="dcard__title">بانتظار الوصول</h2>
       <div class="drow">
-        <span
-          v-if="late > 0"
-          class="dpill dpill--warn"
-        >متأخر {{ arabicDigits(late) }}</span>
+        <span v-if="late > 0" class="dpill dpill--warn"
+          >متأخر {{ arabicDigits(late) }}</span
+        >
         <span class="dpill">{{ arabicDigits(items.length) }}</span>
       </div>
     </header>
 
-    <p
-      v-if="items.length === 0"
-      class="dcard--pad dmuted centre"
-    >
+    <p v-if="items.length === 0" class="dcard--pad dmuted centre">
       وصل كل من لديه موعد.
     </p>
 
-    <div
-      v-else
-      class="dtable"
-    >
+    <div v-else class="dtable">
       <div
         v-for="item in items"
         :key="item.id"
         class="dtable__row row"
+        :data-appointment-id="item.id"
       >
         <!-- Stacked rather than columned: this list shares the row with the
              queue itself, so it is often half the width and four columns of
@@ -72,10 +64,7 @@ const late = computed(() => props.items.filter((item) => item.isLate).length);
             <span class="row__window">
               {{ windowLabel(item.windowStart, item.windowEnd, timezone) }}
             </span>
-            <span
-              v-if="item.isLate"
-              class="dpill dpill--warn"
-            >تأخّر</span>
+            <span v-if="item.isLate" class="dpill dpill--warn">تأخّر</span>
           </span>
           <strong>{{ item.child.fullName }}</strong>
           <span class="dmuted">

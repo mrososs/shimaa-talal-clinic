@@ -100,6 +100,20 @@ export default [
                 'pg',
               ],
             },
+            {
+              // Browser journeys compose all runtimes from outside the product
+              // boundary. Their isolated fixtures may provision through pg,
+              // while browser actions still use only the real public clients.
+              sourceTag: 'platform:e2e',
+              onlyDependOnLibsWithTags: [
+                'platform:mobile',
+                'platform:dashboard',
+                'platform:client',
+                'platform:server',
+                'platform:shared',
+                'platform:e2e',
+              ],
+            },
 
             // ---------------------------------------------------------------
             // type: which layer a project sits in.
@@ -172,6 +186,18 @@ export default [
               sourceTag: 'type:contract',
               onlyDependOnLibsWithTags: ['type:contract'],
             },
+            {
+              sourceTag: 'type:e2e',
+              onlyDependOnLibsWithTags: [
+                'type:app',
+                'type:workflow',
+                'type:feature',
+                'type:data-access',
+                'type:util',
+                'type:contract',
+                'type:e2e',
+              ],
+            },
 
             // ---------------------------------------------------------------
             // scope: which business domain a project belongs to.
@@ -204,6 +230,10 @@ export default [
               onlyDependOnLibsWithTags: ['scope:patients', 'scope:shared'],
             },
             {
+              sourceTag: 'scope:clinical',
+              onlyDependOnLibsWithTags: ['scope:clinical', 'scope:shared'],
+            },
+            {
               sourceTag: 'scope:notifications',
               onlyDependOnLibsWithTags: ['scope:notifications', 'scope:shared'],
             },
@@ -222,6 +252,7 @@ export default [
                 'scope:queue',
                 'scope:payments',
                 'scope:patients',
+                'scope:clinical',
                 'scope:notifications',
                 'scope:shared',
               ],

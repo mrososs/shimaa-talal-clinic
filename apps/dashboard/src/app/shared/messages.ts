@@ -15,7 +15,11 @@ const AUTH_MESSAGES: Record<AuthErrorCode, string> = {
   email_not_confirmed: 'يلزم تأكيد البريد الإلكتروني أولاً.',
   email_taken: 'هذا البريد الإلكتروني مسجَّل بالفعل. جرِّبي تسجيل الدخول.',
   email_invalid: 'هذا البريد الإلكتروني غير صالح. تحقّقي منه وأعيدي المحاولة.',
+  phone_invalid: 'رقم الهاتف غير صالح.',
   weak_password: 'كلمة المرور قصيرة جداً — ٨ أحرف على الأقل.',
+  otp_invalid: 'رمز التحقق غير صحيح.',
+  otp_expired: 'انتهت صلاحية رمز التحقق.',
+  otp_delivery_failed: 'تعذّر إرسال رمز التحقق.',
   rate_limited: 'محاولات كثيرة. انتظري قليلاً ثم أعيدي المحاولة.',
   network: 'تعذَّر الاتصال. تحقّقي من الإنترنت وأعيدي المحاولة.',
   unknown: 'حدث خطأ غير متوقع. أعيدي المحاولة.',
@@ -35,6 +39,7 @@ const API_MESSAGES: Record<string, string> = {
   guardian_phone_taken:
     'هذا الرقم مسجَّل بالفعل لدى العيادة. تواصلي مع الاستقبال لربط الحساب.',
   invalid_phone: 'رقم الهاتف غير صحيح. مثال: ٠١٠١٢٣٤٥٦٧٨',
+  verified_phone_mismatch: 'رقم الهاتف لا يطابق رقم الحساب الموثّق.',
   auth_user_already_linked: 'هذا الحساب مرتبط بملف عائلي بالفعل.',
   guardian_already_claimed: 'هذا الملف مرتبط بحساب آخر.',
   claim_code_invalid: 'الرمز غير صحيح. تأكّدي منه مع الاستقبال.',
@@ -62,9 +67,17 @@ const API_MESSAGES: Record<string, string> = {
   queue_conflict: 'تغيّر الطابور للتو — حدَّثنا الشاشة.',
   queue_invalid_transition: 'تغيّر وضع هذا المريض للتو — حدَّثنا الشاشة.',
   queue_grace_not_expired: 'ما زالت مهلة الحضور سارية.',
+  queue_current_patient_still_in_service:
+    'يوجد مريض ما زال في الكشف — أنهِ الكشف أولًا.',
+  queue_child_not_accessible: 'هذا الطفل غير مسجّل لهذه العيادة أو لهذا الملف.',
   queue_reason_required: 'يلزم ذكر السبب.',
   queue_entry_not_found: 'لم نعثر على هذا المريض في الطابور.',
   invalid_transition: 'هذا الإجراء غير ممكن في الوضع الحالي.',
+
+  // Clinical records.
+  clinical_encounter_finalized: 'تم إنهاء هذا السجل ولا يمكن تعديله.',
+  clinical_encounter_not_found: 'لم نعثر على سجل الكشف.',
+  clinical_invalid_measurement: 'أدخلي قياسًا واحدًا صحيحًا على الأقل.',
 };
 
 export function apiMessage(error: unknown): string {

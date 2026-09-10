@@ -22,7 +22,14 @@ describe('dashboard router', () => {
       'overview',
       'appointments',
       'queue',
+      'messages',
       'reception-booking',
+      'patients',
+      'payments',
+      'reports',
+      'settings',
+      'consultation',
+      'growth',
     ]);
   });
 

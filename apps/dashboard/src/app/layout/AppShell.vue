@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
+import { computed, shallowRef } from 'vue';
+import { RouterView, useRoute, useRouter } from 'vue-router';
 import { session } from '../runtime';
-import { navigationFor } from './navigation';
+import DashboardSidebar from './components/DashboardSidebar.vue';
+import DashboardTopbar from './components/DashboardTopbar.vue';
 
 /**
  * The frame every staff screen renders inside.
  *
  * Three regions, from the design: a sidebar on the reading-start side, a top
- * bar that names where you are, and the scrolling content. The sidebar and the
+ * bar that names where you are, and the scrolling content. The fixed sidebar and the
  * top bar are the shell's job precisely so a screen never has to restate them —
  * a page that drew its own header would drift from the others.
  *
@@ -20,21 +21,10 @@ import { navigationFor } from './navigation';
 const router = useRouter();
 const route = useRoute();
 const state = session.state;
-const signingOut = ref(false);
+const signingOut = shallowRef(false);
 
 const member = computed(() => state.identity?.member ?? null);
 const clinic = computed(() => state.identity?.clinic ?? null);
-const links = computed(() => navigationFor(member.value?.role ?? null));
-
-const ROLE_LABELS: Record<string, string> = {
-  doctor: 'الطبيبة',
-  // The clinic's own word for this role. The stored value stays `reception`.
-  reception: 'مساعدة العيادة',
-  admin: 'مسؤول',
-};
-
-/** The clinic's initial, for the brand tile. */
-const brandInitial = computed(() => clinic.value?.name?.trim().at(0) ?? 'ع');
 
 /** What the top bar says. Read from the route so a screen cannot forget it. */
 const heading = computed(() => ({
@@ -67,51 +57,14 @@ async function signOut(): Promise<void> {
 
 <template>
   <div class="dash">
-    <aside
+    <DashboardSidebar
       v-if="member"
-      class="dash-side"
-    >
-      <div class="dash-brand">
-        <div class="dash-brand__logo">
-          {{ brandInitial }}
-        </div>
-        <div>
-          <p class="dash-brand__name">
-            {{ clinic?.name ?? 'العيادة' }}
-          </p>
-          <p class="dash-brand__role">
-            {{ member.displayName }} ·
-            {{ ROLE_LABELS[member.role] ?? member.role }}
-          </p>
-        </div>
-      </div>
-
-      <nav class="dash-nav">
-        <!--
-          Matched by name rather than with `active-class`. That matches
-          inclusively, so the index route ('' under '/') lights up on every
-          child page and two links read as current at once.
-        -->
-        <router-link
-          v-for="link in links"
-          :key="link.name"
-          class="dash-navbtn"
-          :class="{ 'dash-navbtn--active': route.name === link.name }"
-          :aria-current="route.name === link.name ? 'page' : undefined"
-          :to="{ name: link.name }"
-        >
-          {{ link.label }}
-        </router-link>
-      </nav>
-
-      <button
-        class="dbtn dbtn--ghost dbtn--block"
-        :disabled="signingOut"
-        @click="signOut"
-      >
-        {{ signingOut ? '...' : 'تسجيل الخروج' }}
-      </button>
-    </aside>
+      :member="member"
+      :clinic-name="clinic?.name ?? 'العيادة'"
+      :active-route-name="route.name"
+      :signing-out="signingOut"
+      @sign-out="signOut"
+    />
 
     <main class="dash-main">
       <section
@@ -121,8 +74,8 @@ async function signOut(): Promise<void> {
         <div class="dcard dcard--pad dstack">
           <h1>لا صلاحية لهذا الحساب</h1>
           <p class="dmuted">
-            هذا الحساب ليس مسجَّلاً ضمن فريق العيادة. إن كنتِ من الفريق،
-            تواصلي مع مسؤول العيادة لإضافة حسابك.
+            هذا الحساب ليس مسجَّلاً ضمن فريق العيادة. إن كنتِ من الفريق، تواصلي
+            مع مسؤول العيادة لإضافة حسابك.
           </p>
           <button
             class="dbtn dbtn--ghost"
@@ -154,15 +107,11 @@ async function signOut(): Promise<void> {
       </section>
 
       <template v-else>
-        <header class="dash-top">
-          <div class="dash-top__title">
-            <h1>{{ heading.title }}</h1>
-            <p v-if="heading.subtitle">
-              {{ heading.subtitle }}
-            </p>
-          </div>
-          <span class="dpill dash-top__today">{{ todayLabel }}</span>
-        </header>
+        <DashboardTopbar
+          :title="heading.title"
+          :subtitle="heading.subtitle"
+          :today-label="todayLabel"
+        />
 
         <!--
           The scroll container, and the only place page padding is defined. A
@@ -188,10 +137,6 @@ async function signOut(): Promise<void> {
   max-width: 460px;
 }
 
-.dash-top__today {
-  margin-inline-start: auto;
-}
-
 @media (max-width: 860px) {
   .dash {
     flex-direction: column;
@@ -199,8 +144,15 @@ async function signOut(): Promise<void> {
 
   .dash-side {
     width: 100%;
+    height: auto;
+    position: static;
+    overflow: visible;
     border-inline-end: none;
     border-block-end: 1px solid var(--line);
+  }
+
+  .dash-main {
+    margin-inline-start: 0;
   }
 
   .dash-nav {

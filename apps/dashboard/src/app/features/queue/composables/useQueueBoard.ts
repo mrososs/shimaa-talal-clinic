@@ -25,7 +25,7 @@ export const BOARD_POLL_MS = 5_000;
  *
  * After a command the board is re-read in full rather than patched with the one
  * row that came back. Half these commands move other people: calling the next
- * patient completes whoever was in the room, and an emergency changes what
+ * patient changes the board, and an emergency changes what
  * every waiting family is told. Folding in a single row would leave the rest of
  * the screen quietly stale — and a failed command leaves it stale in a way that
  * *looks* fine, which is worse.

@@ -15,6 +15,7 @@
     "build": "nx run-many -t build",
     "lint": "nx run-many -t lint",
     "test": "nx run-many -t test",
+    "test:dashboard:e2e": "nx run dashboard-e2e:e2e",
     "typecheck": "nx run-many -t typecheck",
     "graph": "nx graph",
     "format": "nx format:write",
@@ -23,10 +24,12 @@
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
     "bootstrap:staff": "node tools/bootstrap-staff.mjs",
+    "demo:accounts": "node tools/bootstrap-demo-accounts.mjs",
     "demo:day": "node tools/demo-day.mjs --up",
     "demo:day:down": "node tools/demo-day.mjs --down"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@capacitor/cli": "^8.5.1",
     "@eslint/js": "^9.8.0",
     "@nestjs/schematics": "^11.0.0",
@@ -43,6 +46,7 @@
     "@nx/web": "23.2.0",
     "@nx/webpack": "23.2.0",
     "@nx/workspace": "23.2.0",
+    "@playwright/test": "1.63.0",
     "@swc/helpers": "~0.5.18",
     "@types/jest": "~30.0.0",
     "@types/node": "^24.13.3",
