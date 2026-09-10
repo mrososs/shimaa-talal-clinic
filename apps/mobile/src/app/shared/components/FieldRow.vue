@@ -15,6 +15,7 @@ import { IonIcon } from '@ionic/vue';
  * and a component that tried to cover all three would grow a prop per variant.
  */
 defineProps<{
+  forId: string;
   label: string;
   icon?: string;
   error?: string | null;
@@ -24,32 +25,18 @@ defineProps<{
 
 <template>
   <div class="field">
-    <label class="field__label">{{ label }}</label>
+    <label class="field__label" :for="forId">{{ label }}</label>
 
-    <div
-      class="field__row"
-      :class="{ 'field__row--error': error }"
-    >
-      <ion-icon
-        v-if="icon"
-        class="field__icon"
-        :icon="icon"
-      />
+    <div class="field__row" :class="{ 'field__row--error': error }">
+      <ion-icon v-if="icon" class="field__icon" :icon="icon" />
       <slot />
       <slot name="end" />
     </div>
 
-    <p
-      v-if="error"
-      class="field__error"
-      role="alert"
-    >
+    <p v-if="error" :id="`${forId}-message`" class="field__error" role="alert">
       {{ error }}
     </p>
-    <p
-      v-else-if="hint"
-      class="field__hint"
-    >
+    <p v-else-if="hint" :id="`${forId}-message`" class="field__hint">
       {{ hint }}
     </p>
   </div>

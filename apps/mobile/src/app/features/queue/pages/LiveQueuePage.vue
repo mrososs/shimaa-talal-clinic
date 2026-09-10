@@ -70,7 +70,6 @@ onIonViewDidLeave(() => queue.close());
   <screen-shell
     title="العداد المباشر"
     subtitle="دورك في العيادة، محدَّثاً أولاً بأول"
-    tabs
   >
     <template #header-end>
       <button
@@ -87,22 +86,13 @@ onIonViewDidLeave(() => queue.close());
     <div class="stack">
       <!-- First load only. A poll must never blank a screen a parent is
            reading. -->
-      <div
-        v-if="queue.loading.value"
-        class="card centre"
-      >
+      <div v-if="queue.loading.value" class="card centre">
         <ion-spinner name="crescent" />
-        <p class="muted">
-          جارٍ تحديث الطابور…
-        </p>
+        <p class="muted">جارٍ تحديث الطابور…</p>
       </div>
 
       <template v-else>
-        <div
-          v-if="queue.failure.value"
-          class="card notice"
-          role="alert"
-        >
+        <div v-if="queue.failure.value" class="card notice" role="alert">
           <p class="notice__text">
             {{ queue.failure.value }}
           </p>
@@ -117,24 +107,16 @@ onIonViewDidLeave(() => queue.close());
         </div>
 
         <!-- Nothing today: no booking and no turn. -->
-        <section
-          v-if="idle"
-          class="card centre empty"
-        >
+        <section v-if="idle" class="card centre empty">
           <span class="empty__ico">
             <ion-icon :icon="calendarOutline" />
           </span>
-          <h2 class="section-title">
-            لم يتم تسجيل الوصول بعد
-          </h2>
+          <h2 class="section-title">لم يتم تسجيل الوصول بعد</h2>
           <p class="muted">
             لا يوجد دور لك في طابور اليوم. بعد أن يسجّل الاستقبال وصولك في
             العيادة سيظهر هنا رقم دورك وكم حالة أمامك.
           </p>
-          <router-link
-            class="empty__link"
-            :to="{ name: 'appointments' }"
-          >
+          <router-link class="empty__link" :to="{ name: 'appointments' }">
             عرض مواعيدي
           </router-link>
         </section>
@@ -180,17 +162,10 @@ onIonViewDidLeave(() => queue.close());
       </p>
 
       <template #actions>
-        <ion-button
-          fill="outline"
-          size="small"
-          @click="deferringEntry = null"
-        >
+        <ion-button fill="outline" size="small" @click="deferringEntry = null">
           تراجع
         </ion-button>
-        <ion-button
-          size="small"
-          @click="confirmDefer"
-        >
+        <ion-button size="small" @click="confirmDefer">
           تأكيد التأجيل
         </ion-button>
       </template>

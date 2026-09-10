@@ -60,12 +60,12 @@
   --ion-color-danger-shade: #d25050;
   --ion-color-danger-tint: #f16b6b;
 
-  --ion-color-medium: #9c95a3;
-  --ion-color-medium-rgb: 156, 149, 163;
+  --ion-color-medium: #746c7c;
+  --ion-color-medium-rgb: 116, 108, 124;
   --ion-color-medium-contrast: #ffffff;
   --ion-color-medium-contrast-rgb: 255, 255, 255;
-  --ion-color-medium-shade: #898390;
-  --ion-color-medium-tint: #a6a0ac;
+  --ion-color-medium-shade: #665f6d;
+  --ion-color-medium-tint: #827b89;
 
   /* Warm cream, not neutral grey. */
   --ion-background-color: #fff4ec;

@@ -49,7 +49,9 @@
 
   --ink: #3a3340; /* primary text */
   --ink-2: #6b6470; /* secondary text */
-  --muted: #9c95a3; /* tertiary text */
+  /* The prototype grey was only 2.9:1 on white. This remains visually quiet
+     while clearing WCAG AA for normal-size helper text on both surfaces. */
+  --muted: #746c7c; /* tertiary text */
   --line: #f0e7e0; /* hairlines */
 
   --ok: #2fb479;

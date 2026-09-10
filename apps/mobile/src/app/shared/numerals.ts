@@ -17,3 +17,10 @@ export function arabicDigits(value: string | number): string {
     (digit) => ARABIC_INDIC[Number(digit)],
   );
 }
+
+/** Arabic keyboard digits to the ASCII form expected by auth and APIs. */
+export function latinDigits(value: string): string {
+  return value
+    .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
+    .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)));
+}

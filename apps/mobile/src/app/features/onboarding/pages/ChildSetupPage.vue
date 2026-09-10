@@ -63,9 +63,7 @@ async function submit(): Promise<void> {
   try {
     await identityApi.createChild({
       fullName: fullName.value.trim(),
-      ...(dateOfBirth.value === ''
-        ? {}
-        : { dateOfBirth: dateOfBirth.value }),
+      ...(dateOfBirth.value === '' ? {} : { dateOfBirth: dateOfBirth.value }),
       ...(sex.value === '' ? {} : { sex: sex.value }),
     });
     await session.refreshIdentity();
@@ -80,22 +78,16 @@ async function submit(): Promise<void> {
 
 <template>
   <ion-page>
-    <ion-content>
+    <ion-content class="safe-content">
       <div class="screen onboarding">
         <header>
-          <h1 class="title">
-            بيانات طفلك
-          </h1>
+          <h1 class="title">بيانات طفلك</h1>
           <p class="subtitle">
             يمكنك إضافة بقية الأطفال لاحقاً من الصفحة الرئيسية.
           </p>
         </header>
 
-        <form
-          class="stack"
-          novalidate
-          @submit.prevent="submit"
-        >
+        <form class="stack" novalidate @submit.prevent="submit">
           <ion-input
             v-model="fullName"
             label="اسم الطفل"
@@ -116,9 +108,7 @@ async function submit(): Promise<void> {
           />
 
           <div>
-            <p class="subtle field-label">
-              النوع (اختياري)
-            </p>
+            <p class="subtle field-label">النوع (اختياري)</p>
             <ion-segment v-model="sex">
               <ion-segment-button
                 v-for="option in SEXES"
@@ -139,10 +129,7 @@ async function submit(): Promise<void> {
               size="large"
               :disabled="pending"
             >
-              <ion-spinner
-                v-if="pending"
-                name="crescent"
-              />
+              <ion-spinner v-if="pending" name="crescent" />
               <span v-else>حفظ ومتابعة</span>
             </ion-button>
           </div>

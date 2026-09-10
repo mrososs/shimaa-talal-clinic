@@ -10,11 +10,11 @@ export default defineConfig(() => ({
   envDir: '../../',
   cacheDir: '../../node_modules/.vite/apps/mobile',
   server: {
-    port: 4200,
+    port: 4202,
     host: 'localhost',
   },
   preview: {
-    port: 4300,
+    port: 4302,
     host: 'localhost',
   },
   plugins: [vue()],

@@ -15,6 +15,7 @@ import { createSessionStore } from './session-store';
 const session: AuthSession = {
   accessToken: 'token',
   userId: 'user-1',
+  phone: '+201012345678',
   expiresAt: null,
 };
 
@@ -38,6 +39,10 @@ function stubProvider(overrides: Partial<AuthProvider> = {}): {
     restoreSession: async () => null,
     signInWithPassword: async () => session,
     signUp: async () => ({ session, needsEmailConfirmation: false }),
+    startPhoneOtp: async () => undefined,
+    verifyPhoneOtp: async () => session,
+    requestPasswordReset: async () => undefined,
+    updatePassword: async () => undefined,
     onAuthStateChange: (next) => {
       listener = next;
       return unsubscribe;
@@ -46,7 +51,11 @@ function stubProvider(overrides: Partial<AuthProvider> = {}): {
     ...overrides,
   };
 
-  const store = { auth, emit: (s: AuthSession | null) => listener(s), unsubscribe };
+  const store = {
+    auth,
+    emit: (s: AuthSession | null) => listener(s),
+    unsubscribe,
+  };
   return store;
 }
 
@@ -301,6 +310,81 @@ describe('createSessionStore', () => {
     });
   });
 
+  describe('phone OTP', () => {
+    it('starts a challenge without authenticating early', async () => {
+      const { auth } = stubProvider();
+      const start = vi.spyOn(auth, 'startPhoneOtp');
+      const store = createSessionStore({
+        auth,
+        loadIdentity: async () => identity,
+      });
+
+      expect(await store.startPhoneOtp('+201012345678')).toBe(true);
+      expect(start).toHaveBeenCalledWith('+201012345678');
+      expect(store.state.status).toBe('restoring');
+      expect(store.state.session).toBeNull();
+    });
+
+    it('adopts the verified session and loads identity', async () => {
+      const { auth } = stubProvider();
+      const store = createSessionStore({
+        auth,
+        loadIdentity: async () => identity,
+      });
+
+      expect(
+        await store.verifyPhoneOtp({
+          phone: '+201012345678',
+          token: '123456',
+        }),
+      ).toBe(true);
+      expect(store.state.status).toBe('authenticated');
+      expect(store.state.session?.phone).toBe('+201012345678');
+      expect(store.state.identity).toEqual(identity);
+    });
+
+    it('keeps the challenge recoverable after a bad token', async () => {
+      const { auth } = stubProvider({
+        verifyPhoneOtp: async () => {
+          throw new AuthError('otp_invalid', 'bad token');
+        },
+      });
+      const store = createSessionStore({
+        auth,
+        loadIdentity: async () => identity,
+      });
+
+      expect(
+        await store.verifyPhoneOtp({
+          phone: '+201012345678',
+          token: '000000',
+        }),
+      ).toBe(false);
+      expect(store.state.authError).toBe('otp_invalid');
+      expect(store.state.session).toBeNull();
+    });
+  });
+
+  describe('password recovery', () => {
+    it('requests a link without changing authentication state', async () => {
+      const { auth } = stubProvider();
+      const request = vi.spyOn(auth, 'requestPasswordReset');
+      const store = createSessionStore({
+        auth,
+        loadIdentity: async () => identity,
+      });
+
+      expect(
+        await store.requestPasswordReset(
+          'parent@example.test',
+          'http://localhost:4202/auth/update-password',
+        ),
+      ).toBe(true);
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(store.state.session).toBeNull();
+    });
+  });
+
   describe('sign out and external changes', () => {
     it('clears everything and tells the provider', async () => {
       const { auth } = stubProvider({ restoreSession: async () => session });
@@ -320,7 +404,9 @@ describe('createSessionStore', () => {
     });
 
     it('follows a sign-out that happened elsewhere', async () => {
-      const { auth, emit } = stubProvider({ restoreSession: async () => session });
+      const { auth, emit } = stubProvider({
+        restoreSession: async () => session,
+      });
       const store = createSessionStore({
         auth,
         loadIdentity: async () => identity,
@@ -336,7 +422,9 @@ describe('createSessionStore', () => {
     it('does not re-fetch the identity when the token merely refreshes', async () => {
       // The provider refreshes on a timer. Reloading identity each time would
       // turn a silent background refresh into a request storm.
-      const { auth, emit } = stubProvider({ restoreSession: async () => session });
+      const { auth, emit } = stubProvider({
+        restoreSession: async () => session,
+      });
       const loadIdentity = vi.fn(async () => identity);
       const store = createSessionStore({ auth, loadIdentity });
 
@@ -353,7 +441,9 @@ describe('createSessionStore', () => {
     it('ignores the provider’s initial null while still restoring', async () => {
       // supabase-js emits an INITIAL_SESSION event at subscribe time. Acting on
       // it would settle the store as anonymous before bootstrap has looked.
-      const { auth, emit } = stubProvider({ restoreSession: async () => session });
+      const { auth, emit } = stubProvider({
+        restoreSession: async () => session,
+      });
       const store = createSessionStore({
         auth,
         loadIdentity: async () => identity,

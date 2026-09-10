@@ -6,6 +6,7 @@ import {
   type AuthErrorCode,
   type AuthProvider,
   type AuthSession,
+  type PhoneOtpCredentials,
 } from '@clinic/client-auth';
 
 /**
@@ -29,9 +30,7 @@ import {
 
 export type SessionStatus =
   /** Before the first `bootstrap()` settles. Render a splash, not a login. */
-  | 'restoring'
-  | 'anonymous'
-  | 'authenticated';
+  'restoring' | 'anonymous' | 'authenticated';
 
 /**
  * Why loading the clinic identity failed, when it is not a transport problem.
@@ -69,6 +68,12 @@ export interface SessionStore<TIdentity> {
    * requires email confirmation, so there is no session to route with.
    */
   signUp(credentials: AuthCredentials): Promise<boolean>;
+  /** Send an SMS challenge. No authenticated state exists until verification. */
+  startPhoneOtp(phone: string): Promise<boolean>;
+  /** Verify an SMS challenge, adopt its session and load the clinic identity. */
+  verifyPhoneOtp(credentials: PhoneOtpCredentials): Promise<boolean>;
+  requestPasswordReset(email: string, redirectTo: string): Promise<boolean>;
+  updatePassword(password: string): Promise<boolean>;
   signOut(): Promise<void>;
   /**
    * Forget the last credential failure.
@@ -200,6 +205,62 @@ export function createSessionStore<TIdentity>(
           return false;
         }
         await adopt(result.session);
+        return true;
+      } catch (error) {
+        state.authError = error instanceof AuthError ? error.code : 'unknown';
+        return false;
+      } finally {
+        state.pending = false;
+      }
+    },
+
+    async startPhoneOtp(phone) {
+      state.pending = true;
+      state.authError = null;
+      try {
+        await options.auth.startPhoneOtp(phone);
+        return true;
+      } catch (error) {
+        state.authError = error instanceof AuthError ? error.code : 'unknown';
+        return false;
+      } finally {
+        state.pending = false;
+      }
+    },
+
+    async verifyPhoneOtp(credentials) {
+      state.pending = true;
+      state.authError = null;
+      try {
+        await adopt(await options.auth.verifyPhoneOtp(credentials));
+        return true;
+      } catch (error) {
+        state.authError = error instanceof AuthError ? error.code : 'unknown';
+        return false;
+      } finally {
+        state.pending = false;
+      }
+    },
+
+    async requestPasswordReset(email, redirectTo) {
+      state.pending = true;
+      state.authError = null;
+      try {
+        await options.auth.requestPasswordReset(email, redirectTo);
+        return true;
+      } catch (error) {
+        state.authError = error instanceof AuthError ? error.code : 'unknown';
+        return false;
+      } finally {
+        state.pending = false;
+      }
+    },
+
+    async updatePassword(password) {
+      state.pending = true;
+      state.authError = null;
+      try {
+        await options.auth.updatePassword(password);
         return true;
       } catch (error) {
         state.authError = error instanceof AuthError ? error.code : 'unknown';

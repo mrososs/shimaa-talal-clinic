@@ -4,6 +4,7 @@ import type { SessionStore } from '@clinic/client-session';
 import type { MeResponse } from '@clinic/contracts';
 import {
   ROUTE_META_ONBOARDING,
+  ROUTE_META_PASSWORD_RECOVERY,
   ROUTE_META_PUBLIC,
   createAuthGuard,
 } from './auth-guard';
@@ -52,6 +53,9 @@ const onboardingRoute = route('onboarding-guardian', {
   [ROUTE_META_ONBOARDING]: true,
 });
 const homeRoute = route('home');
+const recoveryRoute = route('update-password', {
+  [ROUTE_META_PASSWORD_RECOVERY]: true,
+});
 
 function guardFor(session: SessionStore<MeResponse>) {
   return createAuthGuard({ session, ready: async () => undefined });
@@ -107,6 +111,11 @@ describe('mobile auth guard', () => {
       expect(await guard(onboardingRoute)).toEqual({ name: 'sign-in' });
     });
 
+    it('rejects a recovery route when its link did not establish a session', async () => {
+      const guard = guardFor(storeWith({ status: 'anonymous' }));
+      expect(await guard(recoveryRoute)).toEqual({ name: 'sign-in' });
+    });
+
     it('treats a still-restoring session as not signed in', async () => {
       const guard = guardFor(storeWith({ status: 'restoring' }));
       expect(await guard(homeRoute)).toEqual({ name: 'sign-in' });
@@ -131,6 +140,10 @@ describe('mobile auth guard', () => {
 
     it('keeps a signed-in user off the auth screens', async () => {
       expect(await guardFor(session)(publicRoute)).toEqual({ name: 'home' });
+    });
+
+    it('allows a valid password-recovery session to set the new password', async () => {
+      expect(await guardFor(session)(recoveryRoute)).toBe(true);
     });
   });
 

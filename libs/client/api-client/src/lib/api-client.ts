@@ -89,10 +89,16 @@ export class ApiClient {
     body?: unknown,
     options?: RequestOptions,
   ): Promise<T> {
+    const formData = isFormData(body);
     const response = await this.fetchImpl(this.buildUrl(path, options?.query), {
       method,
-      headers: await this.buildHeaders(body !== undefined, options?.headers),
-      body: body === undefined ? undefined : JSON.stringify(body),
+      headers: await this.buildHeaders(
+        body !== undefined,
+        formData,
+        options?.headers,
+      ),
+      body:
+        body === undefined ? undefined : formData ? body : JSON.stringify(body),
       signal: options?.signal,
     });
 
@@ -136,6 +142,7 @@ export class ApiClient {
 
   private async buildHeaders(
     hasBody: boolean,
+    isMultipart: boolean,
     extra?: Record<string, string>,
   ): Promise<Record<string, string>> {
     const headers: Record<string, string> = {
@@ -144,7 +151,7 @@ export class ApiClient {
       ...extra,
     };
 
-    if (hasBody) {
+    if (hasBody && !isMultipart) {
       headers['Content-Type'] = 'application/json';
     }
 
@@ -169,6 +176,10 @@ export class ApiClient {
       return null;
     }
   }
+}
+
+function isFormData(value: unknown): value is FormData {
+  return typeof FormData !== 'undefined' && value instanceof FormData;
 }
 
 export function createApiClient(options: ApiClientOptions): ApiClient {

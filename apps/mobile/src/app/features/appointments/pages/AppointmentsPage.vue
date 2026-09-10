@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import {
   IonButton,
@@ -7,15 +7,16 @@ import {
   IonRefresher,
   IonRefresherContent,
   IonSpinner,
+  onIonViewDidLeave,
+  onIonViewWillEnter,
   type RefresherCustomEvent,
 } from '@ionic/vue';
 import { chevronBackOutline } from 'ionicons/icons';
-import type { Appointment } from '@clinic/contracts';
 import ScreenShell from '../../../shared/components/ScreenShell.vue';
 import FormNotice from '../../../shared/components/FormNotice.vue';
 import { shortDayLabel, windowLabel } from '../../../shared/format';
-import { apiMessage } from '../../../shared/messages';
-import { bookingApi, session } from '../../../runtime';
+import { session } from '../../../runtime';
+import { useAppointments } from '../composables/useAppointments';
 
 /**
  * Every visit this family has, split into what is ahead and what has been.
@@ -26,11 +27,7 @@ import { bookingApi, session } from '../../../runtime';
 
 const router = useRouter();
 const state = session.state;
-
-const scope = ref<'upcoming' | 'past'>('upcoming');
-const items = ref<Appointment[]>([]);
-const loading = ref(true);
-const failure = ref<string | null>(null);
+const appointments = useAppointments();
 
 const timezone = computed(() => state.identity?.clinic.timezone);
 const childNameById = computed(
@@ -52,32 +49,17 @@ const STATUS: Record<string, { label: string; tone: string }> = {
   no_show: { label: 'لم يحضر', tone: 'danger' },
 };
 
-async function load(): Promise<void> {
-  loading.value = true;
-  failure.value = null;
-  try {
-    items.value = await bookingApi.list(scope.value);
-  } catch (error) {
-    failure.value = apiMessage(error);
-  } finally {
-    loading.value = false;
-  }
-}
-
 async function refresh(event?: RefresherCustomEvent): Promise<void> {
-  await load();
+  await appointments.refresh();
   await event?.target.complete();
 }
 
-watch(scope, load);
-onMounted(load);
+onIonViewWillEnter(() => void appointments.open());
+onIonViewDidLeave(() => appointments.close());
 </script>
 
 <template>
-  <screen-shell
-    title="المواعيد"
-    tabs
-  >
+  <screen-shell title="المواعيد">
     <template #above>
       <ion-refresher
         slot="fixed"
@@ -91,42 +73,42 @@ onMounted(load);
       <div class="tabs">
         <button
           type="button"
-          :class="{ on: scope === 'upcoming' }"
-          @click="scope = 'upcoming'"
+          :class="{ on: appointments.scope.value === 'upcoming' }"
+          @click="appointments.selectScope('upcoming')"
         >
           القادمة
         </button>
         <button
           type="button"
-          :class="{ on: scope === 'past' }"
-          @click="scope = 'past'"
+          :class="{ on: appointments.scope.value === 'past' }"
+          @click="appointments.selectScope('past')"
         >
           السابقة
         </button>
       </div>
 
-      <form-notice :message="failure" />
+      <form-notice :message="appointments.failure.value" />
 
       <div
-        v-if="loading"
+        v-if="appointments.loading.value"
         class="card card--centre"
       >
         <ion-spinner name="crescent" />
       </div>
 
       <div
-        v-else-if="items.length === 0"
+        v-else-if="appointments.empty.value"
         class="card empty"
       >
         <p class="subtitle">
           {{
-            scope === 'upcoming'
+            appointments.scope.value === 'upcoming'
               ? 'لا توجد مواعيد قادمة.'
               : 'لا توجد زيارات سابقة بعد.'
           }}
         </p>
         <ion-button
-          v-if="scope === 'upcoming'"
+          v-if="appointments.scope.value === 'upcoming'"
           expand="block"
           @click="router.push({ name: 'booking' })"
         >
@@ -134,47 +116,48 @@ onMounted(load);
         </ion-button>
       </div>
 
-      <button
-        v-for="appointment in items"
-        v-else
-        :key="appointment.id"
-        type="button"
-        class="card visit"
-        @click="
-          router.push({
-            name: 'appointment-detail',
-            params: { appointmentId: appointment.id },
-          })
-        "
-      >
-        <div class="visit__date">
-          {{ shortDayLabel(appointment.windowStart, timezone) }}
-        </div>
-        <div class="visit__text">
-          <p class="visit__child">
-            {{ childNameById.get(appointment.childId) ?? 'موعد' }}
-          </p>
-          <p class="visit__window">
-            {{
-              windowLabel(
-                appointment.windowStart,
-                appointment.windowEnd,
-                timezone,
-              )
-            }}
-          </p>
-        </div>
-        <span
-          class="chip"
-          :class="`chip--${STATUS[appointment.status]?.tone ?? 'muted'}`"
+      <template v-else>
+        <button
+          v-for="appointment in appointments.items.value"
+          :key="appointment.id"
+          type="button"
+          class="card visit"
+          @click="
+            router.push({
+              name: 'appointment-detail',
+              params: { appointmentId: appointment.id },
+            })
+          "
         >
-          {{ STATUS[appointment.status]?.label ?? appointment.status }}
-        </span>
-        <ion-icon
-          class="visit__chevron"
-          :icon="chevronBackOutline"
-        />
-      </button>
+          <div class="visit__date">
+            {{ shortDayLabel(appointment.windowStart, timezone) }}
+          </div>
+          <div class="visit__text">
+            <p class="visit__child">
+              {{ childNameById.get(appointment.childId) ?? 'موعد' }}
+            </p>
+            <p class="visit__window">
+              {{
+                windowLabel(
+                  appointment.windowStart,
+                  appointment.windowEnd,
+                  timezone,
+                )
+              }}
+            </p>
+          </div>
+          <span
+            class="chip"
+            :class="`chip--${STATUS[appointment.status]?.tone ?? 'muted'}`"
+          >
+            {{ STATUS[appointment.status]?.label ?? appointment.status }}
+          </span>
+          <ion-icon
+            class="visit__chevron"
+            :icon="chevronBackOutline"
+          />
+        </button>
+      </template>
     </div>
   </screen-shell>
 </template>

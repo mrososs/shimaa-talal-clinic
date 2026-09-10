@@ -16,10 +16,9 @@ import { identityApi, session } from '../../../runtime';
 /**
  * Link this account to a family the clinic already has on file.
  *
- * The number matching is not what authorises this. Phone ownership is
- * unverified in this MVP, so a matching number would otherwise mean anyone who
- * guessed it could open somebody's family. The six-digit code, issued by
- * reception to the person in front of them or on the call, is the authorisation.
+ * The number matching is not what authorises this. Even when Supabase has
+ * verified ownership of the number, the clinic-issued six-digit code is what
+ * authorises linking an existing medical family to this account.
  *
  * There is no way to "create a new profile with this number instead": a phone
  * is unique per clinic, so the only honest choices are to claim the family or
@@ -63,15 +62,14 @@ async function submit(): Promise<void> {
 
 <template>
   <ion-page>
-    <ion-content>
+    <ion-content class="safe-content">
       <div class="screen onboarding">
         <header>
-          <h1 class="title">
-            هذا الرقم مسجَّل لدينا
-          </h1>
+          <h1 class="title">هذا الرقم مسجَّل لدينا</h1>
           <p class="subtitle">
             لدى العيادة ملف عائلي مرتبط بالرقم
-            <span class="phone">{{ arabicDigits(phone) }}</span>. لربطه بحسابك، اطلبي من الاستقبال رمز التأكيد المكوَّن من ٦ أرقام.
+            <span class="phone">{{ arabicDigits(phone) }}</span
+            >. لربطه بحسابك، اطلبي من الاستقبال رمز التأكيد المكوَّن من ٦ أرقام.
           </p>
         </header>
 
@@ -82,11 +80,7 @@ async function submit(): Promise<void> {
           </p>
         </div>
 
-        <form
-          class="stack"
-          novalidate
-          @submit.prevent="submit"
-        >
+        <form class="stack" novalidate @submit.prevent="submit">
           <ion-input
             v-model="code"
             label="رمز التأكيد"
@@ -109,10 +103,7 @@ async function submit(): Promise<void> {
               size="large"
               :disabled="pending"
             >
-              <ion-spinner
-                v-if="pending"
-                name="crescent"
-              />
+              <ion-spinner v-if="pending" name="crescent" />
               <span v-else>ربط الحساب</span>
             </ion-button>
 

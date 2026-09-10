@@ -50,9 +50,9 @@ file_size_limit = "50MiB"
 [auth]
 enabled = true
 # The URL the browser is redirected back to after an auth flow. The mobile app
-# runs on 4200 and the dashboard on 4201.
-site_url = "http://localhost:4200"
-additional_redirect_urls = ["http://localhost:4200", "http://localhost:4201"]
+# runs on 4202 and the dashboard on 4203.
+site_url = "http://localhost:4202"
+additional_redirect_urls = ["http://localhost:4202", "http://localhost:4203"]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
 refresh_token_reuse_interval = 10
@@ -65,8 +65,15 @@ double_confirm_changes = true
 enable_confirmations = false
 
 [auth.sms]
-enable_signup = false
+enable_signup = true
 enable_confirmations = false
+template = "رمز التحقق لعيادة د. شيماء طلال هو {{ .Code }}"
+max_frequency = "60s"
+
+# Local development only. Hosted Supabase must use a configured SMS provider;
+# this fixed number/code pair never leaves the CLI stack.
+[auth.sms.test_otp]
+201555000001 = "123456"
 
 # Realtime is provisioned but unused. No realtime feature is implemented yet;
 # leaving it enabled costs nothing locally and avoids a config change later.

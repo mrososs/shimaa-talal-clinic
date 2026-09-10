@@ -18,9 +18,9 @@ import { identityApi, session } from '../../../runtime';
 /**
  * The clinic profile, created after the account exists.
  *
- * The phone is asked for here and not on the signup screen, because it is not a
- * credential — it is how the clinic finds this family, and it may already be on
- * file from a phone call made months ago.
+ * Phone-OTP accounts arrive with a verified number and cannot accidentally
+ * type a different one here. Email accounts still provide the clinic contact
+ * number during onboarding.
  *
  * Which is why submitting does not create anything straight away. It asks the
  * clinic whether that number is already known, and routes to the claim screen
@@ -41,7 +41,8 @@ const route = useRoute();
 // Registration already asked for a name. Typing it twice would be an odd
 // welcome, so it arrives in the route and is prefilled here.
 const fullName = ref(String(route.query['name'] ?? ''));
-const phone = ref('');
+const verifiedPhone = computed(() => session.state.session?.phone ?? null);
+const phone = ref(verifiedPhone.value ?? '');
 const relationship = ref<GuardianRelationship>(GuardianRelationship.Mother);
 const submitted = ref(false);
 const pending = ref(false);
@@ -98,7 +99,7 @@ async function submit(): Promise<void> {
 
 <template>
   <ion-page>
-    <ion-content>
+    <ion-content class="safe-content">
       <div class="screen onboarding">
         <header>
           <h1 class="title">
@@ -132,9 +133,16 @@ async function submit(): Promise<void> {
             inputmode="tel"
             autocomplete="tel"
             fill="outline"
+            :readonly="verifiedPhone !== null"
             :class="{ 'ion-invalid': phoneError, 'ion-touched': submitted }"
             :error-text="phoneError ?? undefined"
           />
+          <p
+            v-if="verifiedPhone"
+            class="verified-phone"
+          >
+            ✓ تم التحقق من هذا الرقم برسالة SMS
+          </p>
 
           <div>
             <p class="subtle field-label">
@@ -182,5 +190,12 @@ async function submit(): Promise<void> {
 .field-label {
   margin: 0 0 8px;
   font-size: 0.85rem;
+}
+
+.verified-phone {
+  margin: -8px 4px 0;
+  color: var(--teal-ink);
+  font-size: 12.5px;
+  font-weight: 800;
 }
 </style>

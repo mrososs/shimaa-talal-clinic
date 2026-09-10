@@ -1,7 +1,55 @@
-/*
- * Intentionally empty.
- *
- * No design system, theme, reset or utility layer has been chosen yet. Ionic's
- * required baseline stylesheets are imported in `main.ts`; everything visual
- * beyond that is a Phase 2+ decision.
- */
+html,
+body,
+#root,
+ion-app {
+  width: 100%;
+  height: 100%;
+}
+
+html {
+  background: var(--bg);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  min-width: 320px;
+  margin: 0;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+button,
+a,
+ion-button,
+ion-tab-button {
+  touch-action: manipulation;
+}
+
+button {
+  min-inline-size: 44px;
+  min-block-size: 44px;
+}
+
+ion-content.safe-content {
+  --padding-top: var(--ion-safe-area-top, 0px);
+  --padding-start: var(--ion-safe-area-left, 0px);
+  --padding-end: var(--ion-safe-area-right, 0px);
+}
+
+:where(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--coral) 64%, white);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}

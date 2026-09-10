@@ -15,6 +15,15 @@ import {
   type IdentityApi,
 } from './features/identity/identity.api';
 import { createQueueApi, type QueueApi } from './features/queue/queue.api';
+import { createGrowthApi, type GrowthApi } from './features/growth/growth.api';
+import {
+  createParentMessagesApi,
+  type ParentMessagesApi,
+} from './features/messages/messages.api';
+import {
+  createParentPaymentsApi,
+  type ParentPaymentsApi,
+} from './features/payments/payments.api';
 
 /**
  * Composition root for everything this app talks to.
@@ -47,6 +56,9 @@ export const apiClient: ApiClient = createApiClient({
 export const identityApi: IdentityApi = createIdentityApi(apiClient);
 export const bookingApi: BookingApi = createBookingApi(apiClient);
 export const queueApi: QueueApi = createQueueApi(apiClient);
+export const growthApi: GrowthApi = createGrowthApi(apiClient);
+export const messagesApi: ParentMessagesApi = createParentMessagesApi(apiClient);
+export const paymentsApi: ParentPaymentsApi = createParentPaymentsApi(apiClient);
 
 /**
  * The signed-in session, and who that account is at the clinic.
@@ -81,6 +93,10 @@ function unconfiguredAuth(): AuthProvider {
     restoreSession: async () => null,
     signInWithPassword: fail,
     signUp: fail,
+    startPhoneOtp: fail,
+    verifyPhoneOtp: fail,
+    requestPasswordReset: fail,
+    updatePassword: fail,
     onAuthStateChange: () => () => undefined,
     signOut: async () => undefined,
   };

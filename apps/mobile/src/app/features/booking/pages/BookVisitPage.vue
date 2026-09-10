@@ -11,11 +11,7 @@ import {
 } from '@clinic/contracts';
 import ScreenShell from '../../../shared/components/ScreenShell.vue';
 import FormNotice from '../../../shared/components/FormNotice.vue';
-import {
-  dayLabel,
-  remainingLabel,
-  windowLabel,
-} from '../../../shared/format';
+import { dayLabel, remainingLabel, windowLabel } from '../../../shared/format';
 import { apiMessage } from '../../../shared/messages';
 import { bookingApi, session } from '../../../runtime';
 
@@ -63,7 +59,8 @@ const children = computed<readonly GuardianChild[]>(
 const timezone = computed(() => state.identity?.clinic.timezone);
 
 const windowsForDay = computed(
-  () => days.value.find((day) => day.date === selectedDate.value)?.windows ?? [],
+  () =>
+    days.value.find((day) => day.date === selectedDate.value)?.windows ?? [],
 );
 
 const canConfirm = computed(
@@ -132,24 +129,16 @@ onMounted(load);
     subtitle="اختاري الطفل واليوم وفترة الحضور"
     :back-to="{ name: 'home' }"
   >
-    <div
-      v-if="loading"
-      class="card card--centre"
-    >
+    <div v-if="loading" class="card card--centre">
       <ion-spinner name="crescent" />
     </div>
 
-    <div
-      v-else
-      class="stack"
-    >
+    <div v-else class="stack">
       <form-notice :message="failure" />
 
       <!-- Child -->
       <section class="stack stack--tight">
-        <h2 class="section-title">
-          لِمن الموعد؟
-        </h2>
+        <h2 class="section-title">لِمن الموعد؟</h2>
         <div class="chips">
           <button
             v-for="child in children"
@@ -166,22 +155,14 @@ onMounted(load);
 
       <!-- Day -->
       <section class="stack stack--tight">
-        <h2 class="section-title">
-          اليوم
-        </h2>
-        <div
-          v-if="days.length === 0"
-          class="card empty"
-        >
+        <h2 class="section-title">اليوم</h2>
+        <div v-if="days.length === 0" class="card empty">
           <p class="subtitle">
             لا توجد مواعيد متاحة في الأيام القادمة. جرّبي لاحقاً أو تواصلي مع
             الاستقبال.
           </p>
         </div>
-        <div
-          v-else
-          class="days"
-        >
+        <div v-else class="days">
           <button
             v-for="day in days"
             :key="day.date"
@@ -196,13 +177,8 @@ onMounted(load);
       </section>
 
       <!-- Arrival window -->
-      <section
-        v-if="selectedDate"
-        class="stack stack--tight"
-      >
-        <h2 class="section-title">
-          فترة الحضور
-        </h2>
+      <section v-if="selectedDate" class="stack stack--tight">
+        <h2 class="section-title">فترة الحضور</h2>
         <p class="subtitle windows__note">
           تحضرين في أي وقت داخل الفترة، والدور حسب وقت الوصول.
         </p>
@@ -213,9 +189,10 @@ onMounted(load);
             :key="window.windowStart"
             type="button"
             class="card window"
+            :data-session-id="window.sessionId"
+            :data-window-start="window.windowStart"
             :class="{
-              'window--on':
-                selectedWindow?.windowStart === window.windowStart,
+              'window--on': selectedWindow?.windowStart === window.windowStart,
             }"
             @click="selectedWindow = window"
           >
@@ -236,9 +213,7 @@ onMounted(load);
 
       <!-- Reason -->
       <section class="stack stack--tight">
-        <h2 class="section-title">
-          سبب الزيارة
-        </h2>
+        <h2 class="section-title">سبب الزيارة</h2>
         <div class="chips">
           <button
             v-for="reason in REASONS"
@@ -260,10 +235,7 @@ onMounted(load);
           :disabled="!canConfirm"
           @click="confirm"
         >
-          <ion-spinner
-            v-if="submitting"
-            name="crescent"
-          />
+          <ion-spinner v-if="submitting" name="crescent" />
           <span v-else>تأكيد الحجز</span>
         </ion-button>
       </div>

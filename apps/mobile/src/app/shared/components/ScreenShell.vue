@@ -1,31 +1,28 @@
 <script setup lang="ts">
 import { IonContent, IonPage } from '@ionic/vue';
+import type { RouteLocationRaw } from 'vue-router';
 import AppHeader from './AppHeader.vue';
-import TabBar from './TabBar.vue';
 
 /**
  * The frame a screen renders inside.
  *
- * Exists so that every page does not restate the same four decisions: whether
- * it has a header, whether it has tabs, how much room the tab bar needs, and
- * where the page's own padding comes from. A screen that set its own would
- * drift from the others within a week.
- *
- * `tabs` is opt-in rather than opt-out. Sign-in, onboarding and the booking
- * flow are all screens where a tab bar would offer a way out of a task the
- * person is in the middle of.
+ * It owns the content safe area, optional header and consistent horizontal
+ * measure. Navigation belongs to the router-level shells, so a page cannot
+ * accidentally draw a duplicate tab bar or place content underneath it.
  */
 defineProps<{
   title?: string;
   subtitle?: string;
-  backTo?: { name: string };
-  tabs?: boolean;
+  backTo?: RouteLocationRaw;
 }>();
 </script>
 
 <template>
   <ion-page>
-    <ion-content :scroll-y="true">
+    <ion-content
+      class="screen-shell__content"
+      :scroll-y="true"
+    >
       <app-header
         v-if="title"
         :title="title"
@@ -39,28 +36,24 @@ defineProps<{
 
       <slot name="above" />
 
-      <div
-        class="screen"
-        :class="{ 'screen--tabs': tabs }"
-      >
+      <main class="screen">
         <slot />
-      </div>
+      </main>
     </ion-content>
-
-    <tab-bar v-if="tabs" />
   </ion-page>
 </template>
 
 <style scoped>
-.screen {
-  padding: 18px;
-  padding-block-end: 40px;
-  max-width: 520px;
-  margin-inline: auto;
+.screen-shell__content {
+  --padding-top: var(--ion-safe-area-top, 0px);
+  --padding-start: var(--ion-safe-area-left, 0px);
+  --padding-end: var(--ion-safe-area-right, 0px);
 }
 
-/* Clear the bar rather than sit under it — the last card must stay reachable. */
-.screen--tabs {
-  padding-block-end: calc(96px + env(safe-area-inset-bottom));
+.screen {
+  padding: clamp(16px, 4.4vw, 20px);
+  padding-block-end: 32px;
+  max-width: 520px;
+  margin-inline: auto;
 }
 </style>

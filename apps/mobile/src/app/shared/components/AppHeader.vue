@@ -2,6 +2,7 @@
 import { IonButton, IonIcon } from '@ionic/vue';
 import { arrowForward } from 'ionicons/icons';
 import { useRouter } from 'vue-router';
+import type { RouteLocationRaw } from 'vue-router';
 
 /**
  * The bar at the top of a screen: a title, and a way back.
@@ -14,7 +15,7 @@ const props = defineProps<{
   title: string;
   subtitle?: string;
   /** Where back goes. Omitted means no back button — a tab root. */
-  backTo?: { name: string };
+  backTo?: RouteLocationRaw;
 }>();
 
 const router = useRouter();

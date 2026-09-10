@@ -1,106 +1,109 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import { IonIcon } from '@ionic/vue';
-import { calendarOutline, homeOutline, timeOutline } from 'ionicons/icons';
+import { IonIcon, IonLabel, IonTabBar, IonTabButton } from '@ionic/vue';
+import {
+  calendarOutline,
+  chatbubblesOutline,
+  homeOutline,
+  timeOutline,
+} from 'ionicons/icons';
 
 /**
  * The bottom navigation, from the design.
  *
- * Three destinations, not the design's four: its fourth is "الرسائل", and
- * messaging is out of scope for this phase. A tab that opens nothing is worse
- * than a tab that is not there.
+ * It is deliberately presentation-only. `MobileTabsShell` owns the Ionic tab
+ * router and the framework keeps each tab's navigation stack. Focused flows
+ * such as booking and appointment details live outside that shell.
  *
- * Not `ion-tabs`. That component owns its own router outlet and expects the
- * whole app to be organised around it; this app has screens that must not show
- * tabs at all — sign-in, onboarding, the booking flow — and the shell is
- * simpler when a page decides for itself.
+ * The four destinations are all working routes. Focused tasks remain outside
+ * this shell so the bottom bar never competes with a form or conversation.
  */
 
-const TABS = [
-  { name: 'home', label: 'الرئيسية', icon: homeOutline },
-  { name: 'appointments', label: 'المواعيد', icon: calendarOutline },
-  { name: 'queue', label: 'الطابور', icon: timeOutline },
+const TAB_ITEMS = [
+  {
+    tab: 'home',
+    label: 'الرئيسية',
+    href: '/tabs/home',
+    icon: homeOutline,
+  },
+  {
+    tab: 'appointments',
+    label: 'المواعيد',
+    href: '/tabs/appointments',
+    icon: calendarOutline,
+  },
+  {
+    tab: 'queue',
+    label: 'الطابور',
+    href: '/tabs/queue',
+    icon: timeOutline,
+  },
+  {
+    tab: 'messages',
+    label: 'الرسائل',
+    href: '/tabs/messages',
+    icon: chatbubblesOutline,
+  },
 ] as const;
-
-const route = useRoute();
-const router = useRouter();
-
-/**
- * A tab is active for its own route and anything nested under it, so a
- * detail screen keeps its section lit rather than dropping the highlight.
- */
-const activeName = computed(() => {
-  const matched = route.matched.map((record) => record.name);
-  return TABS.find((tab) => matched.includes(tab.name))?.name ?? null;
-});
 </script>
 
 <template>
-  <nav class="tabbar">
-    <button
-      v-for="tab in TABS"
-      :key="tab.name"
-      type="button"
+  <ion-tab-bar slot="bottom" class="tabbar" aria-label="التنقل الرئيسي">
+    <ion-tab-button
+      v-for="item in TAB_ITEMS"
+      :key="item.tab"
       class="tab"
-      :class="{ 'tab--active': activeName === tab.name }"
-      :aria-current="activeName === tab.name ? 'page' : undefined"
-      @click="router.replace({ name: tab.name })"
+      :tab="item.tab"
+      :href="item.href"
     >
-      <span class="tab__ico">
-        <ion-icon :icon="tab.icon" />
-      </span>
-      {{ tab.label }}
-    </button>
-  </nav>
+      <ion-icon class="tab__icon" aria-hidden="true" :icon="item.icon" />
+      <ion-label>{{ item.label }}</ion-label>
+    </ion-tab-button>
+  </ion-tab-bar>
 </template>
 
 <style scoped>
 .tabbar {
-  position: absolute;
-  bottom: 0;
-  inset-inline: 0;
-  background: rgba(255, 255, 255, 0.92);
+  --background: rgba(255, 255, 255, 0.94);
+  --border: 0;
+  background: var(--background);
   backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-top: 1px solid var(--line);
-  display: flex;
-  /* The extra bottom padding clears the home indicator on a modern handset. */
-  padding: 8px 10px calc(10px + env(safe-area-inset-bottom));
-  z-index: 40;
+  min-height: calc(70px + var(--ion-safe-area-bottom, 0px));
+  padding: 7px 8px max(7px, var(--ion-safe-area-bottom, 0px));
 }
 
 .tab {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  padding: 6px 0;
-  border: none;
-  background: none;
-  cursor: pointer;
-  color: var(--muted);
+  --color: var(--muted);
+  --color-selected: var(--coral-ink);
+  --ripple-color: var(--coral-soft);
+  max-width: none;
+  min-height: 54px;
   font-family: var(--ff-body);
   font-weight: 700;
   font-size: 11px;
-  transition: color 0.15s ease;
 }
 
-.tab--active {
-  color: var(--coral);
-}
-
-.tab__ico {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
+.tab__icon {
+  box-sizing: content-box;
+  width: 20px;
+  height: 20px;
+  padding: 5px 9px;
   border-radius: var(--r-pill);
-  font-size: 19px;
-  transition: background 0.2s ease;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease,
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.tab--active .tab__ico {
+.tab.tab-selected .tab__icon {
   background: var(--coral-soft);
+  transform: translateY(-1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab__icon {
+    transition: none;
+  }
 }
 </style>

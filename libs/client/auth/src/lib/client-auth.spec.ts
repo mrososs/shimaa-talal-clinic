@@ -18,7 +18,7 @@ const { AuthError, createSupabaseAuthProvider } = await import('./client-auth');
 const SESSION = {
   access_token: 'jwt-token',
   expires_at: 1_800_000_000,
-  user: { id: 'user-1' },
+  user: { id: 'user-1', phone: '+201012345678' },
 };
 
 interface AuthStub {
@@ -26,6 +26,10 @@ interface AuthStub {
   getUser: ReturnType<typeof vi.fn>;
   signInWithPassword: ReturnType<typeof vi.fn>;
   signUp: ReturnType<typeof vi.fn>;
+  signInWithOtp: ReturnType<typeof vi.fn>;
+  verifyOtp: ReturnType<typeof vi.fn>;
+  resetPasswordForEmail: ReturnType<typeof vi.fn>;
+  updateUser: ReturnType<typeof vi.fn>;
   signOut: ReturnType<typeof vi.fn>;
   onAuthStateChange: ReturnType<typeof vi.fn>;
 }
@@ -57,6 +61,10 @@ beforeEach(() => {
     getUser: vi.fn().mockResolvedValue({ data: { user: null }, error: null }),
     signInWithPassword: vi.fn(),
     signUp: vi.fn(),
+    signInWithOtp: vi.fn(),
+    verifyOtp: vi.fn(),
+    resetPasswordForEmail: vi.fn(),
+    updateUser: vi.fn(),
     signOut: vi.fn().mockResolvedValue({ error: null }),
     onAuthStateChange: vi
       .fn()
@@ -90,6 +98,7 @@ describe('signInWithPassword', () => {
     ).resolves.toEqual({
       accessToken: 'jwt-token',
       userId: 'user-1',
+      phone: '+201012345678',
       expiresAt: 1_800_000_000,
     });
     expect(auth.signInWithPassword).toHaveBeenCalledWith({
@@ -172,6 +181,7 @@ describe('signUp', () => {
       session: {
         accessToken: 'jwt-token',
         userId: 'user-1',
+        phone: '+201012345678',
         expiresAt: 1_800_000_000,
       },
       needsEmailConfirmation: false,
@@ -214,6 +224,119 @@ describe('signUp', () => {
   });
 });
 
+describe('phone OTP', () => {
+  it('starts an SMS challenge without pretending a session exists', async () => {
+    auth.signInWithOtp.mockResolvedValue({ data: {}, error: null });
+
+    await expect(
+      provider().startPhoneOtp('+201012345678'),
+    ).resolves.toBeUndefined();
+    expect(auth.signInWithOtp).toHaveBeenCalledWith({
+      phone: '+201012345678',
+    });
+  });
+
+  it('verifies the six-digit SMS token and returns its session', async () => {
+    auth.verifyOtp.mockResolvedValue({
+      data: { session: SESSION },
+      error: null,
+    });
+
+    await expect(
+      provider().verifyPhoneOtp({
+        phone: '+201012345678',
+        token: '123456',
+      }),
+    ).resolves.toMatchObject({
+      userId: 'user-1',
+      phone: '+201012345678',
+    });
+    expect(auth.verifyOtp).toHaveBeenCalledWith({
+      phone: '+201012345678',
+      token: '123456',
+      type: 'sms',
+    });
+  });
+
+  it.each([
+    [
+      'expired',
+      supabaseError('Token has expired', { code: 'otp_expired', status: 403 }),
+      'otp_expired',
+    ],
+    [
+      'invalid',
+      supabaseError('Token is invalid', { status: 403 }),
+      'otp_invalid',
+    ],
+    [
+      'delivery',
+      supabaseError('Error sending confirmation OTP', {
+        code: 'sms_send_failed',
+        status: 500,
+      }),
+      'otp_delivery_failed',
+    ],
+    [
+      'rate limit',
+      supabaseError('Wait before sending another', {
+        code: 'over_sms_send_rate_limit',
+        status: 429,
+      }),
+      'rate_limited',
+    ],
+  ])('maps an %s phone failure', async (_label, error, code) => {
+    auth.verifyOtp.mockResolvedValue({ data: { session: null }, error });
+
+    await expect(
+      provider().verifyPhoneOtp({
+        phone: '+201012345678',
+        token: '000000',
+      }),
+    ).rejects.toMatchObject({ code });
+  });
+
+  it('refuses a successful verification response with no session', async () => {
+    auth.verifyOtp.mockResolvedValue({
+      data: { session: null },
+      error: null,
+    });
+
+    await expect(
+      provider().verifyPhoneOtp({
+        phone: '+201012345678',
+        token: '123456',
+      }),
+    ).rejects.toMatchObject({ code: 'otp_invalid' });
+  });
+});
+
+describe('password recovery', () => {
+  it('requests a recovery link with the mobile callback URL', async () => {
+    auth.resetPasswordForEmail.mockResolvedValue({ data: {}, error: null });
+
+    await provider().requestPasswordReset(
+      'parent@example.test',
+      'http://localhost:4202/auth/update-password',
+    );
+
+    expect(auth.resetPasswordForEmail).toHaveBeenCalledWith(
+      'parent@example.test',
+      { redirectTo: 'http://localhost:4202/auth/update-password' },
+    );
+  });
+
+  it('updates the password only through an authenticated recovery session', async () => {
+    auth.updateUser.mockResolvedValue({ data: {}, error: null });
+
+    await provider().updatePassword('new-safe-password');
+
+    expect(auth.updateUser).toHaveBeenCalledWith({
+      password: 'new-safe-password',
+    });
+  });
+});
+
 describe('restoreSession', () => {
   it('returns null when nothing is stored, without asking the server', async () => {
     await expect(provider().restoreSession()).resolves.toBeNull();
@@ -233,6 +356,7 @@ describe('restoreSession', () => {
     await expect(provider().restoreSession()).resolves.toEqual({
       accessToken: 'jwt-token',
       userId: 'user-1',
+      phone: '+201012345678',
       expiresAt: 1_800_000_000,
     });
     expect(auth.signOut).not.toHaveBeenCalled();
@@ -305,6 +429,7 @@ describe('the surface ApiClient depends on', () => {
     await expect(provider().getSession()).resolves.toEqual({
       accessToken: 't',
       userId: 'u',
+      phone: null,
       expiresAt: null,
     });
   });
@@ -324,6 +449,7 @@ describe('onAuthStateChange', () => {
     expect(listener).toHaveBeenCalledWith({
       accessToken: 'jwt-token',
       userId: 'user-1',
+      phone: '+201012345678',
       expiresAt: 1_800_000_000,
     });
 

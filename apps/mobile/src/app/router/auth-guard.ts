@@ -17,6 +17,7 @@ import type { MeResponse } from '@clinic/contracts';
 
 export const ROUTE_META_PUBLIC = 'public';
 export const ROUTE_META_ONBOARDING = 'onboarding';
+export const ROUTE_META_PASSWORD_RECOVERY = 'passwordRecovery';
 
 export interface AuthGuardDeps {
   session: SessionStore<MeResponse>;
@@ -36,13 +37,18 @@ export function createAuthGuard({ session, ready }: AuthGuardDeps) {
 
     const isPublic = to.meta[ROUTE_META_PUBLIC] === true;
     const isOnboarding = to.meta[ROUTE_META_ONBOARDING] === true;
+    const isPasswordRecovery = to.meta[ROUTE_META_PASSWORD_RECOVERY] === true;
     const { status, identity } = session.state;
 
     if (status !== 'authenticated') {
       return isPublic ? true : { name: 'sign-in' };
     }
 
-    // Signed in: the auth screens are no longer somewhere to be.
+    // A recovery link establishes a short-lived authenticated session before
+    // routing here. It must remain reachable long enough to set the password.
+    if (isPasswordRecovery) return true;
+
+    // Signed in: the ordinary auth screens are no longer somewhere to be.
     if (isPublic) {
       return { name: 'home' };
     }

@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { IonButton, IonContent, IonIcon, IonPage, IonSpinner } from '@ionic/vue';
+import {
+  IonButton,
+  IonContent,
+  IonIcon,
+  IonPage,
+  IonSpinner,
+} from '@ionic/vue';
 import {
   eyeOffOutline,
   eyeOutline,
@@ -99,60 +105,68 @@ async function submit(): Promise<void> {
 
       <div class="screen auth pop">
         <header class="auth__intro">
-          <h2 class="title">
-            إنشاء حساب جديد
-          </h2>
+          <h2 class="title">إنشاء حساب جديد</h2>
           <p class="subtitle">
             حسابٌ واحد لمتابعة مواعيد أطفالك ودورك في العيادة.
           </p>
         </header>
 
-        <form
-          class="stack"
-          novalidate
-          @submit.prevent="submit"
-        >
+        <form class="stack" novalidate @submit.prevent="submit">
           <field-row
+            for-id="sign-up-name"
             label="الاسم الكامل"
             :icon="personOutline"
             :error="nameError"
           >
             <input
+              id="sign-up-name"
               v-model="fullName"
               type="text"
               autocomplete="name"
               placeholder="مثال: منى عبدالله"
-            >
+              :aria-invalid="nameError !== null"
+              :aria-describedby="nameError ? 'sign-up-name-message' : undefined"
+            />
           </field-row>
 
           <field-row
+            for-id="sign-up-email"
             label="البريد الإلكتروني"
             :icon="mailOutline"
             :error="emailError"
           >
             <input
+              id="sign-up-email"
               v-model="email"
               type="email"
               inputmode="email"
               autocomplete="email"
               placeholder="name@email.com"
               dir="ltr"
-            >
+              :aria-invalid="emailError !== null"
+              :aria-describedby="
+                emailError ? 'sign-up-email-message' : undefined
+              "
+            />
           </field-row>
 
           <field-row
+            for-id="sign-up-password"
             label="كلمة المرور"
             :icon="lockClosedOutline"
             :error="passwordError"
             hint="٨ أحرف على الأقل"
           >
             <input
+              id="sign-up-password"
               v-model="password"
               :type="revealed ? 'text' : 'password'"
               autocomplete="new-password"
               placeholder="••••••••"
               dir="ltr"
-            >
+              :aria-invalid="passwordError !== null"
+              aria-describedby="sign-up-password-message"
+            />
             <template #end>
               <button
                 type="button"
@@ -183,10 +197,7 @@ async function submit(): Promise<void> {
             size="large"
             :disabled="state.pending"
           >
-            <ion-spinner
-              v-if="state.pending"
-              name="crescent"
-            />
+            <ion-spinner v-if="state.pending" name="crescent" />
             <span v-else>متابعة</span>
           </ion-button>
 

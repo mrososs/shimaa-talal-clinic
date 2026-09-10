@@ -15,7 +15,12 @@ const AUTH_MESSAGES: Record<AuthErrorCode, string> = {
   email_not_confirmed: 'يلزم تأكيد البريد الإلكتروني أولاً.',
   email_taken: 'هذا البريد الإلكتروني مسجَّل بالفعل. جرِّبي تسجيل الدخول.',
   email_invalid: 'هذا البريد الإلكتروني غير صالح. تحقّقي منه وأعيدي المحاولة.',
+  phone_invalid: 'رقم الموبايل غير صالح. تحقّقي منه وأعيدي المحاولة.',
   weak_password: 'كلمة المرور قصيرة جداً — ٨ أحرف على الأقل.',
+  otp_invalid: 'رمز التحقق غير صحيح. تحقّقي من الأرقام وحاولي مرة أخرى.',
+  otp_expired: 'انتهت صلاحية رمز التحقق. اطلبي رمزاً جديداً.',
+  otp_delivery_failed:
+    'تعذّر إرسال رسالة التحقق الآن. حاولي لاحقاً أو استخدمي البريد الإلكتروني.',
   rate_limited: 'محاولات كثيرة. انتظري قليلاً ثم أعيدي المحاولة.',
   network: 'تعذَّر الاتصال. تحقّقي من الإنترنت وأعيدي المحاولة.',
   unknown: 'حدث خطأ غير متوقع. أعيدي المحاولة.',
@@ -35,6 +40,8 @@ const API_MESSAGES: Record<string, string> = {
   guardian_phone_taken:
     'هذا الرقم مسجَّل بالفعل لدى العيادة. تواصلي مع الاستقبال لربط الحساب.',
   invalid_phone: 'رقم الهاتف غير صحيح. مثال: ٠١٠١٢٣٤٥٦٧٨',
+  verified_phone_mismatch:
+    'استخدمي رقم الموبايل الذي تم التحقق منه، أو سجّلي الدخول برقم آخر.',
   auth_user_already_linked: 'هذا الحساب مرتبط بملف عائلي بالفعل.',
   guardian_already_claimed: 'هذا الملف مرتبط بحساب آخر.',
   claim_code_invalid: 'الرمز غير صحيح. تأكّدي منه مع الاستقبال.',
@@ -57,6 +64,23 @@ const API_MESSAGES: Record<string, string> = {
   queue_entry_not_found: 'لم نعثر على دورك في الطابور.',
   queue_session_not_running: 'الطابور متوقف مؤقتاً الآن.',
   queue_conflict: 'تغيّر الطابور للتو — حدّثنا الشاشة.',
+
+  // Messages and urgent guidance.
+  message_thread_not_found: 'لم نعثر على هذه المحادثة.',
+  message_thread_closed:
+    'أغلقت العيادة هذه المحادثة. ابدئي محادثة جديدة للمتابعة.',
+  message_invalid_participant: 'لم نعثر على الطفل في ملفك.',
+  urgent_case_not_found: 'لم نعثر على الحالة العاجلة.',
+  urgent_case_already_decided: 'راجعت العيادة هذه الحالة بالفعل.',
+
+  // Payments.
+  payment_not_found: 'هذا الموعد غير متاح للدفع الآن.',
+  payment_invalid_transition:
+    'توجد عملية دفع لهذا الموعد قيد المعالجة. حدّثي الصفحة بعد قليل.',
+  payment_invalid_receipt:
+    'اختاري إيصال PDF أو صورة بحجم لا يزيد عن ٥ ميجابايت.',
+  payment_storage_failed:
+    'تعذّر رفع الإيصال الآن. احتفظي به وحاولي مرة أخرى.',
 };
 
 export function apiMessage(error: unknown): string {

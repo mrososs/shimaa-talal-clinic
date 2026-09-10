@@ -1,46 +1,48 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, shallowRef } from 'vue';
 import { useRouter } from 'vue-router';
 import {
   IonIcon,
   IonRefresher,
   IonRefresherContent,
   IonSpinner,
+  onIonViewDidLeave,
+  onIonViewWillEnter,
   type RefresherCustomEvent,
 } from '@ionic/vue';
 import {
   calendarOutline,
+  chatbubblesOutline,
   chevronBackOutline,
   logOutOutline,
+  statsChartOutline,
   timeOutline,
+  walletOutline,
 } from 'ionicons/icons';
-import type { Appointment } from '@clinic/contracts';
 import ScreenShell from '../../../shared/components/ScreenShell.vue';
 import FormNotice from '../../../shared/components/FormNotice.vue';
 import { shortDayLabel, windowLabel } from '../../../shared/format';
 import { arabicDigits } from '../../../shared/numerals';
-import { apiMessage } from '../../../shared/messages';
-import { bookingApi, session } from '../../../runtime';
+import { session } from '../../../runtime';
+import { useAppointments } from '../../appointments/composables/useAppointments';
 
 /**
  * Home, as the design lays it out: who you are, what is next, what you can do.
  *
- * The design also carries an AI assistant, payments, doctor messaging, a growth
- * chart and a parent-side emergency request. All five are out of scope for this
- * phase, so none of them is here — not even greyed out. A tile that does
- * nothing teaches people not to trust the ones that do.
+ * Only working destinations are shown. Payments, messaging and growth are
+ * backed by guardian-scoped APIs and are safe to offer here.
  *
- * The live queue card is likewise absent until the queue engine exists. What is
- * here is real: the family, the next visit, and a way to book one.
+ * The live queue has its own top-level tab, so Home stays focused on the next
+ * visit, family shortcuts and tasks that start a separate flow.
  */
 
 const router = useRouter();
 const state = session.state;
-
-const upcoming = ref<Appointment[] | null>(null);
-const failure = ref<string | null>(null);
-const loading = ref(true);
-const signingOut = ref(false);
+const appointments = useAppointments();
+const upcoming = computed(() => appointments.items.value);
+const failure = appointments.failure;
+const loading = appointments.loading;
+const signingOut = shallowRef(false);
 
 const guardian = computed(() => state.identity?.guardian ?? null);
 const children = computed(() => state.identity?.children ?? []);
@@ -66,20 +68,8 @@ const STATUS_LABEL: Record<string, string> = {
   checked_in: 'في العيادة',
 };
 
-async function load(): Promise<void> {
-  loading.value = true;
-  failure.value = null;
-  try {
-    upcoming.value = await bookingApi.list('upcoming');
-  } catch (error) {
-    failure.value = apiMessage(error);
-  } finally {
-    loading.value = false;
-  }
-}
-
 async function refresh(event?: RefresherCustomEvent): Promise<void> {
-  await Promise.all([session.refreshIdentity(), load()]);
+  await Promise.all([session.refreshIdentity(), appointments.refresh()]);
   await event?.target.complete();
 }
 
@@ -93,11 +83,12 @@ async function signOut(): Promise<void> {
   }
 }
 
-onMounted(load);
+onIonViewWillEnter(() => void appointments.open());
+onIonViewDidLeave(() => appointments.close());
 </script>
 
 <template>
-  <screen-shell tabs>
+  <screen-shell>
     <template #above>
       <ion-refresher
         slot="fixed"
@@ -202,7 +193,13 @@ onMounted(load);
               {{ childNameById.get(nextVisit.childId) ?? 'موعد' }}
             </p>
             <p class="visit__window">
-              {{ windowLabel(nextVisit.windowStart, nextVisit.windowEnd, clinic?.timezone) }}
+              {{
+                windowLabel(
+                  nextVisit.windowStart,
+                  nextVisit.windowEnd,
+                  clinic?.timezone,
+                )
+              }}
             </p>
           </div>
           <span
@@ -251,6 +248,42 @@ onMounted(load);
             </span>
             <span class="action__title">مواعيدي</span>
             <span class="action__hint">تأجيل أو إلغاء</span>
+          </button>
+
+          <button
+            type="button"
+            class="card action"
+            @click="router.push({ name: 'growth' })"
+          >
+            <span class="action__ico action__ico--lav">
+              <ion-icon :icon="statsChartOutline" />
+            </span>
+            <span class="action__title">متابعة النمو</span>
+            <span class="action__hint">الوزن والطول</span>
+          </button>
+
+          <button
+            type="button"
+            class="card action"
+            @click="router.push({ name: 'messages' })"
+          >
+            <span class="action__ico action__ico--blue">
+              <ion-icon :icon="chatbubblesOutline" />
+            </span>
+            <span class="action__title">رسائل العيادة</span>
+            <span class="action__hint">سؤال أو متابعة</span>
+          </button>
+
+          <button
+            type="button"
+            class="card action"
+            @click="router.push({ name: 'payments' })"
+          >
+            <span class="action__ico action__ico--sun">
+              <ion-icon :icon="walletOutline" />
+            </span>
+            <span class="action__title">الدفع</span>
+            <span class="action__hint">نقداً أو InstaPay</span>
           </button>
         </div>
       </section>
@@ -497,6 +530,21 @@ onMounted(load);
 .action__ico--teal {
   background: var(--teal-soft);
   color: var(--teal-ink);
+}
+
+.action__ico--lav {
+  background: var(--lav-soft);
+  color: #6b4fb0;
+}
+
+.action__ico--blue {
+  background: #e8f5fd;
+  color: #2176a7;
+}
+
+.action__ico--sun {
+  background: var(--sun-soft);
+  color: #8a6212;
 }
 
 .action__title {

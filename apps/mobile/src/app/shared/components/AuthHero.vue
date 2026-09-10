@@ -13,24 +13,14 @@ import { medkitOutline } from 'ionicons/icons';
 
 <template>
   <header class="hero hero-grad">
-    <span
-      class="hero__blob hero__blob--lg"
-      aria-hidden="true"
-    />
-    <span
-      class="hero__blob hero__blob--sm"
-      aria-hidden="true"
-    />
+    <span class="hero__blob hero__blob--lg" aria-hidden="true" />
+    <span class="hero__blob hero__blob--sm" aria-hidden="true" />
 
     <div class="hero__badge">
       <ion-icon :icon="medkitOutline" />
     </div>
-    <h1 class="hero__name">
-      عيادة د. شيماء طلال
-    </h1>
-    <p class="hero__tagline">
-      لطب الأطفال وحديثي الولادة
-    </p>
+    <h1 class="hero__name">عيادة د. شيماء طلال</h1>
+    <p class="hero__tagline">لطب الأطفال وحديثي الولادة</p>
   </header>
 </template>
 
@@ -42,7 +32,7 @@ import { medkitOutline } from 'ionicons/icons';
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  padding: 34px 24px 30px;
+  padding: calc(34px + var(--ion-safe-area-top, 0px)) 24px 30px;
   color: #fff;
   text-align: center;
   border-end-start-radius: var(--r-xl);

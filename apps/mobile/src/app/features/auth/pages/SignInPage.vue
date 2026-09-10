@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { IonButton, IonContent, IonIcon, IonPage, IonSpinner } from '@ionic/vue';
+import {
+  IonButton,
+  IonContent,
+  IonIcon,
+  IonPage,
+  IonSpinner,
+} from '@ionic/vue';
 import {
   eyeOffOutline,
   eyeOutline,
@@ -15,16 +21,9 @@ import { authMessage } from '../../../shared/messages';
 import { session } from '../../../runtime';
 
 /**
- * Sign in with an email and a password.
- *
- * Not a phone and a one-time code. The design shows that flow and it is the
- * eventual one, but phone ownership is unverified in this MVP and an SMS
- * provider is out of scope — so the account is an email account, and the phone
- * stays what it actually is here: the clinic's way of finding a family.
- *
- * The design's "الدخول برقم الجوال" button is therefore absent rather than
- * present and inert. A control that does nothing teaches people not to trust
- * the ones that do.
+ * Email/password is the release authentication path. Phone OTP is deliberately
+ * deferred to the next product phase, so this screen must not advertise a
+ * route that the deployed Supabase project cannot deliver yet.
  */
 
 const router = useRouter();
@@ -89,31 +88,43 @@ async function submit(): Promise<void> {
           @submit.prevent="submit"
         >
           <field-row
+            for-id="sign-in-email"
             label="البريد الإلكتروني"
             :icon="mailOutline"
             :error="emailError"
           >
             <input
+              id="sign-in-email"
               v-model="email"
               type="email"
               inputmode="email"
               autocomplete="email"
               placeholder="name@email.com"
               dir="ltr"
+              :aria-invalid="emailError !== null"
+              :aria-describedby="
+                emailError ? 'sign-in-email-message' : undefined
+              "
             >
           </field-row>
 
           <field-row
+            for-id="sign-in-password"
             label="كلمة المرور"
             :icon="lockClosedOutline"
             :error="passwordError"
           >
             <input
+              id="sign-in-password"
               v-model="password"
               :type="revealed ? 'text' : 'password'"
               autocomplete="current-password"
               placeholder="••••••••"
               dir="ltr"
+              :aria-invalid="passwordError !== null"
+              :aria-describedby="
+                passwordError ? 'sign-in-password-message' : undefined
+              "
             >
             <template #end>
               <button
@@ -128,6 +139,14 @@ async function submit(): Promise<void> {
               </button>
             </template>
           </field-row>
+
+          <button
+            type="button"
+            class="forgot"
+            @click="router.push({ name: 'reset-password' })"
+          >
+            نسيتِ كلمة المرور؟
+          </button>
 
           <form-notice :message="serverError" />
 
@@ -167,6 +186,19 @@ async function submit(): Promise<void> {
 
 .auth__intro {
   margin-block-end: 20px;
+}
+
+.forgot {
+  justify-self: start;
+  min-block-size: 32px;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--coral-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 .reveal {

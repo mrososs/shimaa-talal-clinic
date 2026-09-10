@@ -97,7 +97,9 @@ export function normalizeToE164(
 ): string | null {
   if (typeof input !== 'string') return null;
 
-  const trimmed = input.trim();
+  // Mobile keyboards in Arabic locales commonly emit Arabic-Indic digits.
+  // Canonicalise them before applying the same validation as Latin digits.
+  const trimmed = toLatinDigits(input).trim();
   if (trimmed === '' || !TYPEABLE.test(trimmed)) return null;
 
   const digits = trimmed.replace(/\D/g, '');
@@ -140,6 +142,12 @@ export function normalizeToE164(
   }
 
   return `+${candidate}`;
+}
+
+function toLatinDigits(value: string): string {
+  return value
+    .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
+    .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)));
 }
 
 /**

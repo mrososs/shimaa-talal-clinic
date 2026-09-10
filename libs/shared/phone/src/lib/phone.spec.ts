@@ -20,6 +20,8 @@ describe('normalizeToE164 — Egypt', () => {
     ['international access code', '00201012345678'],
     ['country code without a plus', '201012345678'],
     ['surrounding whitespace', '  01012345678  '],
+    ['Arabic-Indic digits', '٠١٠١٢٣٤٥٦٧٨'],
+    ['Eastern Arabic digits', '۰۱۰۱۲۳۴۵۶۷۸'],
   ])('accepts %s', (_label, input) => {
     expect(normalizeToE164(input, PhoneRegion.Egypt)).toBe(EG_MOBILE);
   });

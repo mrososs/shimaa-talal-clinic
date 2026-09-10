@@ -53,4 +53,26 @@ describe('ApiClient', () => {
     });
     await expect(client.get('things/1')).rejects.toBeInstanceOf(ApiClientError);
   });
+
+  it('sends FormData without overriding the browser multipart boundary', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse({ success: true, data: { id: 'file-1' } }),
+      );
+    const client = new ApiClient({
+      baseUrl: 'https://api.example.test/api/v1',
+      fetchImpl,
+    });
+    const body = new FormData();
+    body.append('file', new Blob(['scan'], { type: 'image/png' }), 'scan.png');
+
+    await client.post('clinic/children/child-1/files', body);
+
+    const [, init] = fetchImpl.mock.calls[0];
+    expect(init?.body).toBe(body);
+    expect(
+      (init?.headers as Record<string, string>)['Content-Type'],
+    ).toBeUndefined();
+  });
 });

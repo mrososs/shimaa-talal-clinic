@@ -4,6 +4,7 @@ import { session } from '../runtime';
 import {
   createAuthGuard,
   ROUTE_META_ONBOARDING,
+  ROUTE_META_PASSWORD_RECOVERY,
   ROUTE_META_PUBLIC,
 } from './auth-guard';
 
@@ -12,10 +13,9 @@ import {
  * navigation stack work. Always create it from `@ionic/vue-router`, never from
  * `vue-router` directly.
  *
- * Three of these routes are tab roots — home, appointments, queue — and the
- * rest are not. The tab bar is rendered by the screen rather than by
- * `ion-tabs`, because sign-in, onboarding and the booking flow are all places
- * where a tab bar would offer a way out of a task somebody is in the middle of.
+ * Home, appointments and queue live under one Ionic tabs shell, which gives
+ * every tab its own native-style navigation stack. Auth, onboarding and
+ * focused task routes stay outside it, so they never leak the tab bar.
  */
 export const routes: RouteRecordRaw[] = [
   {
@@ -29,6 +29,18 @@ export const routes: RouteRecordRaw[] = [
     name: 'sign-up',
     component: () => import('../features/auth/pages/SignUpPage.vue'),
     meta: { [ROUTE_META_PUBLIC]: true },
+  },
+  {
+    path: '/auth/reset-password',
+    name: 'reset-password',
+    component: () => import('../features/auth/pages/ResetPasswordPage.vue'),
+    meta: { [ROUTE_META_PUBLIC]: true },
+  },
+  {
+    path: '/auth/update-password',
+    name: 'update-password',
+    component: () => import('../features/auth/pages/UpdatePasswordPage.vue'),
+    meta: { [ROUTE_META_PASSWORD_RECOVERY]: true },
   },
   {
     path: '/onboarding/guardian',
@@ -51,22 +63,57 @@ export const routes: RouteRecordRaw[] = [
     meta: { [ROUTE_META_ONBOARDING]: true },
   },
 
-  // Tab roots.
+  // Preserve the original public URLs while keeping focused tasks outside the
+  // tab route namespace. Redirects resolve to the canonical Ionic tab stacks.
   {
     path: '/',
-    name: 'home',
-    component: () => import('../features/home/pages/HomePage.vue'),
+    redirect: { name: 'home' },
   },
   {
     path: '/appointments',
-    name: 'appointments',
-    component: () =>
-      import('../features/appointments/pages/AppointmentsPage.vue'),
+    redirect: { name: 'appointments' },
   },
   {
     path: '/queue',
-    name: 'queue',
-    component: () => import('../features/queue/pages/LiveQueuePage.vue'),
+    redirect: { name: 'queue' },
+  },
+  {
+    path: '/messages',
+    redirect: { name: 'messages' },
+  },
+
+  // Top-level destinations share one real Ionic tabs shell.
+  {
+    path: '/tabs',
+    component: () => import('../layout/MobileTabsShell.vue'),
+    children: [
+      {
+        path: '',
+        redirect: { name: 'home' },
+      },
+      {
+        path: 'home',
+        name: 'home',
+        component: () => import('../features/home/pages/HomePage.vue'),
+      },
+      {
+        path: 'appointments',
+        name: 'appointments',
+        component: () =>
+          import('../features/appointments/pages/AppointmentsPage.vue'),
+      },
+      {
+        path: 'queue',
+        name: 'queue',
+        component: () => import('../features/queue/pages/LiveQueuePage.vue'),
+      },
+      {
+        path: 'messages',
+        name: 'messages',
+        component: () =>
+          import('../features/messages/pages/MessagesPage.vue'),
+      },
+    ],
   },
 
   // Inside a task: no tabs.
@@ -80,6 +127,22 @@ export const routes: RouteRecordRaw[] = [
     name: 'appointment-detail',
     component: () =>
       import('../features/appointments/pages/AppointmentDetailPage.vue'),
+  },
+  {
+    path: '/appointments/:appointmentId/reschedule',
+    name: 'appointment-reschedule',
+    component: () =>
+      import('../features/booking/pages/RescheduleVisitPage.vue'),
+  },
+  {
+    path: '/growth',
+    name: 'growth',
+    component: () => import('../features/growth/pages/GrowthPage.vue'),
+  },
+  {
+    path: '/payments',
+    name: 'payments',
+    component: () => import('../features/payments/pages/PaymentsPage.vue'),
   },
 
   {

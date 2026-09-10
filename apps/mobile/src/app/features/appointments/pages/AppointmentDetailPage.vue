@@ -1,14 +1,19 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, shallowRef } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { IonButton, IonSpinner } from '@ionic/vue';
-import { AppointmentStatus, type Appointment } from '@clinic/contracts';
+import {
+  IonButton,
+  IonSpinner,
+  onIonViewDidLeave,
+  onIonViewWillEnter,
+} from '@ionic/vue';
+import { AppointmentStatus } from '@clinic/contracts';
 import { ClinicDialog } from '@clinic/client-ui';
 import ScreenShell from '../../../shared/components/ScreenShell.vue';
 import FormNotice from '../../../shared/components/FormNotice.vue';
 import { dayLabel, windowLabel } from '../../../shared/format';
-import { apiMessage } from '../../../shared/messages';
-import { bookingApi, session } from '../../../runtime';
+import { session } from '../../../runtime';
+import { useAppointmentDetail } from '../composables/useAppointmentDetail';
 
 /**
  * One visit: when, for whom, and what can still be done about it.
@@ -26,11 +31,10 @@ import { bookingApi, session } from '../../../runtime';
 const route = useRoute();
 const router = useRouter();
 const state = session.state;
-
-const appointment = ref<Appointment | null>(null);
-const loading = ref(true);
-const working = ref(false);
-const failure = ref<string | null>(null);
+const detail = useAppointmentDetail(() =>
+  String(route.params['appointmentId']),
+);
+const appointment = detail.appointment;
 
 const timezone = computed(() => state.identity?.clinic.timezone);
 const childName = computed(() => {
@@ -88,19 +92,12 @@ const canCancel = computed(
     appointment.value?.status === AppointmentStatus.Confirmed,
 );
 
-async function load(): Promise<void> {
-  loading.value = true;
-  failure.value = null;
-  try {
-    appointment.value = await bookingApi.detail(
-      String(route.params['appointmentId']),
-    );
-  } catch (error) {
-    failure.value = apiMessage(error);
-  } finally {
-    loading.value = false;
-  }
-}
+const canPay = computed(
+  () =>
+    appointment.value?.status === AppointmentStatus.Requested ||
+    appointment.value?.status === AppointmentStatus.Confirmed ||
+    appointment.value?.status === AppointmentStatus.CheckedIn,
+);
 
 /**
  * Cancelling is asked about first.
@@ -109,23 +106,15 @@ async function load(): Promise<void> {
  * it final. That question used to be a bare button; it is now the same dialog
  * the clinic staff see, in Arabic and right-to-left, rather than the browser's.
  */
-const confirming = ref(false);
+const confirming = shallowRef(false);
 
 async function cancel(): Promise<void> {
   confirming.value = false;
-  if (appointment.value === null) return;
-  working.value = true;
-  failure.value = null;
-  try {
-    appointment.value = await bookingApi.cancel(appointment.value.id);
-  } catch (error) {
-    failure.value = apiMessage(error);
-  } finally {
-    working.value = false;
-  }
+  await detail.cancel();
 }
 
-onMounted(load);
+onIonViewWillEnter(() => void detail.open());
+onIonViewDidLeave(() => detail.close());
 </script>
 
 <template>
@@ -134,7 +123,7 @@ onMounted(load);
     :back-to="{ name: 'appointments' }"
   >
     <div
-      v-if="loading"
+      v-if="detail.loading.value"
       class="card card--centre"
     >
       <ion-spinner name="crescent" />
@@ -179,7 +168,21 @@ onMounted(load);
         {{ STATUS[appointment.status].note }}
       </p>
 
-      <form-notice :message="failure" />
+      <form-notice :message="detail.failure.value" />
+
+      <div v-if="canPay" class="actions">
+        <ion-button
+          expand="block"
+          @click="
+            router.push({
+              name: 'payments',
+              query: { appointmentId: appointment.id },
+            })
+          "
+        >
+          الدفع لهذا الموعد
+        </ion-button>
+      </div>
 
       <div
         v-if="inClinic"
@@ -200,12 +203,25 @@ onMounted(load);
         <ion-button
           expand="block"
           fill="outline"
+          :disabled="detail.working.value"
+          @click="
+            router.push({
+              name: 'appointment-reschedule',
+              params: { appointmentId: appointment.id },
+            })
+          "
+        >
+          تغيير الموعد
+        </ion-button>
+        <ion-button
+          expand="block"
+          fill="outline"
           color="danger"
-          :disabled="working"
+          :disabled="detail.working.value"
           @click="confirming = true"
         >
           <ion-spinner
-            v-if="working"
+            v-if="detail.working.value"
             name="crescent"
           />
           <span v-else>إلغاء الموعد</span>
@@ -227,7 +243,7 @@ onMounted(load);
 
     <form-notice
       v-else
-      :message="failure"
+      :message="detail.failure.value"
     />
 
     <clinic-dialog

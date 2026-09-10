@@ -16,6 +16,8 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 export interface AuthSession {
   accessToken: string;
   userId: string;
+  /** Verified phone attached to this Supabase identity, in E.164 form. */
+  phone: string | null;
   /** Unix seconds, or `null` when the provider does not report one. */
   expiresAt: number | null;
 }
@@ -23,6 +25,12 @@ export interface AuthSession {
 export interface AuthCredentials {
   email: string;
   password: string;
+}
+
+export interface PhoneOtpCredentials {
+  /** E.164. Formatting and regional validation belongs to the caller. */
+  phone: string;
+  token: string;
 }
 
 /**
@@ -44,7 +52,11 @@ export type AuthErrorCode =
    * unexpected error occurred" tells them to try the same thing again.
    */
   | 'email_invalid'
+  | 'phone_invalid'
   | 'weak_password'
+  | 'otp_invalid'
+  | 'otp_expired'
+  | 'otp_delivery_failed'
   | 'rate_limited'
   /** The request never got an answer. Says nothing about the credentials. */
   | 'network'
@@ -84,6 +96,12 @@ export interface AuthProvider {
   restoreSession(): Promise<AuthSession | null>;
   signInWithPassword(credentials: AuthCredentials): Promise<AuthSession>;
   signUp(credentials: AuthCredentials): Promise<SignUpResult>;
+  /** Send an SMS challenge. A successful start does not create a session. */
+  startPhoneOtp(phone: string): Promise<void>;
+  /** Verify the SMS challenge and return the session it establishes. */
+  verifyPhoneOtp(credentials: PhoneOtpCredentials): Promise<AuthSession>;
+  requestPasswordReset(email: string, redirectTo: string): Promise<void>;
+  updatePassword(password: string): Promise<void>;
   /** Returns an unsubscribe function. */
   onAuthStateChange(
     listener: (session: AuthSession | null) => void,
@@ -101,7 +119,7 @@ export interface SupabaseAuthProviderOptions {
 interface RawSession {
   access_token: string;
   expires_at?: number;
-  user: { id: string };
+  user: { id: string; phone?: string | null };
 }
 
 export function createSupabaseAuthProvider(
@@ -118,6 +136,7 @@ export function createSupabaseAuthProvider(
       ? {
           accessToken: raw.access_token,
           userId: raw.user.id,
+          phone: raw.user.phone?.trim() || null,
           expiresAt: raw.expires_at ?? null,
         }
       : null;
@@ -192,6 +211,41 @@ export function createSupabaseAuthProvider(
       return { session, needsEmailConfirmation: session === null };
     },
 
+    async startPhoneOtp(phone) {
+      const { error } = await client.auth.signInWithOtp({ phone });
+      if (error) throw toAuthError(error);
+    },
+
+    async verifyPhoneOtp(credentials) {
+      const { data, error } = await client.auth.verifyOtp({
+        phone: credentials.phone,
+        token: credentials.token,
+        type: 'sms',
+      });
+      if (error) throw toAuthError(error);
+
+      const session = toSession(data.session);
+      if (session === null) {
+        throw new AuthError(
+          'otp_invalid',
+          'The one-time code did not establish a session.',
+        );
+      }
+      return session;
+    },
+
+    async requestPasswordReset(email, redirectTo) {
+      const { error } = await client.auth.resetPasswordForEmail(email, {
+        redirectTo,
+      });
+      if (error) throw toAuthError(error);
+    },
+
+    async updatePassword(password) {
+      const { error } = await client.auth.updateUser({ password });
+      if (error) throw toAuthError(error);
+    },
+
     onAuthStateChange(listener) {
       const { data } = client.auth.onAuthStateChange((_event, session) => {
         listener(toSession(session));
@@ -235,9 +289,34 @@ function toAuthError(error: unknown): AuthError {
   if (
     code === 'email_address_invalid' ||
     code === 'email_address_not_authorized' ||
-    text.includes('is invalid')
+    (text.includes('email') && text.includes('is invalid'))
   ) {
     return new AuthError('email_invalid', message, error);
+  }
+  if (
+    code === 'phone_provider_disabled' ||
+    code === 'sms_send_failed' ||
+    text.includes('error sending confirmation otp') ||
+    text.includes('phone provider is not enabled')
+  ) {
+    return new AuthError('otp_delivery_failed', message, error);
+  }
+  if (
+    code === 'phone_address_invalid' ||
+    (code === 'validation_failed' && text.includes('phone')) ||
+    text.includes('invalid phone')
+  ) {
+    return new AuthError('phone_invalid', message, error);
+  }
+  if (code === 'otp_expired' || text.includes('token has expired')) {
+    return new AuthError('otp_expired', message, error);
+  }
+  if (
+    code === 'otp_invalid' ||
+    text.includes('token is invalid') ||
+    text.includes('invalid otp')
+  ) {
+    return new AuthError('otp_invalid', message, error);
   }
   if (
     code === 'weak_password' ||
@@ -245,7 +324,11 @@ function toAuthError(error: unknown): AuthError {
   ) {
     return new AuthError('weak_password', message, error);
   }
-  if (code === 'over_request_rate_limit' || status === 429) {
+  if (
+    code === 'over_request_rate_limit' ||
+    code === 'over_sms_send_rate_limit' ||
+    status === 429
+  ) {
     return new AuthError('rate_limited', message, error);
   }
   // supabase-js reports a fetch failure with no usable HTTP status. Telling
