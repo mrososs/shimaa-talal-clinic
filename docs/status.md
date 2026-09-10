@@ -7,7 +7,7 @@ exists, and is expected to be edited every time a slice lands.
 Anything not listed as built is not built. If a claim here disagrees with the
 code, the code is right and this file is stale — say so.
 
-_Last updated: 2026-09-10 · 15 migrations · 100 routes._
+_Last updated: 2026-09-11 · 17 migrations · 103 routes._
 
 ---
 
@@ -15,29 +15,31 @@ _Last updated: 2026-09-10 · 15 migrations · 100 routes._
 
 ### Database
 
-Fifteen migrations are in source control and applied to the hosted pilot database.
+Seventeen migrations are in source control and applied to the hosted pilot database.
 Every table lives in the `clinic` schema, which
 is absent from `[api].schemas` in `supabase/config.toml` — so the publishable
 key shipped in both bundles cannot reach any of it. RLS is `ENABLE` + `FORCE`
 on every table with no permissive policies, as a second lock under a trusted
 API. See [database.md](database.md).
 
-| Migration                           | Tables                                                                                                     |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `init_extensions`                   | —                                                                                                          |
-| `clinic_identity` (+ `_fk_indexes`) | `clinics`, `clinic_members`, `guardians`, `children`, `guardian_children`, `guardian_claim_codes`          |
-| `pilot_clinic`                      | the pilot tenant row                                                                                       |
-| `clinic_scheduling`                 | `clinic_schedules`, `clinic_closures`, `clinic_sessions`                                                   |
-| `pilot_schedule`                    | Sat–Wed 10:00–16:00, Thu 12:00–17:00, Friday absent                                                        |
-| `booking`                           | `appointments`, `appointment_events`                                                                       |
-| `queue`                             | `queue_entries`, `queue_events`                                                                            |
-| `booking_queue_tenant_consistency`  | composite tenant foreign keys for Booking and Queue                                                        |
-| `patient_files`                     | private attachment metadata and the private `clinic-patient-files` Storage bucket                          |
-| `clinical_records`                  | `clinical_encounters`, immutable `clinical_encounter_versions`, and reception-safe `clinical_measurements` |
-| `messages_urgent_triage`            | staff inbox, read markers, quick replies, urgent cases, immutable events, and notification outbox          |
-| `parent_messages`                   | guardian actors, parent unread cursor and idempotent parent thread creation                                |
-| `payments_and_reports`              | provider-neutral payments, immutable payment events, reporting indexes, and the private receipt bucket     |
-| `clinic_settings_audit`             | service prices, notification templates, immutable setting audit events, and clinic contact details         |
+| Migration                           | Tables                                                                                                                  |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `init_extensions`                   | —                                                                                                                       |
+| `clinic_identity` (+ `_fk_indexes`) | `clinics`, `clinic_members`, `guardians`, `children`, `guardian_children`, `guardian_claim_codes`                       |
+| `pilot_clinic`                      | the pilot tenant row                                                                                                    |
+| `clinic_scheduling`                 | `clinic_schedules`, `clinic_closures`, `clinic_sessions`                                                                |
+| `pilot_schedule`                    | Sat–Wed 10:00–16:00, Thu 12:00–17:00, Friday absent                                                                     |
+| `booking`                           | `appointments`, `appointment_events`                                                                                    |
+| `queue`                             | `queue_entries`, `queue_events`                                                                                         |
+| `booking_queue_tenant_consistency`  | composite tenant foreign keys for Booking and Queue                                                                     |
+| `patient_files`                     | private attachment metadata and the private `clinic-patient-files` Storage bucket                                       |
+| `clinical_records`                  | `clinical_encounters`, immutable `clinical_encounter_versions`, and reception-safe `clinical_measurements`              |
+| `messages_urgent_triage`            | staff inbox, read markers, quick replies, urgent cases, immutable events, and notification outbox                       |
+| `parent_messages`                   | guardian actors, parent unread cursor and idempotent parent thread creation                                             |
+| `parent_payments`                   | guardian actors, one active payment per appointment and parent payment audit events                                     |
+| `payments_and_reports`              | provider-neutral payments, immutable payment events, reporting indexes, and the private receipt bucket                  |
+| `clinic_settings_audit`             | service prices, notification templates, immutable setting audit events, clinic contact details and InstaPay destination |
+| `parent_instapay_handle`            | nullable clinic-owned InstaPay destination with database validation                                                     |
 
 ### The four concurrency guarantees
 
@@ -51,7 +53,7 @@ races rather than by reading the schema:
 | One patient called, one in service             | `queue_one_called_uq`, `queue_one_in_service_uq` | concurrent queue commands leave one called and one in service |
 | One check-in per appointment                   | `queue_appointment_uq`                           | 5 simultaneous check-ins → one entry, five 201s               |
 
-### API — 100 routes
+### API — 103 routes
 
 Auth (guard, `@Roles`, cached verifier, envelope interceptor) · identity
 (parent + staff, claim codes) · clinic sessions (list, open/pause/resume/close,
@@ -93,11 +95,16 @@ audit event in the same transaction.
 `Call Next` never ends an active consultation; paused sessions reject every
 queue mutation without an event or revision bump.
 
-### Mobile — 15 screens
+Guardians have a separate three-route payment surface. Its view combines owned
+payments with server-priced payable appointments; cash choices and receipt
+uploads derive every identity and amount field from the appointment and record
+the guardian as the real audit actor.
+
+### Mobile — 16 screens
 
 Sign in/up · password reset/update · guardian and child onboarding · claim an
 existing family · home · appointments list/detail/reschedule · book a visit ·
-live queue · parent-safe growth · clinic messages and urgent guidance.
+live queue · payments · parent-safe growth · clinic messages and urgent guidance.
 
 The mobile foundation now uses a real router-level Ionic tabs shell for Home,
 Appointments, Queue and Messages. Focused auth, onboarding, booking and detail flows stay
@@ -119,6 +126,15 @@ Messages is the fourth Ionic tab. It supports owned-child conversations,
 idempotent replies, closed-thread handling, parent unread state and explicit
 urgent escalation after emergency-care guidance; staff replies appear on the
 same fifteen-second live-update lifecycle.
+Payments is a focused route reached from Home, appointment detail, and the
+booking completion flow. It offers cash-at-clinic and private InstaPay receipt
+upload, keeps uncertain retries idempotent, and renders pending/paid/failed/
+refunded history. The transfer destination is clinic-owned configuration edited
+in Dashboard and read from the API; Mobile never hard-codes financial details.
+Booking and Queue now match the supplied warm RTL prototype's
+card hierarchy, horizontal selectors, sticky action, live ring, ETA and pending
+approval treatment while keeping server-owned arrival windows and private
+`aheadCount` semantics.
 
 ### Dashboard — 12 screens
 

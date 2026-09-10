@@ -29,22 +29,22 @@ from contracts.
 
 Conceptual routes, following the existing URI versioning and naming rules:
 
-| Route | Purpose |
-| --- | --- |
-| `GET /me/notifications` | List guardian notifications |
-| `POST /me/notifications/:id/read` | Mark one notification read |
-| `GET /messages` | List own threads |
-| `POST /messages` | Create own-child thread idempotently |
-| `GET /messages/:threadId` | Read own thread |
-| `POST /messages/:threadId/replies` | Idempotent guardian reply |
-| `POST /messages/:threadId/read` | Mark staff replies read for this guardian |
-| `POST /messages/:threadId/urgent` | Raise urgent case |
-| `GET /payments` | List own payments |
-| `POST /payments` | Create payment intent/choose method |
-| `POST /payments/:id/receipt` | Upload private InstaPay receipt |
-| `GET /children/:childId/growth` | Read sanitized growth data |
-| `POST /urgent-cases` | Create urgent request when no thread exists |
-| `GET /queue/guest/:token` | Public read-only guest queue view |
+| Route                              | Purpose                                                                                          |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `GET /me/notifications`            | List guardian notifications                                                                      |
+| `POST /me/notifications/:id/read`  | Mark one notification read                                                                       |
+| `GET /messages`                    | List own threads                                                                                 |
+| `POST /messages`                   | Create own-child thread idempotently                                                             |
+| `GET /messages/:threadId`          | Read own thread                                                                                  |
+| `POST /messages/:threadId/replies` | Idempotent guardian reply                                                                        |
+| `POST /messages/:threadId/read`    | Mark staff replies read for this guardian                                                        |
+| `POST /messages/:threadId/urgent`  | Raise urgent case                                                                                |
+| `GET /payments`                    | List own payments, server-priced payable appointments, and the clinic-owned InstaPay destination |
+| `POST /payments/cash`              | Idempotently choose cash at the clinic                                                           |
+| `POST /payments/instapay`          | Idempotently upload a private InstaPay receipt                                                   |
+| `GET /children/:childId/growth`    | Read sanitized growth data                                                                       |
+| `POST /urgent-cases`               | Create urgent request when no thread exists                                                      |
+| `GET /queue/guest/:token`          | Public read-only guest queue view                                                                |
 
 Existing parent appointment and queue routes remain unchanged unless a contract
 extension is required. Staff queue routes remain under `clinic/queue`; the

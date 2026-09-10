@@ -47,7 +47,7 @@ contracts in `libs/contracts`, and Supabase/Postgres for persistence.
 - [x] M1 — Email auth and family onboarding (phone login/OTP deferred).
 - [x] M2 — Booking, appointment status and Dashboard approval.
 - [ ] M3 — Queue read model, explicit staff commands and guest links.
-- [ ] M4 — Parent payments and receipt review.
+- [x] M4 — Parent payments and receipt review.
 - [x] M5 — Parent messages and urgent triage.
 - [x] M6 — Parent-safe growth reads.
 - [ ] M7 — Grace, missed, reschedule and cancellation.
@@ -115,6 +115,24 @@ atomic. Guest links work without login and reveal only queue facts.
 
 Cash and InstaPay receipt flows are idempotent, private, staff-reviewable, and
 their status is visible to the owning guardian only.
+
+Implemented with guardian-only `GET /payments`, `POST /payments/cash` and
+multipart `POST /payments/instapay`. The API derives the appointment identity,
+child, guardian, amount and currency; Mobile submits only the appointment,
+idempotency key and (for InstaPay) a validated receipt. Cash stays pending until
+staff confirm it, receipts stay in the private bucket, and fifteen-second
+polling brings staff decisions back to the owning guardian.
+The InstaPay destination is nullable clinic configuration maintained in
+Dashboard settings and returned by the parent view. When absent, Mobile disables
+InstaPay and keeps cash available; it never embeds a financial address in the
+bundle.
+
+The booking and live-queue screens now follow the supplied prototype's visual
+hierarchy: service and child cards, horizontal day/window selectors, a sticky
+continue-to-payment action, live concentric queue counter, ETA card and the
+dedicated pending-approval state. The implementation deliberately keeps honest
+arrival windows and the guardian-safe `aheadCount`; it does not invent 12-minute
+slots or reveal other patients' ticket numbers from the static prototype.
 
 ### M5 checkpoint
 
