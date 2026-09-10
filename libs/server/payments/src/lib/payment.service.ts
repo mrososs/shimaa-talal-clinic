@@ -96,7 +96,7 @@ export class PaymentService {
     clinicId: string,
     guardianId: string,
   ): Promise<ParentPaymentsView> {
-    const [payments, payable] = await Promise.all([
+    const [payments, payable, clinic] = await Promise.all([
       this.database.query<PaymentRow>(
         `select ${COLUMNS} from clinic.payments
           where clinic_id = $1 and guardian_id = $2
@@ -134,10 +134,15 @@ export class PaymentService {
           order by a.window_start, a.id`,
         [clinicId, guardianId],
       ),
+      this.database.query<{ instapay_handle: string | null }>(
+        `select instapay_handle from clinic.clinics where id = $1`,
+        [clinicId],
+      ),
     ]);
     return {
       items: payments.rows.map(toPayment),
       payableAppointments: payable.rows.map(toParentPaymentOption),
+      instapayHandle: clinic.rows[0]?.instapay_handle?.trim() || null,
     };
   }
 
@@ -284,6 +289,7 @@ export class PaymentService {
     ) {
       throw paymentProcessing();
     }
+    await this.requireParentInstapay(clinicId);
     return this.registerInstapayForActor(
       {
         ...seed,
@@ -292,6 +298,19 @@ export class PaymentService {
         file: input.file,
       },
       { guardianId },
+    );
+  }
+
+  private async requireParentInstapay(clinicId: string): Promise<void> {
+    const configured = await this.database.query<{ configured: boolean }>(
+      `select nullif(btrim(instapay_handle), '') is not null as configured
+         from clinic.clinics where id = $1`,
+      [clinicId],
+    );
+    if (configured.rows[0]?.configured) return;
+    throw new PaymentsError(
+      PaymentsErrorCode.InstapayUnavailable,
+      'InstaPay is not configured for this clinic.',
     );
   }
 
@@ -498,16 +517,7 @@ export class PaymentService {
          where id=$1 and clinic_id=$2 returning ${COLUMNS}`,
         [id, clinicId, to, memberId, note],
       );
-      await event(
-        tx,
-        clinicId,
-        id,
-        kind,
-        from,
-        to,
-        { memberId },
-        note,
-      );
+      await event(tx, clinicId, id, kind, from, to, { memberId }, note);
       const row = updated.rows[0];
       if (!row) throw notFound();
       return toPayment(row);

@@ -79,8 +79,9 @@ const API_MESSAGES: Record<string, string> = {
     'توجد عملية دفع لهذا الموعد قيد المعالجة. حدّثي الصفحة بعد قليل.',
   payment_invalid_receipt:
     'اختاري إيصال PDF أو صورة بحجم لا يزيد عن ٥ ميجابايت.',
-  payment_storage_failed:
-    'تعذّر رفع الإيصال الآن. احتفظي به وحاولي مرة أخرى.',
+  payment_instapay_unavailable:
+    'الدفع عبر InstaPay غير متاح حالياً. اختاري الدفع في العيادة.',
+  payment_storage_failed: 'تعذّر رفع الإيصال الآن. احتفظي به وحاولي مرة أخرى.',
 };
 
 export function apiMessage(error: unknown): string {

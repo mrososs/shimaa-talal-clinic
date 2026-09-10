@@ -48,8 +48,9 @@ export function describePaymentsWithDatabase(
       const clinic = await sql.query<{ id: string }>(
         `insert into clinic.clinics
           (name, slug, timezone, default_country_code, grace_period_minutes,
-           max_self_defers)
-         values ('Payments fixture', $1, 'Africa/Cairo', 'EG', 10, 2)
+           max_self_defers, instapay_handle)
+         values ('Payments fixture', $1, 'Africa/Cairo', 'EG', 10, 2,
+                 'payments.fixture@instapay')
          returning id`,
         [TAG],
       );
@@ -143,7 +144,9 @@ export async function clearPayments(
   await sql.query(`delete from clinic.payment_events where clinic_id = $1`, [
     clinicId,
   ]);
-  await sql.query(`delete from clinic.payments where clinic_id = $1`, [clinicId]);
+  await sql.query(`delete from clinic.payments where clinic_id = $1`, [
+    clinicId,
+  ]);
 }
 
 async function sweep(sql: SqlExecutor): Promise<void> {
@@ -163,15 +166,41 @@ async function removeClinics(
   clinicIds: string[],
 ): Promise<void> {
   if (clinicIds.length === 0) return;
-  await sql.query(`delete from clinic.payment_events where clinic_id = any($1)`, [clinicIds]);
-  await sql.query(`delete from clinic.payments where clinic_id = any($1)`, [clinicIds]);
-  await sql.query(`delete from clinic.appointment_events where appointment_id in (select id from clinic.appointments where clinic_id = any($1))`, [clinicIds]);
-  await sql.query(`delete from clinic.appointments where clinic_id = any($1)`, [clinicIds]);
-  await sql.query(`delete from clinic.service_prices where clinic_id = any($1)`, [clinicIds]);
-  await sql.query(`delete from clinic.clinic_sessions where clinic_id = any($1)`, [clinicIds]);
-  await sql.query(`delete from clinic.guardian_children where child_id in (select id from clinic.children where clinic_id = any($1))`, [clinicIds]);
-  await sql.query(`delete from clinic.children where clinic_id = any($1)`, [clinicIds]);
-  await sql.query(`delete from clinic.guardians where clinic_id = any($1)`, [clinicIds]);
-  await sql.query(`delete from clinic.clinic_members where clinic_id = any($1)`, [clinicIds]);
+  await sql.query(
+    `delete from clinic.payment_events where clinic_id = any($1)`,
+    [clinicIds],
+  );
+  await sql.query(`delete from clinic.payments where clinic_id = any($1)`, [
+    clinicIds,
+  ]);
+  await sql.query(
+    `delete from clinic.appointment_events where appointment_id in (select id from clinic.appointments where clinic_id = any($1))`,
+    [clinicIds],
+  );
+  await sql.query(`delete from clinic.appointments where clinic_id = any($1)`, [
+    clinicIds,
+  ]);
+  await sql.query(
+    `delete from clinic.service_prices where clinic_id = any($1)`,
+    [clinicIds],
+  );
+  await sql.query(
+    `delete from clinic.clinic_sessions where clinic_id = any($1)`,
+    [clinicIds],
+  );
+  await sql.query(
+    `delete from clinic.guardian_children where child_id in (select id from clinic.children where clinic_id = any($1))`,
+    [clinicIds],
+  );
+  await sql.query(`delete from clinic.children where clinic_id = any($1)`, [
+    clinicIds,
+  ]);
+  await sql.query(`delete from clinic.guardians where clinic_id = any($1)`, [
+    clinicIds,
+  ]);
+  await sql.query(
+    `delete from clinic.clinic_members where clinic_id = any($1)`,
+    [clinicIds],
+  );
   await sql.query(`delete from clinic.clinics where id = any($1)`, [clinicIds]);
 }

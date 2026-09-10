@@ -1,5 +1,9 @@
 import { computed, readonly, shallowRef } from 'vue';
-import type { ParentPaymentOption, ParentPaymentsView } from '@clinic/contracts';
+import type {
+  ParentPaymentOption,
+  ParentPaymentsView,
+  PaymentRecord,
+} from '@clinic/contracts';
 import { createSequence, usePolling } from '@clinic/client-ui';
 import { paymentsApi } from '../../../runtime';
 import { apiMessage } from '../../../shared/messages';
@@ -18,12 +22,17 @@ export function useParentPayments(initialAppointmentId?: () => string | null) {
   const view = shallowRef<ParentPaymentsView>({
     items: [],
     payableAppointments: [],
+    instapayHandle: null,
   });
   const selectedId = shallowRef<string | null>(null);
   const loading = shallowRef(true);
   const working = shallowRef(false);
   const failure = shallowRef<string | null>(null);
   const success = shallowRef<string | null>(null);
+  const lastResult = shallowRef<{
+    payment: PaymentRecord;
+    appointment: ParentPaymentOption;
+  } | null>(null);
   const sequence = createSequence();
   const pendingKeys = new Map<string, string>();
 
@@ -88,6 +97,7 @@ export function useParentPayments(initialAppointmentId?: () => string | null) {
   function select(appointmentId: string): void {
     selectedId.value = appointmentId;
     success.value = null;
+    lastResult.value = null;
   }
 
   async function run(
@@ -95,10 +105,13 @@ export function useParentPayments(initialAppointmentId?: () => string | null) {
     command: (input: {
       appointmentId: string;
       idempotencyKey: string;
-    }) => Promise<unknown>,
+    }) => Promise<PaymentRecord>,
   ): Promise<boolean> {
     const appointmentId = selectedId.value;
-    if (working.value || appointmentId === null) return false;
+    const appointment = selected.value;
+    if (working.value || appointmentId === null || appointment === null) {
+      return false;
+    }
     working.value = true;
     failure.value = null;
     success.value = null;
@@ -106,12 +119,13 @@ export function useParentPayments(initialAppointmentId?: () => string | null) {
     const idempotencyKey = pendingKeys.get(requestKey) ?? crypto.randomUUID();
     pendingKeys.set(requestKey, idempotencyKey);
     try {
-      await command({ appointmentId, idempotencyKey });
+      const payment = await command({ appointmentId, idempotencyKey });
       pendingKeys.delete(requestKey);
       success.value =
         method === 'cash'
           ? 'تم تسجيل اختيار الدفع في العيادة.'
           : 'تم إرسال الإيصال للمراجعة.';
+      lastResult.value = { payment, appointment };
       await read();
       return true;
     } catch (error) {
@@ -128,6 +142,11 @@ export function useParentPayments(initialAppointmentId?: () => string | null) {
   }
 
   function registerInstapay(file: File | null): Promise<boolean> {
+    if (view.value.instapayHandle === null) {
+      failure.value =
+        'الدفع عبر InstaPay غير متاح حالياً. اختاري الدفع في العيادة.';
+      return Promise.resolve(false);
+    }
     if (
       file === null ||
       file.size < 1 ||
@@ -148,6 +167,7 @@ export function useParentPayments(initialAppointmentId?: () => string | null) {
     working: readonly(working),
     failure: readonly(failure),
     success: readonly(success),
+    lastResult: readonly(lastResult),
     polling,
     open,
     close,

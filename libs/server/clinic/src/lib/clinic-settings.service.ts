@@ -13,7 +13,7 @@ export class ClinicSettingsService {
     const [clinic, prices, templates, schedules, closures, team] =
       await Promise.all([
         this.database.query<any>(
-          `select name,phone_e164,address,timezone,grace_period_minutes,default_avg_consult_minutes,max_self_defers,min_lead_minutes,cancellation_cutoff_minutes,auto_confirm_parent_bookings from clinic.clinics where id=$1`,
+          `select name,phone_e164,address,instapay_handle,timezone,grace_period_minutes,default_avg_consult_minutes,max_self_defers,min_lead_minutes,cancellation_cutoff_minutes,auto_confirm_parent_bookings from clinic.clinics where id=$1`,
           [clinicId],
         ),
         this.database.query<any>(
@@ -44,6 +44,7 @@ export class ClinicSettingsService {
         name: c.name,
         phoneE164: c.phone_e164,
         address: c.address,
+        instapayHandle: c.instapay_handle,
         timezone: c.timezone,
       },
       policies: {
@@ -96,7 +97,12 @@ export class ClinicSettingsService {
   profile(
     clinicId: string,
     actor: string,
-    input: { name: string; phoneE164?: string; address?: string },
+    input: {
+      name: string;
+      phoneE164?: string;
+      address?: string;
+      instapayHandle?: string;
+    },
   ) {
     return this.mutate(
       clinicId,
@@ -107,17 +113,18 @@ export class ClinicSettingsService {
       async (tx) => {
         const before = await one(
           tx,
-          'select name,phone_e164,address from clinic.clinics where id=$1 for update',
+          'select name,phone_e164,address,instapay_handle from clinic.clinics where id=$1 for update',
           [clinicId],
         );
         const after = await one(
           tx,
-          'update clinic.clinics set name=$2,phone_e164=$3,address=$4 where id=$1 returning name,phone_e164,address',
+          'update clinic.clinics set name=$2,phone_e164=$3,address=$4,instapay_handle=$5 where id=$1 returning name,phone_e164,address,instapay_handle',
           [
             clinicId,
             input.name,
             input.phoneE164 ?? null,
             input.address ?? null,
+            input.instapayHandle?.trim() || null,
           ],
         );
         return { before, after, result: undefined };
@@ -232,7 +239,7 @@ export class ClinicSettingsService {
             'New schedule versions must start after today.',
           );
         await tx.query(
-        `update clinic.clinic_schedules set effective_to=$5::date-1 where clinic_id=$1 and doctor_member_id=$2 and weekday=$3 and session_kind=$4 and active and (effective_to is null or effective_to >= $5)`,
+          `update clinic.clinic_schedules set effective_to=$5::date-1 where clinic_id=$1 and doctor_member_id=$2 and weekday=$3 and session_kind=$4 and active and (effective_to is null or effective_to >= $5)`,
           [
             clinicId,
             input.doctorMemberId,

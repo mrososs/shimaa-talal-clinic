@@ -36,7 +36,10 @@ function money(amountMinor: number, currency: string): string {
       :key="appointment.appointmentId"
       type="button"
       class="card appointment"
-      :class="{ 'appointment--selected': appointment.appointmentId === selectedId }"
+      :class="{
+        'appointment--selected': appointment.appointmentId === selectedId,
+      }"
+      :aria-pressed="appointment.appointmentId === selectedId"
       @click="emit('select', appointment.appointmentId)"
     >
       <span class="appointment__mark" aria-hidden="true" />

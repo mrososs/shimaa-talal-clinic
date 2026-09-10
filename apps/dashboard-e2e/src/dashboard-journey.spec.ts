@@ -51,7 +51,7 @@ test('parent request reaches completion, payment and role-safe reports', async (
       name: 'التنقل الرئيسي',
     });
     await expect(mobileTabs).toBeVisible();
-    await expect(parent.getByRole('tab')).toHaveCount(3);
+    await expect(parent.getByRole('tab')).toHaveCount(4);
 
     const mobileLayout = await parent.evaluate(() => {
       const tabBar = document.querySelector('ion-tab-bar');
@@ -86,14 +86,46 @@ test('parent request reaches completion, payment and role-safe reports', async (
 
     await parent.goto(`${mobileUrl}/booking`);
     await expect(mobileTabs).toBeHidden();
+    await expect(
+      parent.getByRole('heading', { name: 'نوع الحجز' }),
+    ).toBeVisible();
+    await expect(
+      parent.getByRole('heading', { name: 'من سيزور الطبيبة؟' }),
+    ).toBeVisible();
+    await expect(
+      parent.getByRole('heading', { name: 'اختر اليوم' }),
+    ).toBeVisible();
     await parent.locator(`[data-session-id="${fixture.sessionId}"]`).click();
-    await parent.getByRole('button', { name: 'تأكيد الحجز' }).click();
-    await expect(parent).toHaveURL(/\/appointments\/[0-9a-f-]+$/);
-    const appointmentId = new URL(parent.url()).pathname.split('/').at(-1);
+    await parent.getByRole('button', { name: /المتابعة للدفع/ }).click();
+    await expect(parent).toHaveURL(/\/payments\?appointmentId=[0-9a-f-]+$/);
+    const appointmentId = new URL(parent.url()).searchParams.get(
+      'appointmentId',
+    );
     if (!appointmentId) {
       throw new Error('Booking did not return an appointment id.');
     }
+
+    await expect(
+      parent.getByRole('heading', { name: 'طريقة الدفع' }),
+    ).toBeVisible();
+    await expect(parent.locator('.invoice')).toContainText(fixture.childName);
+    await expect(parent.locator('.method')).toHaveCount(2);
+    expect(
+      await parent.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+
+    await parent.goto(`${mobileUrl}/appointments/${appointmentId}`);
     await expect(parent.getByText('قيد المراجعة')).toBeVisible();
+
+    await parent.goto(`${mobileUrl}/tabs/queue`);
+    await expect(
+      parent.getByText(`حجز ${fixture.childName} قيد المراجعة`),
+    ).toBeVisible();
+    await expect(
+      parent.getByText('الحالة: بانتظار موافقة العيادة'),
+    ).toBeVisible();
 
     const reception = await receptionContext.newPage();
     await signIn(reception, `${dashboardUrl}/sign-in`, fixture.reception);
@@ -106,7 +138,6 @@ test('parent request reaches completion, payment and role-safe reports', async (
     await expect(appointmentRow).toContainText('مؤكّد');
 
     await reception.goto(`${dashboardUrl}/queue`);
-    await reception.locator(`[data-session-id="${fixture.sessionId}"]`).click();
     const expectedRow = reception.locator(
       `[data-appointment-id="${appointmentId}"]`,
     );
@@ -114,21 +145,28 @@ test('parent request reaches completion, payment and role-safe reports', async (
     await expectedRow.getByRole('button', { name: 'تسجيل الوصول' }).click();
 
     const waitingRow = reception
-      .locator(`[data-appointment-id="${appointmentId}"]`)
+      .locator(`[data-entry-id][data-appointment-id="${appointmentId}"]`)
       .filter({ hasText: fixture.childName });
     await expect(waitingRow).toBeVisible();
+
+    await parent.goto(`${mobileUrl}/tabs/queue`);
+    await expect(parent.locator('.counter__ring')).toBeVisible();
+    await expect(parent.getByText('دورك هو التالي')).toBeVisible();
+
     await reception.getByRole('button', { name: 'استدعاء التالي' }).click();
     const calledCard = reception.locator(
       `.now__patient[data-appointment-id="${appointmentId}"]`,
     );
     await expect(calledCard).toContainText('تم النداء');
+    await parent.reload();
+    await expect(parent.getByText('حان دورك الآن!')).toBeVisible();
+
     await calledCard.getByRole('button', { name: 'بدء الكشف' }).click();
     await expect(calledCard).toContainText('في الكشف');
 
     const doctor = await doctorContext.newPage();
     await signIn(doctor, `${dashboardUrl}/sign-in`, fixture.doctor);
     await doctor.goto(`${dashboardUrl}/queue`);
-    await doctor.locator(`[data-session-id="${fixture.sessionId}"]`).click();
     const inService = doctor.locator(
       `.now__patient[data-appointment-id="${appointmentId}"]`,
     );
@@ -185,7 +223,7 @@ test('parent request reaches completion, payment and role-safe reports', async (
       animations: 'disabled',
     });
 
-    await parent.reload();
+    await parent.goto(`${mobileUrl}/appointments/${appointmentId}`);
     await expect(parent.getByText('تمت الزيارة')).toBeVisible();
   } finally {
     await Promise.all([

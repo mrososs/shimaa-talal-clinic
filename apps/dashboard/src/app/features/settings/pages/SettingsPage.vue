@@ -10,7 +10,12 @@ const tab = ref<Tab>('clinic'),
   loading = ref(true),
   working = ref(false),
   failure = ref<string | null>(null);
-const profile = reactive({ name: '', phoneE164: '', address: '' }),
+const profile = reactive({
+    name: '',
+    phoneE164: '',
+    address: '',
+    instapayHandle: '',
+  }),
   policies = reactive({
     gracePeriodMinutes: 10,
     defaultAvgConsultMinutes: 6,
@@ -50,6 +55,7 @@ function sync(v: ClinicSettings) {
     name: v.profile.name,
     phoneE164: v.profile.phoneE164 ?? '',
     address: v.profile.address ?? '',
+    instapayHandle: v.profile.instapayHandle ?? '',
   });
   Object.assign(policies, v.policies);
   schedule.doctorMemberId = v.team.find((m) => m.role === 'doctor')?.id ?? '';
@@ -96,10 +102,7 @@ onMounted(load);
 </script>
 <template>
   <div class="dstack">
-    <nav
-      class="dtabs"
-      aria-label="أقسام الإعدادات"
-    >
+    <nav class="dtabs" aria-label="أقسام الإعدادات">
       <button
         v-for="item in tabs"
         :key="item[0]"
@@ -109,42 +112,27 @@ onMounted(load);
         {{ item[1] }}
       </button>
     </nav>
-    <p
-      v-if="failure"
-      class="dnotice dnotice--error"
-      role="alert"
-    >
+    <p v-if="failure" class="dnotice dnotice--error" role="alert">
       {{ failure }}
     </p>
-    <div
-      v-if="loading"
-      class="dcard dcard--pad"
-    >
-      جارٍ تحميل الإعدادات…
-    </div>
+    <div v-if="loading" class="dcard dcard--pad">جارٍ تحميل الإعدادات…</div>
     <template v-else-if="data">
-      <section
-        v-if="tab === 'clinic'"
-        class="settings-grid"
-      >
+      <section v-if="tab === 'clinic'" class="settings-grid">
         <form
           class="dcard dcard--pad dstack"
           @submit.prevent="run(() => settingsApi.profile(profile))"
         >
           <h2>بيانات العيادة</h2>
-          <label>اسم العيادة<input
-            v-model="profile.name"
-            required
-          ></label><label>الهاتف<input
-            v-model="profile.phoneE164"
-            dir="ltr"
-          ></label><label>العنوان<textarea
-            v-model="profile.address"
-            rows="3"
-          /></label><button
-            class="dbtn dbtn--primary"
-            :disabled="working"
-          >
+          <label>اسم العيادة<input v-model="profile.name" required /></label
+          ><label>الهاتف<input v-model="profile.phoneE164" dir="ltr" /></label
+          ><label>العنوان<textarea v-model="profile.address" rows="3" /></label
+          ><label
+            >عنوان InstaPay<input
+              v-model="profile.instapayHandle"
+              dir="ltr"
+              maxlength="200"
+              placeholder="clinic@instapay" /></label
+          ><button class="dbtn dbtn--primary" :disabled="working">
             حفظ البيانات
           </button>
         </form>
@@ -153,31 +141,34 @@ onMounted(load);
           @submit.prevent="run(() => settingsApi.policies(policies))"
         >
           <h2>سياسات التشغيل</h2>
-          <label>مهلة النداء بالدقائق<input
-            v-model.number="policies.gracePeriodMinutes"
-            type="number"
-            min="1"
-            max="120"
-          ></label><label>متوسط الكشف<input
-            v-model.number="policies.defaultAvgConsultMinutes"
-            type="number"
-            min="1"
-          ></label><label>أقصى مرات التأجيل<input
-            v-model.number="policies.maxSelfDefers"
-            type="number"
-            min="0"
-            max="10"
-          ></label><label>مهلة الإلغاء<input
-            v-model.number="policies.cancellationCutoffMinutes"
-            type="number"
-            min="0"
-          ></label><label class="check"><input
-            v-model="policies.autoConfirmParentBookings"
-            type="checkbox"
-          >اعتماد حجوزات الأسر تلقائيًا</label><button
-            class="dbtn dbtn--primary"
-            :disabled="working"
-          >
+          <label
+            >مهلة النداء بالدقائق<input
+              v-model.number="policies.gracePeriodMinutes"
+              type="number"
+              min="1"
+              max="120" /></label
+          ><label
+            >متوسط الكشف<input
+              v-model.number="policies.defaultAvgConsultMinutes"
+              type="number"
+              min="1" /></label
+          ><label
+            >أقصى مرات التأجيل<input
+              v-model.number="policies.maxSelfDefers"
+              type="number"
+              min="0"
+              max="10" /></label
+          ><label
+            >مهلة الإلغاء<input
+              v-model.number="policies.cancellationCutoffMinutes"
+              type="number"
+              min="0" /></label
+          ><label class="check"
+            ><input
+              v-model="policies.autoConfirmParentBookings"
+              type="checkbox"
+            />اعتماد حجوزات الأسر تلقائيًا</label
+          ><button class="dbtn dbtn--primary" :disabled="working">
             حفظ السياسات
           </button>
         </form>
@@ -188,7 +179,10 @@ onMounted(load);
             :key="price.visitType"
             class="setting-row"
           >
-            <strong>{{ visitLabels[price.visitType] ?? price.visitType }}</strong><input
+            <strong>{{
+              visitLabels[price.visitType] ?? price.visitType
+            }}</strong
+            ><input
               :value="price.amountMinor / 100"
               type="number"
               min="0"
@@ -199,10 +193,9 @@ onMounted(load);
                   Number(($event.target as HTMLInputElement).value) * 100,
                 )
               "
-            ><label class="check"><input
-              v-model="price.active"
-              type="checkbox"
-            >مفعّل</label><button
+            /><label class="check"
+              ><input v-model="price.active" type="checkbox" />مفعّل</label
+            ><button
               class="dbtn dbtn--ghost"
               :disabled="working"
               @click="
@@ -219,51 +212,48 @@ onMounted(load);
           </div>
         </article>
       </section>
-      <section
-        v-else-if="tab === 'schedule'"
-        class="settings-grid"
-      >
+      <section v-else-if="tab === 'schedule'" class="settings-grid">
         <form
           class="dcard dcard--pad dstack"
           @submit.prevent="run(() => settingsApi.schedule(schedule))"
         >
           <h2>نسخة جدول جديدة</h2>
-          <label>الطبيب<select v-model="schedule.doctorMemberId">
-            <option
-              v-for="m in data.team.filter(
-                (v) => v.role === 'doctor' && v.status === 'active',
-              )"
-              :key="m.id"
-              :value="m.id"
-            >
-              {{ m.displayName }}
-            </option>
-          </select></label><label>اليوم<input
-            v-model.number="schedule.weekday"
-            type="number"
-            min="0"
-            max="6"
-          ></label><label>الفترة<select v-model="schedule.sessionKind">
-            <option value="morning">صباحية</option>
-            <option value="evening">مسائية</option>
-          </select></label><label>يبدأ<input
-            v-model="schedule.startsAt"
-            type="time"
-          ></label><label>ينتهي<input
-            v-model="schedule.endsAt"
-            type="time"
-          ></label><label>من تاريخ<input
-            v-model="schedule.effectiveFrom"
-            type="date"
-            required
-          ></label><label>السعة<input
-            v-model.number="schedule.capacityPerWindow"
-            type="number"
-            min="1"
-          ></label><button
-            class="dbtn dbtn--primary"
-            :disabled="working"
-          >
+          <label
+            >الطبيب<select v-model="schedule.doctorMemberId">
+              <option
+                v-for="m in data.team.filter(
+                  (v) => v.role === 'doctor' && v.status === 'active',
+                )"
+                :key="m.id"
+                :value="m.id"
+              >
+                {{ m.displayName }}
+              </option>
+            </select></label
+          ><label
+            >اليوم<input
+              v-model.number="schedule.weekday"
+              type="number"
+              min="0"
+              max="6" /></label
+          ><label
+            >الفترة<select v-model="schedule.sessionKind">
+              <option value="morning">صباحية</option>
+              <option value="evening">مسائية</option>
+            </select></label
+          ><label>يبدأ<input v-model="schedule.startsAt" type="time" /></label
+          ><label>ينتهي<input v-model="schedule.endsAt" type="time" /></label
+          ><label
+            >من تاريخ<input
+              v-model="schedule.effectiveFrom"
+              type="date"
+              required /></label
+          ><label
+            >السعة<input
+              v-model.number="schedule.capacityPerWindow"
+              type="number"
+              min="1" /></label
+          ><button class="dbtn dbtn--primary" :disabled="working">
             إضافة نسخة مستقبلية
           </button>
         </form>
@@ -272,35 +262,33 @@ onMounted(load);
           @submit.prevent="run(saveClosure)"
         >
           <h2>إضافة إجازة/إغلاق</h2>
-          <label>من<input
-            v-model="closure.startsAt"
-            type="datetime-local"
-            required
-          ></label><label>إلى<input
-            v-model="closure.endsAt"
-            type="datetime-local"
-            required
-          ></label><label>السبب<input
-            v-model="closure.reason"
-            required
-          ></label><button
-            class="dbtn dbtn--primary"
-            :disabled="working"
-          >
+          <label
+            >من<input
+              v-model="closure.startsAt"
+              type="datetime-local"
+              required /></label
+          ><label
+            >إلى<input
+              v-model="closure.endsAt"
+              type="datetime-local"
+              required /></label
+          ><label>السبب<input v-model="closure.reason" required /></label
+          ><button class="dbtn dbtn--primary" :disabled="working">
             حفظ الإغلاق
           </button>
         </form>
         <article class="dcard dcard--pad settings-wide">
           <h2>الجداول الحالية</h2>
-          <div
-            v-for="s in data.schedules"
-            :key="s.id"
-            class="setting-row"
-          >
-            <span>اليوم {{ s.weekday }} · {{ s.startsAt.slice(0, 5) }}–{{
-              s.endsAt.slice(0, 5)
-            }}</span><span>{{ s.capacityPerWindow }} / نافذة</span><small>{{ s.effectiveFrom }}
-              {{ s.effectiveTo ? `— ${s.effectiveTo}` : '— مستمر' }}</small>
+          <div v-for="s in data.schedules" :key="s.id" class="setting-row">
+            <span
+              >اليوم {{ s.weekday }} · {{ s.startsAt.slice(0, 5) }}–{{
+                s.endsAt.slice(0, 5)
+              }}</span
+            ><span>{{ s.capacityPerWindow }} / نافذة</span
+            ><small
+              >{{ s.effectiveFrom }}
+              {{ s.effectiveTo ? `— ${s.effectiveTo}` : '— مستمر' }}</small
+            >
           </div>
         </article>
       </section>
@@ -308,18 +296,11 @@ onMounted(load);
         v-else-if="tab === 'notifications'"
         class="dcard dcard--pad dstack"
       >
-        <div
-          v-for="item in data.templates"
-          :key="item.key"
-          class="template"
-        >
-          <strong>{{ item.key }}</strong><textarea
-            v-model="item.body"
-            rows="3"
-          /><label class="check"><input
-            v-model="item.active"
-            type="checkbox"
-          >مفعّل</label><button
+        <div v-for="item in data.templates" :key="item.key" class="template">
+          <strong>{{ item.key }}</strong
+          ><textarea v-model="item.body" rows="3" /><label class="check"
+            ><input v-model="item.active" type="checkbox" />مفعّل</label
+          ><button
             class="dbtn dbtn--ghost"
             :disabled="working"
             @click="
@@ -335,33 +316,20 @@ onMounted(load);
           </button>
         </div>
       </section>
-      <section
-        v-else-if="tab === 'team'"
-        class="dcard"
-      >
+      <section v-else-if="tab === 'team'" class="dcard">
         <div
           v-for="member in data.team"
           :key="member.id"
           class="setting-row team"
         >
-          <input v-model="member.displayName"><select v-model="member.role">
-            <option value="doctor">
-              طبيب
-            </option>
-            <option value="reception">
-              مساعدة
-            </option>
-            <option value="admin">
-              Admin
-            </option>
-          </select><select v-model="member.status">
-            <option value="active">
-              نشط
-            </option>
-            <option value="suspended">
-              موقوف
-            </option>
-          </select><button
+          <input v-model="member.displayName" /><select v-model="member.role">
+            <option value="doctor">طبيب</option>
+            <option value="reception">مساعدة</option>
+            <option value="admin">Admin</option></select
+          ><select v-model="member.status">
+            <option value="active">نشط</option>
+            <option value="suspended">موقوف</option></select
+          ><button
             class="dbtn dbtn--ghost"
             :disabled="working"
             @click="
@@ -378,22 +346,14 @@ onMounted(load);
           </button>
         </div>
       </section>
-      <section
-        v-else
-        class="dcard"
-      >
-        <div
-          v-if="!audit.length"
-          class="dempty"
-        >
+      <section v-else class="dcard">
+        <div v-if="!audit.length" class="dempty">
           لا توجد تغييرات مسجلة بعد.
         </div>
-        <div
-          v-for="event in audit"
-          :key="event.id"
-          class="setting-row"
-        >
-          <strong>{{ event.actorName }}</strong><span>{{ event.action }}</span><time>{{ new Date(event.createdAt).toLocaleString('ar-EG') }}</time>
+        <div v-for="event in audit" :key="event.id" class="setting-row">
+          <strong>{{ event.actorName }}</strong
+          ><span>{{ event.action }}</span
+          ><time>{{ new Date(event.createdAt).toLocaleString('ar-EG') }}</time>
         </div>
       </section>
     </template>

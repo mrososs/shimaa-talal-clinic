@@ -39,7 +39,12 @@ describePaymentsWithDatabase((fx) => {
         currency: 'EGP',
       }),
     ]);
-    expect(stranger).toEqual({ items: [], payableAppointments: [] });
+    expect(owner.instapayHandle).toBe('payments.fixture@instapay');
+    expect(stranger).toEqual({
+      items: [],
+      payableAppointments: [],
+      instapayHandle: 'payments.fixture@instapay',
+    });
   });
 
   it('registers cash as pending with guardian-owned audit identity', async () => {
@@ -145,5 +150,72 @@ describePaymentsWithDatabase((fx) => {
     expect(event.rows).toEqual([
       { event_type: 'receipt_uploaded', actor_guardian_id: fx.guardianId },
     ]);
+  });
+
+  it('keeps a completed InstaPay retry idempotent after configuration is removed', async () => {
+    const input = {
+      appointmentId: fx.appointmentId,
+      idempotencyKey: '89921a80-d4f1-4cb2-948a-12fccf32d239',
+      file: {
+        originalname: 'receipt.pdf',
+        mimetype: 'application/pdf',
+        size: 9,
+        buffer: Buffer.from('%PDF-test'),
+      },
+    };
+    const first = await service().registerParentInstapay(
+      fx.clinicId,
+      fx.guardianId,
+      input,
+    );
+    await fx.db.database.query(
+      `update clinic.clinics set instapay_handle = null where id = $1`,
+      [fx.clinicId],
+    );
+    try {
+      const retry = await service().registerParentInstapay(
+        fx.clinicId,
+        fx.guardianId,
+        input,
+      );
+      expect(retry.id).toBe(first.id);
+      expect(storage.upload).toHaveBeenCalledTimes(1);
+    } finally {
+      await fx.db.database.query(
+        `update clinic.clinics set instapay_handle = 'payments.fixture@instapay'
+          where id = $1`,
+        [fx.clinicId],
+      );
+    }
+  });
+
+  it('rejects a parent InstaPay upload when the clinic has no destination', async () => {
+    await fx.db.database.query(
+      `update clinic.clinics set instapay_handle = null where id = $1`,
+      [fx.clinicId],
+    );
+    try {
+      await expect(
+        service().registerParentInstapay(fx.clinicId, fx.guardianId, {
+          appointmentId: fx.appointmentId,
+          idempotencyKey: 'cd3bf876-83ca-4ad9-8661-1690182bf13b',
+          file: {
+            originalname: 'receipt.pdf',
+            mimetype: 'application/pdf',
+            size: 9,
+            buffer: Buffer.from('%PDF-test'),
+          },
+        }),
+      ).rejects.toMatchObject({
+        code: PaymentsErrorCode.InstapayUnavailable,
+      });
+      expect(storage.upload).not.toHaveBeenCalled();
+    } finally {
+      await fx.db.database.query(
+        `update clinic.clinics set instapay_handle = 'payments.fixture@instapay'
+          where id = $1`,
+        [fx.clinicId],
+      );
+    }
   });
 });

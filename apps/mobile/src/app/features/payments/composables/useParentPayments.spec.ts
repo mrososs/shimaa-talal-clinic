@@ -13,6 +13,7 @@ const { useParentPayments } = await import('./useParentPayments');
 
 const paymentView = (): ParentPaymentsView => ({
   items: [],
+  instapayHandle: 'payments@clinic.instapay',
   payableAppointments: [
     {
       appointmentId: 'appointment-1',
@@ -85,6 +86,21 @@ describe('useParentPayments', () => {
     expect(await state.registerInstapay(invalid)).toBe(false);
     expect(api.instapay).not.toHaveBeenCalled();
     expect(state.failure.value).toContain('PDF');
+    dispose();
+  });
+
+  it('blocks InstaPay before the API call when the clinic has no destination', async () => {
+    api.view.mockResolvedValueOnce({
+      ...paymentView(),
+      instapayHandle: null,
+    });
+    const { state, dispose } = mount();
+    await state.open();
+
+    const receipt = new File(['receipt'], 'receipt.png', { type: 'image/png' });
+    expect(await state.registerInstapay(receipt)).toBe(false);
+    expect(api.instapay).not.toHaveBeenCalled();
+    expect(state.failure.value).toContain('غير متاح');
     dispose();
   });
 });

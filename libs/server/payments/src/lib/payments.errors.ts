@@ -2,6 +2,7 @@ export const PaymentsErrorCode = {
   NotFound: 'payment_not_found',
   InvalidTransition: 'payment_invalid_transition',
   InvalidReceipt: 'payment_invalid_receipt',
+  InstapayUnavailable: 'payment_instapay_unavailable',
   StorageFailed: 'payment_storage_failed',
 } as const;
 

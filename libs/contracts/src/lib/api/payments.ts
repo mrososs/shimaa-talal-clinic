@@ -64,6 +64,8 @@ export interface ParentPaymentOption {
 export interface ParentPaymentsView {
   items: PaymentRecord[];
   payableAppointments: ParentPaymentOption[];
+  /** Server-owned destination shown before a guardian uploads a receipt. */
+  instapayHandle: string | null;
 }
 
 export interface PaymentDecisionInput {

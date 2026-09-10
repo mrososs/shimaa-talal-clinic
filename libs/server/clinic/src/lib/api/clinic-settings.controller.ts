@@ -8,7 +8,7 @@ import {
   Post,
   Put,
 } from '@nestjs/common';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsIn,
@@ -35,8 +35,28 @@ import {
 import { ClinicSettingsService } from '../clinic-settings.service';
 class ProfileDto {
   @IsString() @Length(1, 200) name!: string;
-  @IsOptional() @Matches(/^\+[1-9]\d{7,14}$/) phoneE164?: string;
-  @IsOptional() @IsString() @Length(1, 500) address?: string;
+  @Transform(emptyToUndefined)
+  @IsOptional()
+  @Matches(/^\+[1-9]\d{7,14}$/)
+  phoneE164?: string;
+  @Transform(emptyToUndefined)
+  @IsOptional()
+  @IsString()
+  @Length(1, 500)
+  address?: string;
+  @Transform(emptyToUndefined)
+  @IsOptional()
+  @IsString()
+  @Length(3, 200)
+  instapayHandle?: string;
+}
+
+function emptyToUndefined({ value }: { value: unknown }): unknown {
+  return typeof value === 'string' && value.trim() === ''
+    ? undefined
+    : typeof value === 'string'
+      ? value.trim()
+      : value;
 }
 class PoliciesDto {
   @Type(() => Number) @IsInt() @Min(1) @Max(120) gracePeriodMinutes!: number;
