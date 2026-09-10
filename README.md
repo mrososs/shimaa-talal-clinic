@@ -3,11 +3,11 @@
 Nx monorepo for the clinic platform: an Ionic Vue mobile app, a Vue staff
 dashboard, and a NestJS API backed by Supabase.
 
-> **Status: Phase 2 — booking and queue are running end to end.**
-> Identity, scheduling, booking and the live queue are built, with the parent
-> app and the staff dashboard on top of them. Payments and notifications remain
-> deliberately empty boundaries. What exists, what does not, and the open
-> product decisions are recorded in [docs/status.md](docs/status.md).
+> **Status: the staff Dashboard phase is complete and browser-verified.**
+> Identity, scheduling, booking, queue, clinical records, messages, payments,
+> reports and settings are built behind the NestJS API. What exists, what does
+> not, and the open product decisions are recorded in
+> [docs/status.md](docs/status.md).
 
 ---
 
@@ -20,8 +20,8 @@ pnpm install
 # Starting fresh? cp .env.example .env   (PowerShell: Copy-Item .env.example .env)
 
 pnpm dev:api                # http://localhost:3000/api/v1
-pnpm dev:dashboard          # http://localhost:4201
-pnpm dev:mobile             # http://localhost:4200
+pnpm dev:dashboard          # http://localhost:4203
+pnpm dev:mobile             # http://localhost:4202
 ```
 
 ```bash
@@ -38,16 +38,17 @@ fails fast without them.
 
 ```text
 apps/
-  mobile/        Ionic Vue + Capacitor        (Vite,    4200)
-  dashboard/     Vue web app for staff        (Vite,    4201)
+  mobile/        Ionic Vue + Capacitor        (Vite,    4202)
+  dashboard/     Vue web app for staff        (Vite,    4203)
+  dashboard-e2e/ Playwright cross-role journey
   api/           NestJS, thin composition     (webpack, 3000)
 
 libs/
   contracts/     Pure TypeScript vocabulary shared by all three
   shared/        phone (E.164 normalisation)
   client/        api-client · auth · config · session · theme · ui
-  server/        core · clinic · patients · booking · queue · workflows
-                 + payments and notifications as empty seams
+  server/        core · clinic · patients · booking · queue · clinical
+                 · notifications · payments · workflows
                  core = config · database · supabase · auth · common
 
 supabase/        migrations (schema source of truth) · seed.sql · config.toml
@@ -59,18 +60,19 @@ docs/            status · architecture · project-structure · dependency-rules
 
 ## Commands
 
-| Command                                         | Does                                                              |
-| ----------------------------------------------- | ----------------------------------------------------------------- |
-| `pnpm dev:mobile` / `dev:dashboard` / `dev:api` | Serve one application                                             |
-| `pnpm dev`                                      | Serve all three                                                   |
-| `pnpm build`                                    | Build the three applications                                      |
-| `pnpm lint`                                     | Lint every project — **this is where architecture is enforced**   |
-| `pnpm test`                                     | All tests — the server suites run against a real database         |
-| `pnpm typecheck`                                | Type-check projects exposing a typecheck target                   |
-| `pnpm graph`                                    | Open the interactive project graph                                |
-| `pnpm format`                                   | Format with Prettier via Nx                                       |
-| `pnpm mobile:sync`                              | Build the mobile app and run `cap sync`                           |
-| `pnpm supabase:start` / `supabase:stop`         | Local Supabase stack (needs Docker + Supabase CLI)                |
+| Command                                         | Does                                                               |
+| ----------------------------------------------- | ------------------------------------------------------------------ |
+| `pnpm dev:mobile` / `dev:dashboard` / `dev:api` | Serve one application                                              |
+| `pnpm dev`                                      | Serve all three                                                    |
+| `pnpm build`                                    | Build the three applications                                       |
+| `pnpm lint`                                     | Lint every project — **this is where architecture is enforced**    |
+| `pnpm test`                                     | All tests — the server suites run against a real database          |
+| `pnpm test:dashboard:e2e`                       | Isolated Chrome journey across Mobile, Dashboard, API and database |
+| `pnpm typecheck`                                | Type-check projects exposing a typecheck target                    |
+| `pnpm graph`                                    | Open the interactive project graph                                 |
+| `pnpm format`                                   | Format with Prettier via Nx                                        |
+| `pnpm mobile:sync`                              | Build the mobile app and run `cap sync`                            |
+| `pnpm supabase:start` / `supabase:stop`         | Local Supabase stack (needs Docker + Supabase CLI)                 |
 
 Scope any of them: `pnpm nx test contracts`, `pnpm nx affected -t lint test`.
 

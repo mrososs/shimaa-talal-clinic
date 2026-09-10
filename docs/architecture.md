@@ -3,9 +3,8 @@
 Clinic Operating Platform — foundation.
 
 This document explains the shape of the system and, more importantly, _why_ it
-has that shape. It describes the architecture as built, not an aspiration: at
-the time of writing there is no booking, no queue and no payment logic in this
-repository, by design.
+has that shape. Booking and Queue are implemented as independent domains;
+cross-domain appointment/queue consistency is owned by the workflow layer.
 
 ---
 
@@ -129,8 +128,8 @@ So: **one deployable NestJS application, with hard internal boundaries.**
 Each business capability is a separate Nx library with its own tag. The
 boundaries are enforced at lint time rather than by a network hop. Domains are
 islands: `scope:booking` may depend on `scope:shared`, never on `scope:queue`.
-Workflows that legitimately span domains are handled by a future orchestration
-layer _above_ the domains, never by relaxing the rule — see
+Workflows that legitimately span domains are handled by the orchestration layer
+_above_ the domains, never by relaxing the rule — see
 [cross-domain-orchestration.md](./cross-domain-orchestration.md).
 
 If a domain ever genuinely needs to scale or deploy separately, the boundary it
@@ -334,7 +333,8 @@ Level 3 is the one that still holds when levels 1 and 2 are wrong. RLS is not
 the business layer; it is what limits the damage when the business layer has a
 bug. The concrete grant and policy design is in
 [database.md](./database.md#4-how-this-interacts-with-supabase-and-rls) — no
-policies exist yet, because policies describe tables and there are no tables.
+table is exposed to the public Data API, and every business table uses forced
+RLS as defence in depth for the least-privilege `clinic_api` role.
 
 Frontend structure follows from this. Both apps are thin shells:
 
@@ -349,32 +349,38 @@ Frontend structure follows from this. Both apps are thin shells:
 
 The two apps are separate on purpose. `apps/mobile` is an Ionic + Capacitor
 shell with a native navigation stack, shipped to app stores; `apps/dashboard`
-is a keyboard-and-mouse web app for clinic staff. They share domain vocabulary
-and the API client — not components, and not a design system, because they will
-not want the same one.
+is a keyboard-and-mouse web app for clinic staff. They share domain vocabulary,
+the API client and visual tokens, but not components: the interaction models
+remain intentionally different.
+
+### Release-level browser boundary
+
+`apps/dashboard-e2e` sits outside the deployed applications. Playwright drives
+the real Mobile and Dashboard clients against the real NestJS API. Global setup
+may use a direct PostgreSQL connection and the Supabase Admin API only to create
+marked, isolated fixture identities; global teardown removes those rows and Auth
+users. No production browser bundle imports either capability.
 
 ---
 
 ## 7. What is deliberately absent
 
 Listed explicitly so their absence reads as a decision rather than an oversight.
-What *is* built is recorded in [status.md](status.md); this table is about what
+What _is_ built is recorded in [status.md](status.md); this table is about what
 is deliberately not.
 
-| Not present                                      | Why                                                                                   |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| Payment / notification logic                     | Out of Phase 2. Empty module boundaries only.                                         |
-| Payment provider                                 | No HyperPay, Moyasar, Stripe or Tap anywhere. `PaymentProvider` is the seam.          |
-| Notification provider                            | No Twilio, WhatsApp Business API or FCM. `NotificationChannel` is the seam.           |
-| Medical records                                  | No diagnoses, prescriptions, files or growth curves. Operational identity only.        |
-| ORM                                              | Supabase migrations are the source of truth; `pg` owns no schema.                     |
+| Not present                                      | Why                                                                                     |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| Payment provider                                 | No HyperPay, Moyasar, Stripe or Tap anywhere. `PaymentProvider` is the seam.            |
+| Outbound notification worker                     | The durable outbox exists, but no SMS/WhatsApp/push worker drains it yet.               |
+| Prescription/lab/pharmacy modules                | Clinical notes exist; downstream prescribing and lab/pharmacy workflows do not.         |
+| ORM                                              | Supabase migrations are the source of truth; `pg` owns no schema.                       |
 | Scheduler / cron                                 | Nothing expires on a timer. Grace and no-shows are human-triggered; see docs/status.md. |
-| Supabase Realtime                                | Polling instead. Realtime authorises via RLS on tables the publishable key can reach.  |
-| UI design, component library, CSS system         | Only Ionic's required baseline stylesheets.                                           |
-| Native Capacitor plugins                         | No camera, push, geolocation, filesystem, biometrics.                                 |
-| Redis, Kafka, RabbitMQ, GraphQL, CQRS, event bus | No current problem justifies any of them.                                             |
-| Caching, offline sync, realtime features         | Premature without usage data.                                                         |
-| `BaseService` / `BaseRepository`                 | Abstractions with no second implementation to justify them.                           |
+| Supabase Realtime                                | Polling instead. Realtime authorises via RLS on tables the publishable key can reach.   |
+| Native Capacitor plugins                         | No camera, push, geolocation, filesystem, biometrics.                                   |
+| Redis, Kafka, RabbitMQ, GraphQL, CQRS, event bus | No current problem justifies any of them.                                               |
+| Offline sync and Supabase Realtime               | Both clients use guarded polling; offline mutation queues are not implemented.          |
+| `BaseService` / `BaseRepository`                 | Abstractions with no second implementation to justify them.                             |
 
 ---
 

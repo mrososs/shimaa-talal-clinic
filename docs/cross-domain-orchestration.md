@@ -3,13 +3,23 @@
 How work that touches more than one domain is coordinated — **without** letting
 domains depend on each other.
 
-The library holds five classes: three writes that must commit across two
-domains (check in, complete, cancel an appointment) and two reads that no single
-domain could assemble (the staff queue board, and a parent's view of their own
-children's turns). The read case is worth naming, because it is easy to assume
-this layer is only for transactions: the board joins Queue's ordering with
-Patients' names and Booking's expected arrivals, and none of those three may see
-the others.
+The library holds cross-domain commands that must commit across Booking and
+Queue, plus reads that no single domain could assemble. The staff board joins
+Queue's ordering with Patients' names and Booking's expected arrivals, while
+the queue completion workflows keep the linked appointment in the same atomic
+state change.
+
+The operational queue commands are intentionally distinct:
+
+- `CompleteQueueEntryWorkflow` completes only the current entry and its linked
+  appointment.
+- `CallNextWorkflow` resolves an expired call and calls the next eligible entry;
+  it refuses while a consultation remains `in_service`.
+- `CompleteAndCallNextWorkflow` completes the current entry and then calls the
+  next eligible entry in one transaction.
+
+Queue owns ordering, grace and queue events. Booking owns appointment state.
+Only this layer synchronises the two; neither domain imports the other.
 
 ---
 

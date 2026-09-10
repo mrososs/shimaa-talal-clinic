@@ -11,8 +11,9 @@ forbidden from owning.
 clinic-platform/
 │
 ├── apps/
-│   ├── mobile/           Ionic Vue + Capacitor app       (Vite,  port 4200)
-│   ├── dashboard/        Vue web app for clinic staff    (Vite,  port 4201)
+│   ├── mobile/           Ionic Vue + Capacitor app       (Vite,  port 4202)
+│   ├── dashboard/        Vue web app for clinic staff    (Vite,  port 4203)
+│   ├── dashboard-e2e/    Isolated cross-role Playwright journey
 │   └── api/              NestJS API                      (webpack, port 3000)
 │
 ├── libs/
@@ -35,9 +36,9 @@ clinic-platform/
 │       ├── clinic/       Tenancy, staff, schedules, sessions
 │       ├── booking/      Appointments and availability
 │       ├── queue/        The live queue: ordering and commands
-│       ├── payments/     Payments domain boundary       (empty seam)
+│       ├── payments/     Payments, receipts and transitions
 │       ├── patients/     Guardians, children, claim codes
-│       ├── notifications/ Notifications boundary        (empty seam)
+│       ├── notifications/ Inbox, urgent triage and outbox
 │       └── workflows/    Cross-domain writes, and reads that span domains
 │
 ├── supabase/
@@ -65,36 +66,49 @@ Applications compose libraries. They are thin, they carry no `scope:` tag
 
 Ionic Vue shell for patients and guardians, packaged natively by Capacitor.
 
-|                  |                                                                                                                                                                                                                                           |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Contains         | `main.ts` bootstrap, `App.vue` (`ion-app` + `ion-router-outlet`), one route, one placeholder page, `runtime.ts` composition root, `capacitor.config.ts`                                                                                   |
-| Does not contain | Product screens, design, CSS system, native plugins                                                                                                                                                                                       |
-| Router           | `@ionic/vue-router` — **not** `vue-router` directly, or page transitions and the native navigation stack break                                                                                                                            |
-| Styling          | Ionic's four required baseline stylesheets (`core`, `normalize`, `structure`, `typography`), imported in `main.ts`. These are a functional requirement, not a theme: without them Ionic components have no layout. `styles.css` is empty. |
-| Build output     | `dist/apps/mobile`, which is what Capacitor's `webDir` points at                                                                                                                                                                          |
-| Extra targets    | `cap-add-android`, `cap-add-ios`, `cap-sync`, `cap-open-android`, `cap-open-ios`                                                                                                                                                          |
+|                  |                                                                                                                            |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Contains         | Auth/onboarding, family home, appointments, booking and live-queue screens; `runtime.ts` composition root; Capacitor shell |
+| Does not contain | Clinic staff operations, direct database access or clinical notes                                                          |
+| Router           | `@ionic/vue-router` with one `/tabs/*` `IonTabs` shell; auth/onboarding/task routes stay outside the tab navigation stack  |
+| Styling          | Ionic baseline plus the shared warm RTL token layer and mobile component primitives                                        |
+| Build output     | `dist/apps/mobile`, which is what Capacitor's `webDir` points at                                                           |
+| Extra targets    | `cap-add-android`, `cap-add-ios`, `cap-sync`, `cap-open-android`, `cap-open-ios`                                           |
 
 ### `apps/dashboard` — `type:app`, `platform:dashboard`
 
 Web app for reception, doctors and administrators.
 
-|                  |                                                                                     |
-| ---------------- | ----------------------------------------------------------------------------------- |
-| Contains         | `main.ts`, `App.vue` (`router-view`), one route, one placeholder page, `runtime.ts` |
-| Does not contain | Any UI framework or design system — none has been chosen                            |
-| Router           | `vue-router`                                                                        |
-| Boundary note    | Lint forbids it from importing `@ionic/*` or `@capacitor/*`                         |
+|               |                                                                                                                                                  |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Contains      | Role-aware shell plus overview, appointments, booking, live queue, families, clinical records, messages, payments, reports and settings features |
+| Design        | Shared warm RTL dashboard tokens and primitives, with focused sidebar/top-bar components                                                         |
+| Router        | `vue-router`; completed screens are lazy-loaded and role metadata is enforced by the auth guard                                                  |
+| Boundary note | Lint forbids it from importing `@ionic/*`, `@capacitor/*` or server libraries                                                                    |
+
+### `apps/dashboard-e2e` — `type:e2e`, `platform:e2e`
+
+The release-level Playwright project. It drives the real Mobile, Dashboard and
+API processes in Chrome, and creates a marked fixture through server-only test
+setup. The fixture is tenant-scoped and removed in global teardown even when a
+browser assertion fails. This is the only application-level project allowed to
+import `pg`; that exception belongs to test provisioning, never to browser code.
+
+Its single serial journey covers the 412×892 RTL Mobile shell and tab behavior,
+parent booking, reception approval/check-in, Queue progression, doctor
+finalisation, payment, role-safe reporting, accessibility and the fixed-sidebar
+visual snapshot.
 
 ### `apps/api` — `type:app`, `platform:server`
 
 The NestJS application. **Composition only.**
 
-|                         |                                                                                                                          |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `src/main.ts`           | Bootstrap: global prefix `api`, URI versioning (default `1`), CORS, `ValidationPipe`, global `ApiExceptionFilter`        |
-| `src/app/app.module.ts` | Imports `ServerCoreModule`, `HealthModule`, `ClinicModule`, the five domain modules and `WorkflowsModule`. Owns nothing. |
-| `src/app/health/`       | `GET /api/v1/health` → `{ "status": "ok", "service", "timestamp" }`                                                      |
-| Must not contain        | Business logic. It belongs in `libs/server/<domain>`.                                                                    |
+|                         |                                                                                                                     |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `src/main.ts`           | Bootstrap: global prefix `api`, URI versioning (default `1`), CORS, `ValidationPipe`, global `ApiExceptionFilter`   |
+| `src/app/app.module.ts` | Imports `ServerCoreModule`, `HealthModule`, `ClinicModule`, the domain modules and `WorkflowsModule`. Owns nothing. |
+| `src/app/health/`       | `GET /api/v1/health` → `{ "status": "ok", "service", "timestamp" }`                                                 |
+| Must not contain        | Business logic. It belongs in `libs/server/<domain>`.                                                               |
 
 ---
 
@@ -107,19 +121,20 @@ The vocabulary all three applications agree on. **Pure TypeScript.** Lint bans
 `@supabase/*`, `express`, `rxjs` and `pg` here, and it may depend on no other
 library.
 
-| Group                | Exports                                                                                                            |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Response envelope    | `ApiResponse<T>`, `ApiSuccess<T>`, `ApiFailure`, `isApiSuccess`                                                    |
-| Routing              | `API_PREFIX`, `API_VERSION`, `API_BASE_PATH`, `ApiResource`, `ApiCommand`                                          |
-| Pagination           | `PageRequest`, `PageMeta`, `Paginated<T>`, `normalizePageRequest`                                                  |
-| Time                 | `IsoInstant`, `IsoDate` — an instant, versus a day in the clinic's timezone                                        |
-| Roles                | `UserRole`, `ClinicMemberRole` (the staff subset, derived from it), `ClinicMemberStatus`                           |
-| Identity             | `Clinic`, `ClinicMember`, `Guardian`, `Child`, `GuardianChild`, `GuardianRelationship`, `ChildSex`                 |
-| Sessions             | `ClinicSession`, `ClinicSessionKind`, `ClinicSessionStatus`, `DoctorPresence`                                      |
-| Booking              | `Appointment`, `AppointmentStatus`, `AppointmentCancelledBy`, `VisitType`, `AvailabilityWindow`, `AvailabilityDay` |
-| Queue                | `QueueEntry`, `QueueStatus`, `QueueEntrySource`, `QueueBoard`, `ParentQueueView`, `isUnchanged`                    |
-| Payments (seam only) | `PaymentStatus`                                                                                                    |
-| Health               | `HealthCheckResult`                                                                                                |
+| Group             | Exports                                                                                                                                  |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Response envelope | `ApiResponse<T>`, `ApiSuccess<T>`, `ApiFailure`, `isApiSuccess`                                                                          |
+| Routing           | `API_PREFIX`, `API_VERSION`, `API_BASE_PATH`, `ApiResource`, `ApiCommand`                                                                |
+| Pagination        | `PageRequest`, `PageMeta`, `Paginated<T>`, `normalizePageRequest`                                                                        |
+| Time              | `IsoInstant`, `IsoDate` — an instant, versus a day in the clinic's timezone                                                              |
+| Roles             | `UserRole`, `ClinicMemberRole` (the staff subset, derived from it), `ClinicMemberStatus`                                                 |
+| Identity          | `Clinic`, `ClinicMember`, `Guardian`, `Child`, `GuardianChild`, `GuardianRelationship`, `ChildSex`                                       |
+| Sessions          | `ClinicSession`, `ClinicSessionKind`, `ClinicSessionStatus`, `DoctorPresence`                                                            |
+| Booking           | `Appointment`, `AppointmentStatus`, `AppointmentCancelledBy`, `VisitType`, `AvailabilityWindow`, `AvailabilityDay`, `FamilyVisitSummary` |
+| Queue             | `QueueEntry`, `QueueStatus`, `QueueEntrySource`, `QueueBoard`, `ParentQueueView`, `isUnchanged`                                          |
+| Payments/reports  | Payment commands/read models, receipt metadata and role-safe clinic report contracts                                                     |
+| Dashboard reads   | `DashboardSummary`, `StaffFamilyRecord`, `PatientFile`, `PatientFileDownload`                                                            |
+| Health            | `HealthCheckResult`                                                                                                                      |
 
 Three things are deliberately **not** here, because exposing them would let a
 client undo a decision the server owns:
@@ -180,7 +195,8 @@ The only HTTP seam. Feature code calls a typed method here, never `fetch`.
 - Unwraps the `ApiResponse` envelope, so callers receive `T` and catch
   `ApiClientError` — no `if (response.success)` scattered through components.
 - `fetchImpl` is injectable, which is how it is unit-tested.
-- No booking, queue or payment endpoints. Those arrive with their domains.
+- Domain endpoint wrappers live with each app feature; the generic client owns
+  only transport and envelope handling.
 
 ### `libs/client/auth` → `@clinic/client-auth` — `type:data-access`
 
@@ -249,36 +265,33 @@ shared reference and tenancy data, not a business engine.
 transitions — but no product rules. "Is this appointment eligible for
 check-in" belongs to booking.
 
-Empty today: the schema lands with the identity and scheduling migrations.
+Implemented: clinic policy, schedules, closures, sessions, row locking and the
+revision used by both polling clients.
 
 ### `libs/server/workflows` → `@clinic/server-workflows` — `type:workflow`, `scope:orchestration`
 
 The one project allowed to depend on several domains at once. Domains stay
 unaware of each other and of this library — the rule is one-directional.
 
-Empty today. Phase 2 brings exactly three workflows: check in an appointment
-(booking + patients + queue), complete a queue entry (queue + booking), and
-cancel an appointment (booking + queue). Each opens one transaction and passes
-the `SqlExecutor` down, so every domain writes in the same commit. See
+Implemented workflows include check-in, complete-only, call-next,
+complete-and-call-next and cancellation, plus the staff and parent queue reads.
+Each command opens one transaction and passes the `SqlExecutor` down, so every
+domain writes in the same commit. See
 [cross-domain-orchestration.md](./cross-domain-orchestration.md).
 
-### The five domain libraries — `type:feature`, `platform:server`, `scope:<domain>`
+### The domain libraries — `type:feature`, `platform:server`, `scope:<domain>`
 
-| Library         | Import path                    | Owns (Phase 2)                                                                                       | Ships today                                                                  |
-| --------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `booking`       | `@clinic/server-booking`       | Appointments, availability, booking lifecycle, rescheduling, cancellation                            | `BookingModule` only                                                         |
-| `queue`         | `@clinic/server-queue`         | Check-in, live queue, serving order, missed turns, grace periods, emergency insertion, doctor delays | `QueueModule` only                                                           |
-| `payments`      | `@clinic/server-payments`      | Payment records and status, verification, refunds                                                    | `PaymentsModule` + `PaymentProvider` / `PAYMENT_PROVIDER` seam               |
-| `patients`      | `@clinic/server-patients`      | Guardian identity, children, clinic records, account claiming                                        | `PatientsModule` only                                                        |
-| `notifications` | `@clinic/server-notifications` | WhatsApp, SMS, push                                                                                  | `NotificationsModule` + `NotificationChannel` / `NOTIFICATION_CHANNELS` seam |
+| Library         | Import path                    | Owns (Phase 2)                                                              | Ships today                                                     |
+| --------------- | ------------------------------ | --------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `booking`       | `@clinic/server-booking`       | Appointments, availability, booking lifecycle, rescheduling, cancellation   | Full Booking domain and API                                     |
+| `queue`         | `@clinic/server-queue`         | Live queue, serving order, missed turns, grace periods, emergency insertion | Queue transitions and single-domain API                         |
+| `payments`      | `@clinic/server-payments`      | Payment records and status, verification, refunds                           | Cash/InstaPay receipt workflow plus the provider-neutral seam   |
+| `patients`      | `@clinic/server-patients`      | Guardian identity, children, clinic records, account claiming               | Patient identity, ownership and API                             |
+| `notifications` | `@clinic/server-notifications` | Staff inbox, urgent triage, outbox; future delivery providers               | Live messages, urgent decisions and a durable write-only outbox |
 
-Each module imports `ServerCoreModule` and declares no controllers, providers or
-exports. The import is not ceremony: it establishes the dependency direction in
-the project graph and puts it under lint enforcement before any code exists to
-get it wrong.
-
-Neither provider seam has an implementation registered. Nothing in this
-repository can charge a card or send a message to a patient.
+Provider seams remain unregistered: the platform can record cash and verify a
+privately uploaded InstaPay receipt, but cannot charge a card or drain the
+notification outbox through an external provider.
 
 Domains are islands: `scope:booking` may depend on `scope:shared`, never on
 `scope:queue`. Cross-domain traffic must be a reviewed decision.
@@ -299,11 +312,16 @@ and component. `platform:shared`, so it stays framework-free like `contracts`.
 
 ## Supabase
 
-| Path                   | Purpose                                                                                                                   |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `supabase/config.toml` | Local stack: API 54321, DB 54322, Studio 54323, Inbucket 54324. Edge Functions disabled — business logic lives in NestJS. |
-| `supabase/migrations/` | **Source of truth for the schema.** One migration, enabling `pgcrypto` and `citext`. No clinic tables.                    |
-| `supabase/seed.sql`    | Intentionally empty — there is no schema to seed.                                                                         |
+| Path                   | Purpose                                                                                                                               |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `supabase/config.toml` | Local stack: API 54321, DB 54322, Studio 54323, Inbucket 54324. Edge Functions disabled — business logic lives in NestJS.             |
+| `supabase/migrations/` | **Source of truth for the schema.** Identity, scheduling, Booking, Queue, tenant integrity and private patient-file metadata/storage. |
+| `supabase/seed.sql`    | Intentionally empty; time-sensitive hosted demo data is managed by the transactional scripts under `tools/`.                          |
+
+`tools/bootstrap-demo-accounts.mjs` provisions dedicated doctor, reception and
+mobile demo Auth accounts without resetting existing credentials.
+`tools/demo-day.mjs` builds and removes the repeatable Booking/Queue fixture for
+the clinic's current day.
 
 ---
 

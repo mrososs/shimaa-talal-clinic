@@ -158,8 +158,30 @@ supabase migration new <name>    # create a new migration
 is no ORM. Never edit a migration that has already been applied to a shared
 environment — add a new one.
 
-Today there is exactly one migration, enabling `pgcrypto` and `citext`. There
-is no clinic schema yet.
+The migration set owns the complete private `clinic` schema: identity,
+scheduling, Booking, Queue, and tenant-consistency constraints.
+
+### Repeatable Booking and Queue demo
+
+Create the dedicated mobile account once, then rebuild today's demo data:
+
+```bash
+# PowerShell
+$env:DEMO_ACCOUNT_PASSWORD='<a temporary password of at least 12 characters>'
+pnpm demo:accounts
+pnpm demo:day
+```
+
+`demo:accounts` creates and confirms dedicated doctor, reception and parent
+accounts through the server-side Supabase Admin API, then links the two staff
+roles to the clinic. If an account already exists, it does not change its
+password. `demo:day` is idempotent and transactional: it replaces only
+`demo `-prefixed families, and refuses to change a session that contains
+non-demo activity.
+
+The fixture includes an in-service patient, normal and emergency waiting
+patients, an expired called patient, and confirmed/requested bookings. Remove
+the operational rows with `pnpm demo:day:down`; the Auth accounts are retained.
 
 ---
 
@@ -217,8 +239,8 @@ Two things worth knowing:
 
 ```bash
 pnpm dev:api          # NestJS      http://localhost:3000/api/v1
-pnpm dev:dashboard    # Vue         http://localhost:4201
-pnpm dev:mobile       # Ionic Vue   http://localhost:4200
+pnpm dev:dashboard    # Vue         http://localhost:4203
+pnpm dev:mobile       # Ionic Vue   http://localhost:4202
 ```
 
 Each in its own terminal, or all three at once:
@@ -246,15 +268,14 @@ curl http://localhost:3000/api/v1/health
 # {"status":"ok","service":"clinic-api","timestamp":"..."}
 ```
 
-Then open http://localhost:4200 (`Clinic Mobile Architecture Ready`) and
-http://localhost:4201 (`Clinic Dashboard Architecture Ready`). Both are
-deliberately unstyled.
+Then open http://localhost:4202 for the parent Mobile app and
+http://localhost:4203 for the clinic Dashboard.
 
 | Service   | Dev  | Preview (built output) |
 | --------- | ---- | ---------------------- |
 | API       | 3000 | —                      |
-| Mobile    | 4200 | 4300                   |
-| Dashboard | 4201 | 4301                   |
+| Mobile    | 4202 | 4302                   |
+| Dashboard | 4203 | 4303                   |
 
 ---
 
@@ -262,8 +283,9 @@ deliberately unstyled.
 
 ```bash
 pnpm build            # nx run-many -t build   (the three applications)
-pnpm lint             # nx run-many -t lint    (all 13 projects)
-pnpm test             # nx run-many -t test    (all 13 projects)
+pnpm lint             # nx run-many -t lint    (all projects)
+pnpm test             # nx run-many -t test    (all unit/integration projects)
+pnpm test:dashboard:e2e # isolated Chrome cross-role journey
 pnpm format           # nx format:write
 pnpm format:check
 ```
@@ -281,9 +303,10 @@ forbidden boundary fails here. See [dependency-rules.md](./dependency-rules.md).
 
 Nx caches task results. Add `--skip-nx-cache` to force a re-run.
 
-The five domain libraries have no tests, because they contain no behaviour yet;
-their Jest configs set `passWithNoTests`. That is deliberate — placeholder tests
-that assert nothing are worse than no tests.
+Database-backed server targets should run with project parallelism disabled.
+The browser journey creates marked temporary Supabase Auth users and clinic
+rows, exercises the real clients and API, and removes the fixture in global
+teardown even when an assertion fails.
 
 ---
 
@@ -334,7 +357,7 @@ Add each when a feature actually needs it.
 pnpm graph                        # interactive graph in the browser
 pnpm nx graph --file=graph.html   # static export
 pnpm nx show project api --web    # one project's tags, targets, dependencies
-pnpm nx show projects             # list all 13
+pnpm nx show projects             # list all workspace projects
 ```
 
 Worth doing after any structural change: the graph shows the real dependency

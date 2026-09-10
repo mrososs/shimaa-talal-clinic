@@ -50,25 +50,27 @@ Every project carries tags on three orthogonal axes. A project must satisfy
 | `type:data-access` | Talks to an external system | `api-client`, `client-auth`, `server-core`, `server-clinic` |
 | `type:util`        | Pure helpers, no I/O        | `client-config`, `phone`                                    |
 | `type:contract`    | Shared types and constants  | `contracts`                                                 |
+| `type:e2e`         | Release-level test harness  | `dashboard-e2e`                                             |
 
 ### `platform:` — which runtime
 
-| Tag                  | Meaning                   | Projects                           |
-| -------------------- | ------------------------- | ---------------------------------- |
-| `platform:mobile`    | The Ionic/Capacitor shell | `mobile`                           |
-| `platform:dashboard` | The staff web app         | `dashboard`                        |
-| `platform:client`    | Any frontend              | the three `libs/client` libraries  |
-| `platform:server`    | Node/NestJS               | `api`, all `libs/server` libraries |
-| `platform:shared`    | Must run anywhere         | `contracts`, `phone`               |
+| Tag                  | Meaning                    | Projects                           |
+| -------------------- | -------------------------- | ---------------------------------- |
+| `platform:mobile`    | The Ionic/Capacitor shell  | `mobile`                           |
+| `platform:dashboard` | The staff web app          | `dashboard`                        |
+| `platform:client`    | Any frontend               | the three `libs/client` libraries  |
+| `platform:server`    | Node/NestJS                | `api`, all `libs/server` libraries |
+| `platform:shared`    | Must run anywhere          | `contracts`, `phone`               |
+| `platform:e2e`       | Node setup + real browsers | `dashboard-e2e`                    |
 
 ### `scope:` — which business domain
 
-| Tag                                                                   | Projects                                                                          |
-| --------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `scope:booking` / `queue` / `payments` / `patients` / `notifications` | the matching domain library                                                       |
-| `scope:shared`                                                        | `contracts`, `server-core`, `server-clinic`, `phone`, all `libs/client` libraries |
-| `scope:orchestration`                                                 | `server-workflows`                                                                |
-| _(none)_                                                              | the three applications                                                            |
+| Tag                                                                                | Projects                                                                          |
+| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `scope:booking` / `queue` / `payments` / `patients` / `clinical` / `notifications` | the matching domain library                                                       |
+| `scope:shared`                                                                     | `contracts`, `server-core`, `server-clinic`, `phone`, all `libs/client` libraries |
+| `scope:orchestration`                                                              | `server-workflows`                                                                |
+| _(none)_                                                                           | the three applications                                                            |
 
 **Applications deliberately carry no `scope:` tag.** Composing every domain is
 exactly their job, and a project with no `scope:` tag matches no scope rule.
@@ -86,6 +88,7 @@ exactly their job, and a project with no `scope:` tag matches no scope rule.
 | `platform:client`    | `platform:client`, `platform:shared`                       | `@nestjs/*`, `pg`                                                                                              |
 | `platform:server`    | `platform:server`, `platform:shared`                       | `vue`, `vue-router`, `@vue/*`, `@ionic/*`, `@capacitor/*`                                                      |
 | `platform:shared`    | `platform:shared`                                          | `vue`, `vue-router`, `@vue/*`, `@ionic/*`, `@capacitor/*`, `@nestjs/*`, `@supabase/*`, `express`, `rxjs`, `pg` |
+| `platform:e2e`       | every platform tag, including `platform:e2e`               | —                                                                                                              |
 
 The `pg` bans on client platforms are part of the security boundary: a frontend
 must not be able to acquire a database connection at all, not merely be trusted
@@ -116,6 +119,7 @@ component library by accident.
 | `type:data-access` | `type:data-access`, `type:util`, `type:contract`                                  | —                    |
 | `type:util`        | `type:util`, `type:contract`                                                      | —                    |
 | `type:contract`    | `type:contract`                                                                   | —                    |
+| `type:e2e`         | every type tag, including `type:e2e`                                              | —                    |
 
 No row lists `type:app`, so **nothing can depend on an application**.
 `type:feature` does not list `type:feature`, so domain modules cannot reach each
@@ -134,8 +138,9 @@ is blocked from importing `@clinic/server-booking`; tagged `type:workflow`,
 it is allowed — while `server-booking` importing `@clinic/server-workflows`
 stays blocked.
 
-`pg` is banned everywhere except `type:data-access` — in practice, only
-`server-core`. That keeps the process to **exactly one connection pool** and
+`pg` is banned from production layers except `type:data-access` — in practice,
+only `server-core`. The separate `type:e2e` harness may use it to provision and
+clean isolated fixtures. This keeps each deployed API process to **exactly one connection pool** and
 forces domain modules to take an `SqlExecutor` instead of opening their own
 connection, which is what makes a domain method callable inside someone else's
 transaction. `QueryResult` and `QueryResultRow` are re-exported from
@@ -150,6 +155,7 @@ transaction. `QueryResult` and `QueryResultRow` are re-exported from
 | `scope:queue`         | `scope:queue`, `scope:shared`         |
 | `scope:payments`      | `scope:payments`, `scope:shared`      |
 | `scope:patients`      | `scope:patients`, `scope:shared`      |
+| `scope:clinical`      | `scope:clinical`, `scope:shared`      |
 | `scope:notifications` | `scope:notifications`, `scope:shared` |
 | `scope:shared`        | `scope:shared`                        |
 | `scope:orchestration` | every `scope:*` above                 |
