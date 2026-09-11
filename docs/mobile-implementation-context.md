@@ -24,9 +24,9 @@ contracts in `libs/contracts`, and Supabase/Postgres for persistence.
   later work.
 - Parent payment uses cash-at-clinic or InstaPay receipt upload with explicit
   staff approval. No direct bank gateway is part of the first release.
-- Guest queue links are signed, read-only, expire at the end of the session day,
-  and are copied/shared from Dashboard. They expose no personally identifiable
-  or clinical data.
+- Guest queue links use opaque 256-bit capability tokens, store only a SHA-256
+  digest, are read-only and expire at the end of the session day. Dashboard can
+  copy/revoke them, and they expose no personally identifiable or clinical data.
 - The assistant is a doctor-curated FAQ in the first release, not an LLM.
 - Booking and Queue remain independent. Cross-domain changes belong in
   `server-workflows` and run in one database transaction.
@@ -46,7 +46,7 @@ contracts in `libs/contracts`, and Supabase/Postgres for persistence.
 - [x] M0 — Mobile shell and design system.
 - [x] M1 — Email auth and family onboarding (phone login/OTP deferred).
 - [x] M2 — Booking, appointment status and Dashboard approval.
-- [ ] M3 — Queue read model, explicit staff commands and guest links.
+- [x] M3 — Queue read model, explicit staff commands and guest links.
 - [x] M4 — Parent payments and receipt review.
 - [x] M5 — Parent messages and urgent triage.
 - [x] M6 — Parent-safe growth reads.
@@ -110,6 +110,12 @@ another selection.
 Dashboard check-in/call/start/complete actions update Mobile's private queue
 view. `Complete`, `Call Next`, and `Complete & Call Next` remain explicit and
 atomic. Guest links work without login and reveal only queue facts.
+
+Implemented with Reception/Admin-only create and revoke commands, an anonymous
+read route, one active link per queue entry and end-of-clinic-day expiry. Mobile
+hosts the public view outside both authentication and the tab shell, polls every
+fifteen seconds without blanking the last good state, and renders only ticket,
+position, serving and session facts. Raw capability tokens are never persisted.
 
 ### M4 checkpoint
 

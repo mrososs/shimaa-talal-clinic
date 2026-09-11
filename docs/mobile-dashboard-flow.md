@@ -74,13 +74,16 @@ ownership, permissions, ordering and state transitions.
 ## Guest queue link
 
 1. Reception generates a link for a checked-in entry.
-2. API signs a token containing only the minimum entry/session references and an
-   end-of-day expiry.
-3. Dashboard offers copy/share.
+2. API creates a random opaque 256-bit capability token, stores only its SHA-256
+   digest, and expires it at the end of the clinic-local session day.
+3. Dashboard offers copy/share and can revoke the active link. Creating a new
+   link for the same entry revokes the previous one.
 4. Public endpoint returns ticket, now-serving number, approximate count ahead,
    session status and expiry.
-5. Invalid, expired, revoked or rate-limited tokens return the same generic
-   not-available response.
+5. The public Mobile page lives outside authentication and the tab shell and
+   polls every fifteen seconds.
+6. Invalid, expired or revoked tokens return the same generic not-available
+   response, without revealing whether a token ever existed.
 
 ## Notifications
 
@@ -88,4 +91,3 @@ Notifications are created only after a successful transaction and are scoped to
 the owning guardian. Initial delivery is in-app polling with deep links. The
 existing `notification_outbox` remains the future boundary for push/SMS/WhatsApp
 workers.
-

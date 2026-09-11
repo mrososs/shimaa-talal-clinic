@@ -50,6 +50,14 @@ Existing parent appointment and queue routes remain unchanged unless a contract
 extension is required. Staff queue routes remain under `clinic/queue`; the
 workflow controller owns cross-domain commands.
 
+Guest-link staff commands are `POST /clinic/queue/:entryId/guest-link` and
+`DELETE /clinic/queue/:entryId/guest-link`. They are limited to Reception/Admin
+and never accept clinic or session identity from the client. Creation returns
+the opaque token once plus its expiry; only the SHA-256 digest is stored. The
+anonymous read returns `GuestQueueView` with ticket/status, count ahead,
+now-serving ticket, grace deadline and sanitized session state, or the same
+generic 404 for an invalid, expired or revoked token.
+
 ## Security and ownership contract
 
 - Guardian and clinic are derived from auth context.

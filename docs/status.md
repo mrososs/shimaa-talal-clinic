@@ -7,7 +7,7 @@ exists, and is expected to be edited every time a slice lands.
 Anything not listed as built is not built. If a claim here disagrees with the
 code, the code is right and this file is stale — say so.
 
-_Last updated: 2026-09-11 · 17 migrations · 103 routes._
+_Last updated: 2026-09-11 · 18 migrations · 106 routes._
 
 ---
 
@@ -15,12 +15,13 @@ _Last updated: 2026-09-11 · 17 migrations · 103 routes._
 
 ### Database
 
-Seventeen migrations are in source control and applied to the hosted pilot database.
+Eighteen migrations are in source control and applied to the hosted pilot database.
 Every table lives in the `clinic` schema, which
 is absent from `[api].schemas` in `supabase/config.toml` — so the publishable
 key shipped in both bundles cannot reach any of it. RLS is `ENABLE` + `FORCE`
-on every table with no permissive policies, as a second lock under a trusted
-API. See [database.md](database.md).
+on every table; policies grant the dedicated `clinic_api` role only, never the
+public browser roles. This is a second lock under the trusted API. See
+[database.md](database.md).
 
 | Migration                           | Tables                                                                                                                  |
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
@@ -40,6 +41,7 @@ API. See [database.md](database.md).
 | `payments_and_reports`              | provider-neutral payments, immutable payment events, reporting indexes, and the private receipt bucket                  |
 | `clinic_settings_audit`             | service prices, notification templates, immutable setting audit events, clinic contact details and InstaPay destination |
 | `parent_instapay_handle`            | nullable clinic-owned InstaPay destination with database validation                                                     |
+| `queue_guest_links`                 | revocable, end-of-day guest queue capabilities storing only SHA-256 token digests                                       |
 
 ### The four concurrency guarantees
 
@@ -53,7 +55,7 @@ races rather than by reading the schema:
 | One patient called, one in service             | `queue_one_called_uq`, `queue_one_in_service_uq` | concurrent queue commands leave one called and one in service |
 | One check-in per appointment                   | `queue_appointment_uq`                           | 5 simultaneous check-ins → one entry, five 201s               |
 
-### API — 103 routes
+### API — 106 routes
 
 Auth (guard, `@Roles`, cached verifier, envelope interceptor) · identity
 (parent + staff, claim codes) · clinic sessions (list, open/pause/resume/close,
@@ -100,7 +102,13 @@ payments with server-priced payable appointments; cash choices and receipt
 uploads derive every identity and amount field from the appointment and record
 the guardian as the real audit actor.
 
-### Mobile — 16 screens
+Queue also exposes Reception/Admin-only creation and revocation of an opaque
+guest tracking link plus one anonymous read. A link is limited to one active
+capability per entry, stores no raw token, expires at the clinic-local end of
+day and returns ticket/session facts without names, phone numbers or clinical
+data.
+
+### Mobile — 17 screens
 
 Sign in/up · password reset/update · guardian and child onboarding · claim an
 existing family · home · appointments list/detail/reschedule · book a visit ·
@@ -135,6 +143,9 @@ Booking and Queue now match the supplied warm RTL prototype's
 card hierarchy, horizontal selectors, sticky action, live ring, ETA and pending
 approval treatment while keeping server-owned arrival windows and private
 `aheadCount` semantics.
+The public guest queue screen runs outside authentication and Ionic tabs, uses
+the same responsive visual language, polls every fifteen seconds and never
+renders patient identity.
 
 ### Dashboard — 12 screens
 

@@ -88,6 +88,7 @@ a backstop; the real defence is not writing one.
 | Variable                        | Required | Default                        |
 | ------------------------------- | -------- | ------------------------------ |
 | `VITE_API_URL`                  | no       | `http://localhost:3000/api/v1` |
+| `VITE_MOBILE_APP_URL`           | no       | `http://localhost:4202`        |
 | `VITE_SUPABASE_URL`             | no       | —                              |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | no       | —                              |
 | `VITE_APP_ENV`                  | no       | `development`                  |
