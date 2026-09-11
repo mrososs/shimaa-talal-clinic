@@ -22,7 +22,6 @@ import { QueueError, QueueErrorCode } from '../queue.errors';
 import {
   CancelEntryDto,
   EmergencyDto,
-  MissDto,
   MoveEntryDto,
   WalkInDto,
 } from './queue.dto';
@@ -122,40 +121,6 @@ export class ClinicQueueController {
     @Param('entryId', new ParseUUIDPipe()) entryId: string,
   ): Promise<QueueEntry> {
     return this.commands.start(member.clinicId, entryId, {
-      memberId: member.id,
-    });
-  }
-
-  /**
-   * Called, did not come.
-   *
-   * Refused while the grace period is still running unless `force` is set with
-   * a reason. The deadline is the promise the clinic made when it called them.
-   */
-  @Roles(UserRole.Reception, UserRole.Admin)
-  @Post(':entryId/miss')
-  @HttpCode(HttpStatus.OK)
-  miss(
-    @CurrentMember() member: ClinicMemberContext,
-    @Param('entryId', new ParseUUIDPipe()) entryId: string,
-    @Body() body: MissDto,
-  ): Promise<QueueEntry> {
-    return this.commands.miss(member.clinicId, entryId, {
-      memberId: member.id,
-      force: body.force ?? false,
-      reason: body.reason ?? null,
-    });
-  }
-
-  /** Back in the queue, with a new number, at the end. */
-  @Roles(UserRole.Reception, UserRole.Admin)
-  @Post(':entryId/requeue')
-  @HttpCode(HttpStatus.OK)
-  requeue(
-    @CurrentMember() member: ClinicMemberContext,
-    @Param('entryId', new ParseUUIDPipe()) entryId: string,
-  ): Promise<QueueEntry> {
-    return this.commands.requeue(member.clinicId, entryId, {
       memberId: member.id,
     });
   }

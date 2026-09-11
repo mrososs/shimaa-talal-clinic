@@ -32,7 +32,6 @@ import { BookingError, BookingErrorCode } from '../booking.errors';
 import {
   CancelAppointmentDto,
   CreateClinicAppointmentDto,
-  RescheduleAppointmentDto,
   StaffAvailabilityQueryDto,
 } from './booking.dto';
 import { BookingExceptionFilter } from './booking-exception.filter';
@@ -168,38 +167,6 @@ export class ClinicAppointmentsController {
   // Cancelling lives in @clinic/server-workflows: a checked-in family has a
   // queue entry that must be cancelled in the same commit, and Booking may not
   // depend on Queue.
-
-  @Roles(UserRole.Reception, UserRole.Admin, UserRole.Doctor)
-  @Post('appointments/:appointmentId/reschedule')
-  @HttpCode(HttpStatus.OK)
-  reschedule(
-    @CurrentMember() member: ClinicMemberContext,
-    @Param('appointmentId', new ParseUUIDPipe()) appointmentId: string,
-    @Body() body: RescheduleAppointmentDto,
-  ): Promise<Appointment> {
-    return this.appointments.reschedule(
-      member.clinicId,
-      appointmentId,
-      { sessionId: body.sessionId, windowStart: body.windowStart },
-      { memberId: member.id },
-    );
-  }
-
-  /** Confirmed, never arrived, day over. */
-  @Roles(UserRole.Reception, UserRole.Admin, UserRole.Doctor)
-  @Post('appointments/:appointmentId/no-show')
-  @HttpCode(HttpStatus.OK)
-  markNoShow(
-    @CurrentMember() member: ClinicMemberContext,
-    @Param('appointmentId', new ParseUUIDPipe()) appointmentId: string,
-  ): Promise<Appointment> {
-    return this.appointments.transition(
-      member.clinicId,
-      appointmentId,
-      AppointmentStatus.NoShow,
-      { memberId: member.id },
-    );
-  }
 
   private async requireAppointment(
     clinicId: string,

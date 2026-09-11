@@ -91,14 +91,6 @@ export class CancelAppointmentDto {
   reason?: string;
 }
 
-export class RescheduleAppointmentDto {
-  @IsUUID()
-  sessionId!: string;
-
-  @IsISO8601({ strict: true })
-  windowStart!: string;
-}
-
 export class AppointmentScopeQueryDto {
   @IsOptional()
   @IsIn(['upcoming', 'past'])

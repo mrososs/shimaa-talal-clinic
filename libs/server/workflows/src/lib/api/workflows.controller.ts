@@ -28,7 +28,16 @@ import { CheckInAppointmentWorkflow } from '../check-in-appointment.workflow';
 import { CompleteQueueEntryWorkflow } from '../complete-queue-entry.workflow';
 import { CallNextWorkflow } from '../call-next.workflow';
 import { CompleteAndCallNextWorkflow } from '../complete-and-call-next.workflow';
-import { CancelReasonDto, SessionQueueCommandDto } from './workflows.dto';
+import { NoShowAppointmentWorkflow } from '../no-show-appointment.workflow';
+import { RescheduleAppointmentWorkflow } from '../reschedule-appointment.workflow';
+import { MissQueueEntryWorkflow } from '../miss-queue-entry.workflow';
+import { RequeueEntryWorkflow } from '../requeue-entry.workflow';
+import {
+  CancelReasonDto,
+  MissQueueEntryDto,
+  RescheduleAppointmentDto,
+  SessionQueueCommandDto,
+} from './workflows.dto';
 import { WorkflowsExceptionFilter } from './workflows-exception.filter';
 
 /**
@@ -54,6 +63,10 @@ export class WorkflowsController {
     private readonly callNextWorkflow: CallNextWorkflow,
     private readonly completeAndCallNextWorkflow: CompleteAndCallNextWorkflow,
     private readonly cancellation: CancelAppointmentWorkflow,
+    private readonly rescheduling: RescheduleAppointmentWorkflow,
+    private readonly noShow: NoShowAppointmentWorkflow,
+    private readonly missEntry: MissQueueEntryWorkflow,
+    private readonly requeueEntry: RequeueEntryWorkflow,
     private readonly appointments: AppointmentService,
   ) {}
 
@@ -128,6 +141,39 @@ export class WorkflowsController {
     });
   }
 
+  /** Mark a called patient missed and synchronize Booking/Payments. */
+  @Roles(UserRole.Reception, UserRole.Admin)
+  @Post('clinic/queue/:entryId/miss')
+  @HttpCode(HttpStatus.OK)
+  miss(
+    @CurrentMember() member: ClinicMemberContext,
+    @Param('entryId', new ParseUUIDPipe()) entryId: string,
+    @Body() body: MissQueueEntryDto,
+  ): Promise<QueueEntry> {
+    return this.missEntry.execute({
+      clinicId: member.clinicId,
+      entryId,
+      memberId: member.id,
+      force: body.force ?? false,
+      reason: body.reason ?? null,
+    });
+  }
+
+  /** Return a missed patient and their appointment/payment state together. */
+  @Roles(UserRole.Reception, UserRole.Admin)
+  @Post('clinic/queue/:entryId/requeue')
+  @HttpCode(HttpStatus.OK)
+  requeue(
+    @CurrentMember() member: ClinicMemberContext,
+    @Param('entryId', new ParseUUIDPipe()) entryId: string,
+  ): Promise<QueueEntry> {
+    return this.requeueEntry.execute({
+      clinicId: member.clinicId,
+      entryId,
+      memberId: member.id,
+    });
+  }
+
   /** Staff calling a visit off. No cutoff — somebody has to be able to. */
   @Roles(UserRole.Reception, UserRole.Admin, UserRole.Doctor)
   @Post('clinic/appointments/:appointmentId/cancel')
@@ -142,6 +188,38 @@ export class WorkflowsController {
       appointmentId,
       memberId: member.id,
       reason: body.reason ?? null,
+    });
+  }
+
+  /** Move a staff-managed visit and carry any live payment allocation. */
+  @Roles(UserRole.Reception, UserRole.Admin, UserRole.Doctor)
+  @Post('clinic/appointments/:appointmentId/reschedule')
+  @HttpCode(HttpStatus.OK)
+  rescheduleAsStaff(
+    @CurrentMember() member: ClinicMemberContext,
+    @Param('appointmentId', new ParseUUIDPipe()) appointmentId: string,
+    @Body() body: RescheduleAppointmentDto,
+  ): Promise<Appointment> {
+    return this.rescheduling.execute({
+      clinicId: member.clinicId,
+      appointmentId,
+      target: { sessionId: body.sessionId, windowStart: body.windowStart },
+      actor: { memberId: member.id },
+    });
+  }
+
+  /** Mark an absent booked patient and void uncollected cash, not a refund. */
+  @Roles(UserRole.Reception, UserRole.Admin, UserRole.Doctor)
+  @Post('clinic/appointments/:appointmentId/no-show')
+  @HttpCode(HttpStatus.OK)
+  markNoShow(
+    @CurrentMember() member: ClinicMemberContext,
+    @Param('appointmentId', new ParseUUIDPipe()) appointmentId: string,
+  ): Promise<Appointment> {
+    return this.noShow.execute({
+      clinicId: member.clinicId,
+      appointmentId,
+      memberId: member.id,
     });
   }
 
@@ -179,6 +257,24 @@ export class WorkflowsController {
       authUserId: user.id,
       reason: body.reason ?? null,
       enforceCutoff: true,
+    });
+  }
+
+  /** Parent move; paid no-shows retain their credit in the same transaction. */
+  @Roles(UserRole.Guardian)
+  @Post('appointments/:appointmentId/reschedule')
+  @HttpCode(HttpStatus.OK)
+  rescheduleAsParent(
+    @CurrentUser() user: AuthenticatedUser,
+    @CurrentGuardian() guardian: GuardianContext,
+    @Param('appointmentId', new ParseUUIDPipe()) appointmentId: string,
+    @Body() body: RescheduleAppointmentDto,
+  ): Promise<Appointment> {
+    return this.rescheduling.execute({
+      clinicId: guardian.clinicId,
+      appointmentId,
+      target: { sessionId: body.sessionId, windowStart: body.windowStart },
+      actor: { guardianId: guardian.id, authUserId: user.id },
     });
   }
 }

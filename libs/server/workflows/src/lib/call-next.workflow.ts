@@ -3,6 +3,7 @@ import { AppointmentService } from '@clinic/server-booking';
 import { AppointmentStatus, type QueueEntry } from '@clinic/contracts';
 import { DatabaseService, type SqlExecutor } from '@clinic/server-core';
 import { QueueCommandService } from '@clinic/server-queue';
+import { PaymentService } from '@clinic/server-payments';
 
 export interface CallNextInput {
   clinicId: string;
@@ -17,6 +18,7 @@ export class CallNextWorkflow {
     private readonly database: DatabaseService,
     private readonly appointments: AppointmentService,
     private readonly queue: QueueCommandService,
+    private readonly payments: PaymentService,
   ) {}
 
   execute(input: CallNextInput, db?: SqlExecutor): Promise<QueueEntry | null> {
@@ -34,6 +36,12 @@ export class CallNextWorkflow {
           result.missed.appointmentId,
           AppointmentStatus.NoShow,
           { memberId: input.memberId },
+          tx,
+        );
+        await this.payments.voidPendingCashForNoShow(
+          input.clinicId,
+          result.missed.appointmentId,
+          input.memberId,
           tx,
         );
       }

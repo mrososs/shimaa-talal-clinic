@@ -74,6 +74,8 @@ const API_MESSAGES: Record<string, string> = {
   queue_reason_required: 'يلزم ذكر السبب.',
   queue_entry_not_found: 'لم نعثر على هذا المريض في الطابور.',
   invalid_transition: 'هذا الإجراء غير ممكن في الوضع الحالي.',
+  payment_missed_reschedule_requires_paid:
+    'لا يمكن نقل موعد متغيّب غير مدفوع. أنشئي حجزاً جديداً.',
 
   // Clinical records.
   clinical_encounter_finalized: 'تم إنهاء هذا السجل ولا يمكن تعديله.',

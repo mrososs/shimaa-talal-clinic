@@ -83,6 +83,8 @@ const API_MESSAGES: Record<string, string> = {
     'اختاري إيصال PDF أو صورة بحجم لا يزيد عن ٥ ميجابايت.',
   payment_instapay_unavailable:
     'الدفع عبر InstaPay غير متاح حالياً. اختاري الدفع في العيادة.',
+  payment_missed_reschedule_requires_paid:
+    'نقل الموعد بعد فوات الدور متاح للحجوزات المدفوعة فقط. يمكنك حجز موعد جديد.',
   payment_storage_failed: 'تعذّر رفع الإيصال الآن. احتفظي به وحاولي مرة أخرى.',
 };
 

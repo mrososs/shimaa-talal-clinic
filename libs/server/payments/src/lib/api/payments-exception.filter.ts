@@ -16,6 +16,7 @@ const STATUS: Record<PaymentsErrorCode, number> = {
   [PaymentsErrorCode.InvalidTransition]: HttpStatus.CONFLICT,
   [PaymentsErrorCode.InvalidReceipt]: HttpStatus.BAD_REQUEST,
   [PaymentsErrorCode.InstapayUnavailable]: HttpStatus.CONFLICT,
+  [PaymentsErrorCode.MissedRescheduleRequiresPaid]: HttpStatus.CONFLICT,
   [PaymentsErrorCode.StorageFailed]: HttpStatus.SERVICE_UNAVAILABLE,
 };
 @Catch(PaymentsError)

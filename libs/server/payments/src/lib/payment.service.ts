@@ -146,6 +146,133 @@ export class PaymentService {
     };
   }
 
+  /**
+   * The active money state attached to one appointment, locked for an
+   * orchestration transaction.
+   *
+   * Booking deliberately does not call this. Rescheduling crosses the Booking
+   * and Payments boundaries, so the workflow asks both domains while holding
+   * one transaction.
+   */
+  async findActiveForTransfer(
+    clinicId: string,
+    guardianId: string,
+    appointmentId: string,
+    db: SqlExecutor,
+  ): Promise<PaymentRecord | null> {
+    const result = await db.query<PaymentRow>(
+      `select ${COLUMNS} from clinic.payments
+        where clinic_id = $1 and guardian_id = $2 and appointment_id = $3
+          and status in ('pending', 'paid') and storage_status = 'ready'
+        order by created_at desc limit 1
+        for update`,
+      [clinicId, guardianId, appointmentId],
+    );
+    return result.rows[0] ? toPayment(result.rows[0]) : null;
+  }
+
+  /** Move an existing payment/receipt to the replacement visit atomically. */
+  async transferToAppointment(
+    clinicId: string,
+    payment: PaymentRecord,
+    fromAppointmentId: string,
+    toAppointmentId: string,
+    actor: PaymentActor,
+    db: SqlExecutor,
+  ): Promise<PaymentRecord> {
+    const updated = await db.query<PaymentRow>(
+      `update clinic.payments
+          set appointment_id = $4
+        where id = $1 and clinic_id = $2 and appointment_id = $3
+          and status in ('pending', 'paid') and storage_status = 'ready'
+        returning ${COLUMNS}`,
+      [payment.id, clinicId, fromAppointmentId, toAppointmentId],
+    );
+    const row = updated.rows[0];
+    if (!row) throw notFound();
+    await event(
+      db,
+      clinicId,
+      payment.id,
+      'transferred',
+      payment.status,
+      payment.status,
+      actor,
+      'Appointment rescheduled; payment credit retained.',
+      { fromAppointmentId, toAppointmentId },
+    );
+    return toPayment(row);
+  }
+
+  /**
+   * A cash promise is not money collected. If the visit becomes a no-show,
+   * close that promise as failed without creating a refund that never existed.
+   */
+  async voidPendingCashForNoShow(
+    clinicId: string,
+    appointmentId: string,
+    memberId: string,
+    db: SqlExecutor,
+  ): Promise<PaymentRecord | null> {
+    const updated = await db.query<PaymentRow>(
+      `update clinic.payments
+          set status = 'failed',
+              decided_by_member_id = $3,
+              decision_note = 'Visit marked no-show before cash collection.'
+        where clinic_id = $1 and appointment_id = $2
+          and method = 'cash' and status = 'pending'
+          and storage_status = 'ready'
+        returning ${COLUMNS}`,
+      [clinicId, appointmentId, memberId],
+    );
+    const row = updated.rows[0];
+    if (!row) return null;
+    await event(
+      db,
+      clinicId,
+      row.id,
+      'voided_no_show',
+      'pending',
+      'failed',
+      { memberId },
+      'Visit marked no-show before cash collection.',
+    );
+    return toPayment(row);
+  }
+
+  /** Re-open the same uncollected cash promise when reception requeues them. */
+  async restoreCashAfterRequeue(
+    clinicId: string,
+    appointmentId: string,
+    memberId: string,
+    db: SqlExecutor,
+  ): Promise<PaymentRecord | null> {
+    const updated = await db.query<PaymentRow>(
+      `update clinic.payments
+          set status = 'pending',
+              decided_by_member_id = null,
+              decision_note = null
+        where clinic_id = $1 and appointment_id = $2
+          and method = 'cash' and status = 'failed'
+          and storage_status = 'ready'
+        returning ${COLUMNS}`,
+      [clinicId, appointmentId],
+    );
+    const row = updated.rows[0];
+    if (!row) return null;
+    await event(
+      db,
+      clinicId,
+      row.id,
+      'restored_after_requeue',
+      'failed',
+      'pending',
+      { memberId },
+      'Patient returned to the same-day queue.',
+    );
+    return toPayment(row);
+  }
+
   async registerCash(
     input: RegisterPaymentInput & { clinicId: string; memberId: string },
   ): Promise<PaymentRecord> {
@@ -629,12 +756,17 @@ async function event(
   to: string,
   actor: PaymentActor,
   note: string | null,
+  appointments?: {
+    fromAppointmentId: string;
+    toAppointmentId: string;
+  },
 ): Promise<void> {
   await db.query(
     `insert into clinic.payment_events
        (clinic_id,payment_id,event_type,from_status,to_status,
-        actor_member_id,actor_guardian_id,note)
-     values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        actor_member_id,actor_guardian_id,note,
+        from_appointment_id,to_appointment_id)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
     [
       clinicId,
       paymentId,
@@ -644,6 +776,8 @@ async function event(
       actor.memberId ?? null,
       actor.guardianId ?? null,
       note,
+      appointments?.fromAppointmentId ?? null,
+      appointments?.toAppointmentId ?? null,
     ],
   );
 }

@@ -7,7 +7,7 @@ exists, and is expected to be edited every time a slice lands.
 Anything not listed as built is not built. If a claim here disagrees with the
 code, the code is right and this file is stale — say so.
 
-_Last updated: 2026-09-11 · 18 migrations · 106 routes._
+_Last updated: 2026-09-11 · 20 migrations · 106 routes._
 
 ---
 
@@ -15,7 +15,7 @@ _Last updated: 2026-09-11 · 18 migrations · 106 routes._
 
 ### Database
 
-Eighteen migrations are in source control and applied to the hosted pilot database.
+Twenty migrations are in source control and applied to the hosted pilot database.
 Every table lives in the `clinic` schema, which
 is absent from `[api].schemas` in `supabase/config.toml` — so the publishable
 key shipped in both bundles cannot reach any of it. RLS is `ENABLE` + `FORCE`
@@ -42,6 +42,8 @@ public browser roles. This is a second lock under the trusted API. See
 | `clinic_settings_audit`             | service prices, notification templates, immutable setting audit events, clinic contact details and InstaPay destination |
 | `parent_instapay_handle`            | nullable clinic-owned InstaPay destination with database validation                                                     |
 | `queue_guest_links`                 | revocable, end-of-day guest queue capabilities storing only SHA-256 token digests                                       |
+| `missed_visit_payment_policy`       | payment event links for no-show appointments and paid-credit transfers                                               |
+| `requeue_payment_policy`            | explicit cash-payment restoration event for queue requeue                                                           |
 
 ### The four concurrency guarantees
 
@@ -107,6 +109,12 @@ guest tracking link plus one anonymous read. A link is limited to one active
 capability per entry, stores no raw token, expires at the clinic-local end of
 day and returns ticket/session facts without names, phone numbers or clinical
 data.
+
+Grace and missed-visit consistency is now cross-domain: expired called entries
+become `missed`/`no_show` atomically; pending cash is voided without inventing
+a refund; paid visits transfer their credit to a no-show reschedule; and a
+requeue restores the appointment and the failed cash record. Pending InstaPay
+receipts remain under staff review.
 
 ### Mobile — 17 screens
 

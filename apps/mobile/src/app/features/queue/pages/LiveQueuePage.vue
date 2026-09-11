@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import {
   IonButton,
   IonIcon,
@@ -14,6 +15,7 @@ import ScreenShell from '../../../shared/components/ScreenShell.vue';
 import { arabicDigits } from '../../../shared/numerals';
 import { session } from '../../../runtime';
 import { useLiveQueue } from '../composables/useLiveQueue';
+import { useParentPayments } from '../../payments/composables/useParentPayments';
 import SessionBanner from '../components/SessionBanner.vue';
 import TurnCard from '../components/TurnCard.vue';
 
@@ -36,6 +38,8 @@ import TurnCard from '../components/TurnCard.vue';
  */
 
 const queue = useLiveQueue();
+const payments = useParentPayments();
+const router = useRouter();
 
 const clinic = computed(() => session.state.identity?.clinic ?? null);
 const graceMinutes = computed(() => clinic.value?.gracePeriodMinutes);
@@ -76,8 +80,20 @@ const visibleItems = computed(() =>
 
 // Ionic keeps a page alive between visits, so entering and leaving are the
 // lifecycle that matters — `onMounted` would start a loop that never stops.
-onIonViewWillEnter(() => void queue.open());
-onIonViewDidLeave(() => queue.close());
+function paymentFor(appointmentId: string | undefined) {
+  if (!appointmentId) return null;
+  return (
+    payments.view.value.items.find(
+      (payment) => payment.appointmentId === appointmentId,
+    ) ?? null
+  );
+}
+
+onIonViewWillEnter(() => void Promise.all([queue.open(), payments.open()]));
+onIonViewDidLeave(() => {
+  queue.close();
+  payments.close();
+});
 </script>
 
 <template>
@@ -172,8 +188,17 @@ onIonViewDidLeave(() => queue.close());
             :grace-minutes="graceMinutes"
             :max-self-defers="maxSelfDefers"
             :deferring="queue.deferring.value !== null"
+            :payment="paymentFor(item.appointment?.id)"
             @grace-expired="queue.refresh()"
             @defer="(entryId) => (deferringEntry = entryId)"
+            @reschedule="
+              (appointmentId) =>
+                router.push({
+                  name: 'appointment-reschedule',
+                  params: { appointmentId },
+                })
+            "
+            @rebook="router.push({ name: 'booking' })"
           />
 
           <p class="foot">

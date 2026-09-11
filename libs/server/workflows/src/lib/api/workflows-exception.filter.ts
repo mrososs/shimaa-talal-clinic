@@ -9,6 +9,7 @@ import { QueueError } from '@clinic/server-queue';
 import { PatientsError } from '@clinic/server-patients';
 import { ClinicalError } from '@clinic/server-clinical';
 import { MessagesError } from '@clinic/server-notifications';
+import { PaymentsError } from '@clinic/server-payments';
 
 /** Structural subset of the response, so this file needs no HTTP driver types. */
 interface JsonResponse {
@@ -63,13 +64,30 @@ const STATUS: Record<string, number> = {
   urgent_case_not_found: 404,
   urgent_case_already_decided: 409,
   message_invalid_participant: 400,
+
+  // Payments
+  payment_not_found: 404,
+  payment_invalid_transition: 409,
+  payment_missed_reschedule_requires_paid: 409,
 };
 
-@Catch(BookingError, QueueError, PatientsError, ClinicalError, MessagesError)
+@Catch(
+  BookingError,
+  QueueError,
+  PatientsError,
+  ClinicalError,
+  MessagesError,
+  PaymentsError,
+)
 export class WorkflowsExceptionFilter implements ExceptionFilter {
   catch(
     exception:
-      BookingError | QueueError | PatientsError | ClinicalError | MessagesError,
+      | BookingError
+      | QueueError
+      | PatientsError
+      | ClinicalError
+      | MessagesError
+      | PaymentsError,
     host: ArgumentsHost,
   ): void {
     const response = host.switchToHttp().getResponse<JsonResponse>();

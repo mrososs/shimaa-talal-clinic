@@ -2,8 +2,6 @@ import {
   Body,
   Controller,
   Get,
-  HttpCode,
-  HttpStatus,
   Inject,
   Param,
   ParseUUIDPipe,
@@ -14,9 +12,7 @@ import {
 import {
   CHILD_ACCESS_CHECKER,
   CurrentGuardian,
-  CurrentUser,
   Roles,
-  type AuthenticatedUser,
   type ChildAccessChecker,
   type GuardianContext,
 } from '@clinic/server-core';
@@ -34,7 +30,6 @@ import {
   AppointmentScopeQueryDto,
   AvailabilityQueryDto,
   CreateAppointmentDto,
-  RescheduleAppointmentDto,
 } from './booking.dto';
 import { BookingExceptionFilter } from './booking-exception.filter';
 
@@ -136,25 +131,6 @@ export class AppointmentsController {
   // Cancelling lives in @clinic/server-workflows: if the family has already
   // checked in, their queue entry must go with the appointment, and Booking
   // may not depend on Queue.
-
-  @Roles(UserRole.Guardian)
-  @Post('appointments/:appointmentId/reschedule')
-  @HttpCode(HttpStatus.OK)
-  async reschedule(
-    @CurrentUser() user: AuthenticatedUser,
-    @CurrentGuardian() guardian: GuardianContext,
-    @Param('appointmentId', new ParseUUIDPipe()) appointmentId: string,
-    @Body() body: RescheduleAppointmentDto,
-  ): Promise<Appointment> {
-    await this.requireOwn(guardian, appointmentId);
-
-    return this.appointments.reschedule(
-      guardian.clinicId,
-      appointmentId,
-      { sessionId: body.sessionId, windowStart: body.windowStart },
-      { authUserId: user.id },
-    );
-  }
 
   /**
    * The appointment, if it is this guardian's.

@@ -3,6 +3,7 @@ import { AppointmentService } from '@clinic/server-booking';
 import { AppointmentStatus, type QueueEntry } from '@clinic/contracts';
 import { DatabaseService, type SqlExecutor } from '@clinic/server-core';
 import { QueueCommandService } from '@clinic/server-queue';
+import { PaymentService } from '@clinic/server-payments';
 
 export interface CompleteAndCallNextInput {
   clinicId: string;
@@ -17,6 +18,7 @@ export class CompleteAndCallNextWorkflow {
     private readonly database: DatabaseService,
     private readonly appointments: AppointmentService,
     private readonly queue: QueueCommandService,
+    private readonly payments: PaymentService,
   ) {}
 
   execute(
@@ -41,11 +43,18 @@ export class CompleteAndCallNextWorkflow {
         );
       }
       if (result.missed?.appointmentId) {
+        const appointmentId = result.missed.appointmentId;
         await this.appointments.transition(
           input.clinicId,
-          result.missed.appointmentId,
+          appointmentId,
           AppointmentStatus.NoShow,
           { memberId: input.memberId },
+          tx,
+        );
+        await this.payments.voidPendingCashForNoShow(
+          input.clinicId,
+          appointmentId,
+          input.memberId,
           tx,
         );
       }

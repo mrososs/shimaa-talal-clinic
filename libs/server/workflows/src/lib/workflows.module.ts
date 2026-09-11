@@ -30,6 +30,10 @@ import { StaffFamilyRecordWorkflow } from './staff-family-record.workflow';
 import { ClinicalWorkflow } from './clinical.workflow';
 import { AcceptUrgentCaseWorkflow } from './urgent-case.workflow';
 import { PaymentsReportWorkflow } from './payments-report.workflow';
+import { RescheduleAppointmentWorkflow } from './reschedule-appointment.workflow';
+import { NoShowAppointmentWorkflow } from './no-show-appointment.workflow';
+import { MissQueueEntryWorkflow } from './miss-queue-entry.workflow';
+import { RequeueEntryWorkflow } from './requeue-entry.workflow';
 
 /**
  * Cross-domain orchestration.
@@ -100,6 +104,10 @@ import { PaymentsReportWorkflow } from './payments-report.workflow';
     ClinicalWorkflow,
     AcceptUrgentCaseWorkflow,
     PaymentsReportWorkflow,
+    RescheduleAppointmentWorkflow,
+    NoShowAppointmentWorkflow,
+    MissQueueEntryWorkflow,
+    RequeueEntryWorkflow,
   ],
   exports: [
     CheckInAppointmentWorkflow,
@@ -115,6 +123,10 @@ import { PaymentsReportWorkflow } from './payments-report.workflow';
     ClinicalWorkflow,
     AcceptUrgentCaseWorkflow,
     PaymentsReportWorkflow,
+    RescheduleAppointmentWorkflow,
+    NoShowAppointmentWorkflow,
+    MissQueueEntryWorkflow,
+    RequeueEntryWorkflow,
   ],
 })
 export class WorkflowsModule {}

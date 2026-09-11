@@ -39,8 +39,12 @@ ownership, permissions, ordering and state transitions.
 
 - `called` carries a server deadline; no client timer mutates state.
 - An expired called entry becomes `missed`; its appointment becomes `no_show`.
-- Paid missed visits may be rescheduled according to policy and retain credit.
-- Cash missed visits may be cancelled or rebooked without inventing a refund.
+- Paid missed visits may be rescheduled according to policy and transfer their
+  payment credit to the replacement appointment.
+- Pending cash is voided as `failed` on no-show (without a refund event), and a
+  requeue restores the appointment and cash payment to pending.
+- Pending InstaPay receipts remain under staff review; no automatic refund or
+  transfer is invented.
 - Expired resolution and next-patient selection are atomic for Call Next and
   Complete & Call Next.
 

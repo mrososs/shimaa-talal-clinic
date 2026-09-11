@@ -1,5 +1,13 @@
 import { Transform, type TransformFnParams } from 'class-transformer';
-import { IsOptional, IsString, IsUUID, Length } from 'class-validator';
+import {
+  IsBoolean,
+  IsISO8601,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Length,
+  ValidateIf,
+} from 'class-validator';
 
 const trim = ({ value }: TransformFnParams): unknown =>
   typeof value === 'string' ? value.trim() : value;
@@ -23,4 +31,25 @@ export class CancelReasonDto {
 export class SessionQueueCommandDto {
   @IsUUID()
   sessionId!: string;
+}
+
+/** A server-owned availability window selected for a replacement visit. */
+export class RescheduleAppointmentDto {
+  @IsUUID()
+  sessionId!: string;
+
+  @IsISO8601({ strict: true })
+  windowStart!: string;
+}
+
+export class MissQueueEntryDto {
+  @IsOptional()
+  @IsBoolean()
+  force?: boolean;
+
+  @ValidateIf((dto: MissQueueEntryDto) => dto.force === true)
+  @IsString()
+  @Transform(trim)
+  @Length(1, 280)
+  reason?: string;
 }

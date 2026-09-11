@@ -3,6 +3,7 @@ export const PaymentsErrorCode = {
   InvalidTransition: 'payment_invalid_transition',
   InvalidReceipt: 'payment_invalid_receipt',
   InstapayUnavailable: 'payment_instapay_unavailable',
+  MissedRescheduleRequiresPaid: 'payment_missed_reschedule_requires_paid',
   StorageFailed: 'payment_storage_failed',
 } as const;
 

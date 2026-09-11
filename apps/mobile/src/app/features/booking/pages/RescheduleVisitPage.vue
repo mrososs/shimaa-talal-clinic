@@ -1,13 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import {
-  IonButton,
-  IonIcon,
-  IonSpinner,
-  onIonViewWillEnter,
-} from '@ionic/vue';
+import { IonButton, IonIcon, IonSpinner, onIonViewWillEnter } from '@ionic/vue';
 import { checkmarkCircle } from 'ionicons/icons';
+import { AppointmentStatus } from '@clinic/contracts';
 import ScreenShell from '../../../shared/components/ScreenShell.vue';
 import FormNotice from '../../../shared/components/FormNotice.vue';
 import { dayLabel, remainingLabel, windowLabel } from '../../../shared/format';
@@ -26,6 +22,9 @@ const childName = computed(
     session.state.identity?.children.find(
       (child) => child.id === form.appointment.value?.childId,
     )?.fullName ?? 'الطفل',
+);
+const missedCredit = computed(
+  () => form.appointment.value?.status === AppointmentStatus.NoShow,
 );
 
 async function submit(): Promise<void> {
@@ -49,23 +48,15 @@ onIonViewWillEnter(() => void form.load());
       params: { appointmentId: route.params['appointmentId'] },
     }"
   >
-    <div
-      v-if="form.loading.value"
-      class="card reschedule-loading"
-    >
+    <div v-if="form.loading.value" class="card reschedule-loading">
       <ion-spinner name="crescent" />
     </div>
 
-    <div
-      v-else
-      class="stack"
-    >
-      <section
-        v-if="form.appointment.value"
-        class="current-visit"
-      >
+    <div v-else class="stack">
+      <section v-if="form.appointment.value" class="current-visit">
         <p class="current-visit__label">
-          الموعد الحالي لـ {{ childName }}
+          {{ missedCredit ? 'الموعد السابق' : 'الموعد الحالي' }} لـ
+          {{ childName }}
         </p>
         <strong>
           {{
@@ -76,14 +67,15 @@ onIonViewWillEnter(() => void form.load());
             )
           }}
         </strong>
+        <span v-if="missedCredit" class="current-visit__credit">
+          سينتقل المبلغ المدفوع للموعد الجديد تلقائياً.
+        </span>
       </section>
 
       <form-notice :message="form.failure.value" />
 
       <section class="stack stack--tight">
-        <h2 class="section-title">
-          اليوم الجديد
-        </h2>
+        <h2 class="section-title">اليوم الجديد</h2>
         <div class="reschedule-days">
           <button
             v-for="day in form.days.value"
@@ -98,17 +90,9 @@ onIonViewWillEnter(() => void form.load());
         </div>
       </section>
 
-      <section
-        v-if="form.selectedDate.value"
-        class="stack stack--tight"
-      >
-        <h2 class="section-title">
-          فترة الوصول الجديدة
-        </h2>
-        <div
-          v-if="form.windowsForDay.value.length"
-          class="reschedule-windows"
-        >
+      <section v-if="form.selectedDate.value" class="stack stack--tight">
+        <h2 class="section-title">فترة الوصول الجديدة</h2>
+        <div v-if="form.windowsForDay.value.length" class="reschedule-windows">
           <button
             v-for="window in form.windowsForDay.value"
             :key="window.windowStart"
@@ -134,10 +118,7 @@ onIonViewWillEnter(() => void form.load());
             />
           </button>
         </div>
-        <p
-          v-else
-          class="card reschedule-empty"
-        >
+        <p v-else class="card reschedule-empty">
           لا توجد فترة بديلة متاحة في هذا اليوم.
         </p>
       </section>
@@ -148,10 +129,7 @@ onIonViewWillEnter(() => void form.load());
         :disabled="!form.canSubmit.value"
         @click="submit"
       >
-        <ion-spinner
-          v-if="form.submitting.value"
-          name="crescent"
-        />
+        <ion-spinner v-if="form.submitting.value" name="crescent" />
         <span v-else>تأكيد الموعد الجديد</span>
       </ion-button>
     </div>
@@ -176,6 +154,14 @@ onIonViewWillEnter(() => void form.load());
   margin: 0 0 3px;
   font-size: 12.5px;
   font-weight: 700;
+}
+
+.current-visit__credit {
+  display: block;
+  margin-block-start: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.6;
 }
 
 .reschedule-days {

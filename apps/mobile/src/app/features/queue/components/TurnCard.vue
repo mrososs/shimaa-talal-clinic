@@ -14,6 +14,8 @@ import {
   ClinicSessionStatus,
   DoctorPresence,
   QueueStatus,
+  PaymentStatus,
+  type PaymentRecord,
   type ParentQueueItem,
 } from '@clinic/contracts';
 import { arabicDigits } from '../../../shared/numerals';
@@ -42,11 +44,22 @@ const props = withDefaults(
     /** The clinic's own limit on how often a parent may skip their turn. */
     maxSelfDefers?: number;
     deferring?: boolean;
+    payment?: PaymentRecord | null;
   }>(),
-  { graceMinutes: undefined, maxSelfDefers: 0, deferring: false },
+  {
+    graceMinutes: undefined,
+    maxSelfDefers: 0,
+    deferring: false,
+    payment: null,
+  },
 );
 
-const emit = defineEmits<{ graceExpired: []; defer: [entryId: string] }>();
+const emit = defineEmits<{
+  graceExpired: [];
+  defer: [entryId: string];
+  reschedule: [appointmentId: string];
+  rebook: [];
+}>();
 
 const entry = computed(() => props.item.queueEntry);
 const ahead = computed(() => entry.value?.aheadCount ?? 0);
@@ -58,6 +71,15 @@ const inService = computed(() => entry.value?.status === QueueStatus.InService);
 const missed = computed(() => entry.value?.status === QueueStatus.Missed);
 const done = computed(() => entry.value?.status === QueueStatus.Done);
 const cancelled = computed(() => entry.value?.status === QueueStatus.Cancelled);
+const paidMissed = computed(
+  () => missed.value && props.payment?.status === PaymentStatus.Paid,
+);
+const receiptPending = computed(
+  () =>
+    missed.value &&
+    props.payment?.method === 'instapay' &&
+    props.payment.status === PaymentStatus.Pending,
+);
 
 /** The turn is happening, so the card leads with that rather than a count. */
 const highlight = computed(() => called.value || inService.value);
@@ -175,9 +197,31 @@ const remainingLabel = computed(() => {
       </span>
       <div>
         <p class="turn__headline">تم تخطّي دورك</p>
-        <p class="turn__note">
-          راجعي الاستقبال وسيعيدونك إلى الطابور برقم جديد.
-        </p>
+        <template v-if="paidMissed && item.appointment">
+          <p class="turn__note">
+            دفعك محفوظ. اختاري موعداً جديداً وسينتقل إليه الرصيد تلقائياً.
+          </p>
+          <button
+            class="turn__action"
+            type="button"
+            @click="emit('reschedule', item.appointment.id)"
+          >
+            نقل الموعد مع الاحتفاظ بالدفع
+          </button>
+        </template>
+        <template v-else-if="receiptPending">
+          <p class="turn__note">
+            إيصال InstaPay ما زال قيد المراجعة. بعد اعتماده يمكنك نقل الموعد.
+          </p>
+        </template>
+        <template v-else>
+          <p class="turn__note">
+            لم يتم تحصيل دفعة، لذلك لا يوجد مبلغ للاسترداد. يمكنك الحجز من جديد.
+          </p>
+          <button class="turn__action" type="button" @click="emit('rebook')">
+            حجز موعد جديد
+          </button>
+        </template>
       </div>
     </div>
 
@@ -442,6 +486,17 @@ const remainingLabel = computed(() => {
 .turn__note--soon {
   color: var(--coral-ink);
   font-weight: 600;
+}
+
+.turn__action {
+  min-block-size: 44px;
+  margin-block-start: 12px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--coral);
+  color: #fff;
+  font: 800 13px var(--ff-body);
 }
 
 .turn__flag {

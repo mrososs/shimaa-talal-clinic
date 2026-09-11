@@ -366,12 +366,26 @@ export class AppointmentService {
     db?: SqlExecutor,
   ): Promise<Appointment> {
     const run = async (tx: SqlExecutor): Promise<Appointment> => {
-      const original = await this.findById(clinicId, appointmentId, tx);
+      const original = await this.findByIdForUpdate(
+        clinicId,
+        appointmentId,
+        tx,
+      );
       if (original === null) throw appointmentNotFound();
+
+      // A retry after the first transaction committed returns the one live
+      // replacement rather than booking a second seat.
+      const existing = await this.findLiveRescheduledFrom(
+        clinicId,
+        appointmentId,
+        tx,
+      );
+      if (existing !== null) return existing;
 
       if (
         original.status !== AppointmentStatus.Requested &&
-        original.status !== AppointmentStatus.Confirmed
+        original.status !== AppointmentStatus.Confirmed &&
+        original.status !== AppointmentStatus.NoShow
       ) {
         throw new BookingError(
           BookingErrorCode.InvalidTransition,
@@ -379,16 +393,19 @@ export class AppointmentService {
         );
       }
 
-      // Released first, so the family can move to another seat in the *same*
-      // window — the commonest reschedule there is, and impossible if the old
-      // seat were still held.
-      await this.transition(
-        clinicId,
-        appointmentId,
-        AppointmentStatus.Cancelled,
-        { ...actor, reason: actor.reason ?? 'rescheduled' },
-        tx,
-      );
+      // A live booking releases its old seat first, so the family can move even
+      // within the same full window. A no-show has already released its seat
+      // and remains no-show in history; the orchestration workflow is the only
+      // caller allowed to reopen it, after proving a paid credit exists.
+      if (original.status !== AppointmentStatus.NoShow) {
+        await this.transition(
+          clinicId,
+          appointmentId,
+          AppointmentStatus.Cancelled,
+          { ...actor, reason: actor.reason ?? 'rescheduled' },
+          tx,
+        );
+      }
 
       const replacement = await this.create(
         {
@@ -425,6 +442,73 @@ export class AppointmentService {
 
     // One transaction, or the family briefly holds two seats or none.
     return db === undefined ? this.database.transaction(run) : run(db);
+  }
+
+  /** Lock one appointment before a cross-domain reschedule decision. */
+  async findByIdForUpdate(
+    clinicId: string,
+    appointmentId: string,
+    db: SqlExecutor,
+  ): Promise<Appointment | null> {
+    const result = await db.query<AppointmentRow>(
+      `select ${COLUMNS} from clinic.appointments
+        where id = $1 and clinic_id = $2
+        for update`,
+      [appointmentId, clinicId],
+    );
+    return result.rows[0] ? toAppointment(result.rows[0]) : null;
+  }
+
+  /** The live replacement makes an already-completed reschedule idempotent. */
+  async findLiveRescheduledFrom(
+    clinicId: string,
+    appointmentId: string,
+    db: SqlExecutor,
+  ): Promise<Appointment | null> {
+    const result = await db.query<AppointmentRow>(
+      `select ${COLUMNS} from clinic.appointments
+        where clinic_id = $1 and rescheduled_from_appointment_id = $2
+          and status = any($3)
+        order by created_at desc limit 1`,
+      [clinicId, appointmentId, LIVE_STATUSES],
+    );
+    return result.rows[0] ? toAppointment(result.rows[0]) : null;
+  }
+
+  /** A missed patient returned to today's queue; restore the linked booking. */
+  async restoreNoShowCheckIn(
+    clinicId: string,
+    appointmentId: string,
+    actor: TransitionActor,
+    db: SqlExecutor,
+  ): Promise<Appointment> {
+    const current = await this.findByIdForUpdate(clinicId, appointmentId, db);
+    if (current === null) throw appointmentNotFound();
+    if (current.status === AppointmentStatus.CheckedIn) return current;
+    if (current.status !== AppointmentStatus.NoShow) {
+      throw new BookingError(
+        BookingErrorCode.InvalidTransition,
+        `Only a no-show appointment can return to check-in; this one is ${current.status}.`,
+      );
+    }
+    const updated = await db.query<AppointmentRow>(
+      `update clinic.appointments set status='checked_in'
+        where id=$1 and clinic_id=$2 and status='no_show'
+        returning ${COLUMNS}`,
+      [appointmentId, clinicId],
+    );
+    const row = updated.rows[0];
+    if (!row) throw appointmentNotFound();
+    const appointment = toAppointment(row);
+    await this.recordEvent(
+      appointment.id,
+      'requeued',
+      AppointmentStatus.NoShow,
+      AppointmentStatus.CheckedIn,
+      actor,
+      db,
+    );
+    return appointment;
   }
 
   /** Today's appointments for a clinic, for the staff day view. */

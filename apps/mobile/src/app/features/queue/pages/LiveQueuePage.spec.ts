@@ -48,6 +48,16 @@ vi.mock('@ionic/vue', async (load) => {
 vi.mock('../composables/useLiveQueue', () => ({
   useLiveQueue: () => queue,
 }));
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
+vi.mock('../../payments/composables/useParentPayments', () => ({
+  useParentPayments: () => ({
+    view: ref({ items: [], payableAppointments: [], instapayHandle: null }),
+    open: vi.fn(),
+    close: vi.fn(),
+  }),
+}));
 vi.mock('../../../runtime', () => ({
   session: {
     state: {

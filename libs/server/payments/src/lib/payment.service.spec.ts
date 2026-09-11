@@ -85,6 +85,127 @@ describePaymentsWithDatabase((fx) => {
     ]);
   });
 
+  it('voids an uncollected cash promise on no-show without a refund', async () => {
+    const payment = await service().registerParentCash(
+      fx.clinicId,
+      fx.guardianId,
+      {
+        appointmentId: fx.appointmentId,
+        idempotencyKey: '68b02484-4bcc-4f72-9c85-3f540633ab0a',
+      },
+    );
+    const result = await fx.db.database.transaction((tx) =>
+      service().voidPendingCashForNoShow(
+        fx.clinicId,
+        fx.appointmentId,
+        fx.doctorMemberId,
+        tx,
+      ),
+    );
+
+    expect(result).toMatchObject({ id: payment.id, status: 'failed' });
+    const restored = await fx.db.database.transaction((tx) =>
+      service().restoreCashAfterRequeue(
+        fx.clinicId,
+        fx.appointmentId,
+        fx.doctorMemberId,
+        tx,
+      ),
+    );
+    expect(restored).toMatchObject({ id: payment.id, status: 'pending' });
+    const events = await fx.db.database.query<{ event_type: string }>(
+      `select event_type from clinic.payment_events
+        where payment_id = $1 order by created_at, id`,
+      [payment.id],
+    );
+    expect(events.rows.map((row) => row.event_type)).toEqual([
+      'cash_selected',
+      'voided_no_show',
+      'restored_after_requeue',
+    ]);
+  });
+
+  it('moves a paid credit and records both appointment ids', async () => {
+    const payment = await service().registerCash({
+      clinicId: fx.clinicId,
+      memberId: fx.doctorMemberId,
+      appointmentId: fx.appointmentId,
+      childId: fx.childId,
+      guardianId: fx.guardianId,
+      amountMinor: 45000,
+      currency: 'EGP',
+      idempotencyKey: '6a3c3c46-1591-4638-a3aa-50205a0939ed',
+    });
+    await fx.db.database.query(
+      `update clinic.appointments
+          set status='cancelled',cancelled_at=now(),cancelled_by='clinic'
+        where id=$1`,
+      [fx.appointmentId],
+    );
+    const replacement = await fx.db.database.query<{ id: string }>(
+      `insert into clinic.appointments
+        (clinic_id,session_id,child_id,guardian_id,window_start,window_end,
+         seat_no,visit_type,status,rescheduled_from_appointment_id)
+       select clinic_id,session_id,child_id,guardian_id,
+              window_start + interval '30 minutes',
+              window_end + interval '30 minutes',2,visit_type,'confirmed',id
+         from clinic.appointments where id=$1 returning id`,
+      [fx.appointmentId],
+    );
+
+    await fx.db.database.transaction(async (tx) => {
+      const active = await service().findActiveForTransfer(
+        fx.clinicId,
+        fx.guardianId,
+        fx.appointmentId,
+        tx,
+      );
+      expect(active?.id).toBe(payment.id);
+      await service().transferToAppointment(
+        fx.clinicId,
+        active!,
+        fx.appointmentId,
+        replacement.rows[0].id,
+        { guardianId: fx.guardianId },
+        tx,
+      );
+    });
+
+    const result = await fx.db.database.query<{
+      appointment_id: string;
+      event_type: string;
+      from_appointment_id: string;
+      to_appointment_id: string;
+    }>(
+      `select payment.appointment_id,event.event_type,
+              event.from_appointment_id,event.to_appointment_id
+         from clinic.payments payment
+         join clinic.payment_events event on event.payment_id=payment.id
+        where payment.id=$1 and event.event_type='transferred'`,
+      [payment.id],
+    );
+    expect(result.rows[0]).toEqual({
+      appointment_id: replacement.rows[0].id,
+      event_type: 'transferred',
+      from_appointment_id: fx.appointmentId,
+      to_appointment_id: replacement.rows[0].id,
+    });
+    await clearPayments(fx.db.database, fx.clinicId);
+    await fx.db.database.query(
+      `delete from clinic.appointment_events where appointment_id=$1`,
+      [replacement.rows[0].id],
+    );
+    await fx.db.database.query(`delete from clinic.appointments where id=$1`, [
+      replacement.rows[0].id,
+    ]);
+    await fx.db.database.query(
+      `update clinic.appointments
+          set status='confirmed',cancelled_at=null,cancelled_by=null
+        where id=$1`,
+      [fx.appointmentId],
+    );
+  });
+
   it('makes a real concurrent retry one payment and one event', async () => {
     const input = {
       appointmentId: fx.appointmentId,

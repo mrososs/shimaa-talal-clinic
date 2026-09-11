@@ -592,6 +592,68 @@ describeWithDatabase('appointments', (fx) => {
         ),
       ).rejects.toMatchObject({ code: BookingErrorCode.InvalidTransition });
     });
+
+    it('preserves a no-show in history while creating one retry-safe replacement', async () => {
+      const svc = service();
+      const session = await openSession();
+      const later = await laterSession();
+      const original = await book(session);
+      await svc.transition(
+        fx.clinicId,
+        original.id,
+        AppointmentStatus.Confirmed,
+        { memberId: fx.doctorMemberId },
+      );
+      await svc.transition(fx.clinicId, original.id, AppointmentStatus.NoShow, {
+        memberId: fx.doctorMemberId,
+      });
+
+      const [first, retry] = await Promise.all([
+        svc.reschedule(
+          fx.clinicId,
+          original.id,
+          { sessionId: later.id, windowStart: later.windowStart },
+          { memberId: fx.doctorMemberId },
+        ),
+        svc.reschedule(
+          fx.clinicId,
+          original.id,
+          { sessionId: later.id, windowStart: later.windowStart },
+          { memberId: fx.doctorMemberId },
+        ),
+      ]);
+
+      expect(retry.id).toBe(first.id);
+      expect((await svc.findById(fx.clinicId, original.id))?.status).toBe(
+        AppointmentStatus.NoShow,
+      );
+      expect(first.rescheduledFromAppointmentId).toBe(original.id);
+    });
+
+    it('restores a no-show when the same patient is requeued', async () => {
+      const svc = service();
+      const session = await openSession();
+      const original = await book(session);
+      await svc.transition(
+        fx.clinicId,
+        original.id,
+        AppointmentStatus.Confirmed,
+        { memberId: fx.doctorMemberId },
+      );
+      await svc.transition(fx.clinicId, original.id, AppointmentStatus.NoShow, {
+        memberId: fx.doctorMemberId,
+      });
+
+      const restored = await fx.db.database.transaction((tx) =>
+        svc.restoreNoShowCheckIn(
+          fx.clinicId,
+          original.id,
+          { memberId: fx.doctorMemberId },
+          tx,
+        ),
+      );
+      expect(restored.status).toBe(AppointmentStatus.CheckedIn);
+    });
   });
 
   describe('reading', () => {

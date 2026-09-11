@@ -7,13 +7,14 @@ import {
   onIonViewDidLeave,
   onIonViewWillEnter,
 } from '@ionic/vue';
-import { AppointmentStatus } from '@clinic/contracts';
+import { AppointmentStatus, PaymentStatus } from '@clinic/contracts';
 import { ClinicDialog } from '@clinic/client-ui';
 import ScreenShell from '../../../shared/components/ScreenShell.vue';
 import FormNotice from '../../../shared/components/FormNotice.vue';
 import { dayLabel, windowLabel } from '../../../shared/format';
 import { session } from '../../../runtime';
 import { useAppointmentDetail } from '../composables/useAppointmentDetail';
+import { useParentPayments } from '../../payments/composables/useParentPayments';
 
 /**
  * One visit: when, for whom, and what can still be done about it.
@@ -35,6 +36,7 @@ const detail = useAppointmentDetail(() =>
   String(route.params['appointmentId']),
 );
 const appointment = detail.appointment;
+const payments = useParentPayments(() => appointment.value?.id ?? null);
 
 const timezone = computed(() => state.identity?.clinic.timezone);
 const childName = computed(() => {
@@ -99,6 +101,18 @@ const canPay = computed(
     appointment.value?.status === AppointmentStatus.CheckedIn,
 );
 
+const currentPayment = computed(
+  () =>
+    payments.view.value.items.find(
+      (payment) => payment.appointmentId === appointment.value?.id,
+    ) ?? null,
+);
+const paidNoShow = computed(
+  () =>
+    appointment.value?.status === AppointmentStatus.NoShow &&
+    currentPayment.value?.status === PaymentStatus.Paid,
+);
+
 /**
  * Cancelling is asked about first.
  *
@@ -113,26 +127,20 @@ async function cancel(): Promise<void> {
   await detail.cancel();
 }
 
-onIonViewWillEnter(() => void detail.open());
-onIonViewDidLeave(() => detail.close());
+onIonViewWillEnter(() => void Promise.all([detail.open(), payments.open()]));
+onIonViewDidLeave(() => {
+  detail.close();
+  payments.close();
+});
 </script>
 
 <template>
-  <screen-shell
-    title="تفاصيل الموعد"
-    :back-to="{ name: 'appointments' }"
-  >
-    <div
-      v-if="detail.loading.value"
-      class="card card--centre"
-    >
+  <screen-shell title="تفاصيل الموعد" :back-to="{ name: 'appointments' }">
+    <div v-if="detail.loading.value" class="card card--centre">
       <ion-spinner name="crescent" />
     </div>
 
-    <div
-      v-else-if="appointment"
-      class="stack"
-    >
+    <div v-else-if="appointment" class="stack">
       <section class="card visit">
         <span
           class="chip"
@@ -161,10 +169,7 @@ onIonViewDidLeave(() => detail.close());
         </p>
       </section>
 
-      <p
-        v-if="STATUS[appointment.status]?.note"
-        class="card note"
-      >
+      <p v-if="STATUS[appointment.status]?.note" class="card note">
         {{ STATUS[appointment.status].note }}
       </p>
 
@@ -184,22 +189,13 @@ onIonViewDidLeave(() => detail.close());
         </ion-button>
       </div>
 
-      <div
-        v-if="inClinic"
-        class="actions"
-      >
-        <ion-button
-          expand="block"
-          @click="router.replace({ name: 'queue' })"
-        >
+      <div v-if="inClinic" class="actions">
+        <ion-button expand="block" @click="router.replace({ name: 'queue' })">
           متابعة دورك في الطابور
         </ion-button>
       </div>
 
-      <div
-        v-else-if="canCancel"
-        class="actions"
-      >
+      <div v-else-if="canCancel" class="actions">
         <ion-button
           expand="block"
           fill="outline"
@@ -220,31 +216,36 @@ onIonViewDidLeave(() => detail.close());
           :disabled="detail.working.value"
           @click="confirming = true"
         >
-          <ion-spinner
-            v-if="detail.working.value"
-            name="crescent"
-          />
+          <ion-spinner v-if="detail.working.value" name="crescent" />
           <span v-else>إلغاء الموعد</span>
         </ion-button>
       </div>
 
-      <div
-        v-else
-        class="actions"
-      >
+      <div v-else-if="paidNoShow" class="actions">
+        <p class="card note note--credit">
+          دفعك محفوظ، وسينتقل تلقائياً إلى الموعد الجديد دون تحصيل مبلغ آخر.
+        </p>
         <ion-button
           expand="block"
-          @click="router.replace({ name: 'booking' })"
+          @click="
+            router.push({
+              name: 'appointment-reschedule',
+              params: { appointmentId: appointment.id },
+            })
+          "
         >
+          نقل الموعد مع الاحتفاظ بالدفع
+        </ion-button>
+      </div>
+
+      <div v-else class="actions">
+        <ion-button expand="block" @click="router.replace({ name: 'booking' })">
           حجز موعد جديد
         </ion-button>
       </div>
     </div>
 
-    <form-notice
-      v-else
-      :message="detail.failure.value"
-    />
+    <form-notice v-else :message="detail.failure.value" />
 
     <clinic-dialog
       :open="confirming"
@@ -258,18 +259,10 @@ onIonViewDidLeave(() => detail.close());
       </p>
 
       <template #actions>
-        <ion-button
-          fill="outline"
-          size="small"
-          @click="confirming = false"
-        >
+        <ion-button fill="outline" size="small" @click="confirming = false">
           تراجع
         </ion-button>
-        <ion-button
-          color="danger"
-          size="small"
-          @click="cancel"
-        >
+        <ion-button color="danger" size="small" @click="cancel">
           تأكيد الإلغاء
         </ion-button>
       </template>

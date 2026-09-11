@@ -50,7 +50,7 @@ contracts in `libs/contracts`, and Supabase/Postgres for persistence.
 - [x] M4 — Parent payments and receipt review.
 - [x] M5 — Parent messages and urgent triage.
 - [x] M6 — Parent-safe growth reads.
-- [ ] M7 — Grace, missed, reschedule and cancellation.
+- [x] M7 — Grace, missed, reschedule and cancellation.
 - [ ] M8 — In-app notifications and deep links.
 - [ ] M9 — Cross-role hardening and release verification.
 
@@ -165,6 +165,12 @@ accessible weight/height graph and measurement history.
 
 Grace expiry, missed/no-show, reschedule and cancellation honor clinic policy,
 payment state and transaction rollback rules.
+
+Implemented with workflow-owned miss/no-show, requeue and reschedule commands.
+Expired called entries update Queue, Booking and pending cash together; paid
+no-show reschedules transfer the payment credit to the replacement appointment;
+requeue restores `checked_in` and the cash payment; pending InstaPay receipts
+remain reviewable. Grace failures roll back the complete operation.
 
 ### M8 checkpoint
 

@@ -38,19 +38,6 @@ export class WalkInDto {
   visitReason?: string;
 }
 
-export class MissDto {
-  /** Skip before the grace deadline. Requires a reason. */
-  @IsOptional()
-  @IsBoolean()
-  force?: boolean;
-
-  @ValidateIf((dto: MissDto) => dto.force === true)
-  @IsString()
-  @Transform(trim)
-  @Length(1, 280)
-  reason?: string;
-}
-
 export class CancelEntryDto {
   @IsOptional()
   @IsString()

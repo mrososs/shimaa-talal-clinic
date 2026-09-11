@@ -84,6 +84,10 @@ Add stable client-mappable codes for:
 - notification not found;
 - guest link expired/revoked;
 - queue grace not expired/current patient still in service where relevant.
+- paid credit is required when rescheduling a `no_show` appointment; the
+  replacement appointment and payment transfer are committed together.
+- requeue and no-show workflow failures are atomic across Queue, Booking and
+  Payments.
 
 ## Consistency and idempotency
 
