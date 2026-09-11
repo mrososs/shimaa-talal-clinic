@@ -35,6 +35,7 @@ const emit = defineEmits<{
   remove: [entry: QueueBoardEntry];
   move: [entry: QueueBoardEntry, direction: -1 | 1];
   recordMeasurements: [entry: QueueBoardEntry];
+  share: [entry: QueueBoardEntry];
 }>();
 
 const busy = computed(() => props.working !== null);
@@ -107,6 +108,14 @@ const busy = computed(() => props.working !== null);
           </button>
 
           <template v-if="canManage">
+            <button
+              class="dbtn dbtn--ghost dbtn--sm"
+              type="button"
+              :disabled="busy"
+              @click="emit('share', entry)"
+            >
+              نسخ رابط المتابعة
+            </button>
             <button
               v-if="entry.isEmergency"
               class="dbtn dbtn--ghost dbtn--sm"

@@ -43,6 +43,7 @@ describe('QueueList permissions', () => {
   it('shows the explicit desk commands to reception and admin', () => {
     const buttons = labels(true, true, true);
     expect(buttons).toContain('نداء');
+    expect(buttons).toContain('نسخ رابط المتابعة');
     expect(buttons).toContain('تسجيل القياسات');
     expect(buttons).toContain('عاجل');
     expect(buttons).toContain('إزالة');

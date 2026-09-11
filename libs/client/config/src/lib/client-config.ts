@@ -14,6 +14,8 @@ export type AppEnvironment = 'development' | 'staging' | 'production';
 export interface ClientConfig {
   /** Absolute base URL of the NestJS API, including `/api/v1`. */
   apiUrl: string;
+  /** Public origin where guardian and guest Mobile routes are hosted. */
+  mobileAppUrl: string;
   /**
    * Supabase project URL. `null` when unconfigured, so an app can still boot
    * locally before Supabase is set up.
@@ -34,6 +36,7 @@ export interface ClientConfig {
 export type RawClientEnv = Record<string, unknown>;
 
 const DEFAULT_API_URL = 'http://localhost:3000/api/v1';
+const DEFAULT_MOBILE_APP_URL = 'http://localhost:4202';
 
 /**
  * Names that must never reach a browser bundle. Includes the legacy
@@ -147,6 +150,8 @@ export function readClientConfig(env: RawClientEnv): ClientConfig {
 
   return {
     apiUrl: readString(env, 'VITE_API_URL') ?? DEFAULT_API_URL,
+    mobileAppUrl:
+      readString(env, 'VITE_MOBILE_APP_URL') ?? DEFAULT_MOBILE_APP_URL,
     supabaseUrl: readString(env, 'VITE_SUPABASE_URL'),
     supabasePublishableKey: readString(env, 'VITE_SUPABASE_PUBLISHABLE_KEY'),
     environment: readEnvironment(env),

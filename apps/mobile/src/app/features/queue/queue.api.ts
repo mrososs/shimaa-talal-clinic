@@ -1,5 +1,9 @@
 import type { ApiClient } from '@clinic/api-client';
-import type { ParentQueueEntry, ParentQueueResponse } from '@clinic/contracts';
+import type {
+  GuestQueueView,
+  ParentQueueEntry,
+  ParentQueueResponse,
+} from '@clinic/contracts';
 
 /**
  * The one queue endpoint this app reads.
@@ -19,6 +23,10 @@ export function createQueueApi(client: ApiClient) {
      */
     mine: (since?: number): Promise<ParentQueueResponse> =>
       client.get<ParentQueueResponse>('queue/me', { query: { since } }),
+
+    /** Anonymous capability view. The token is the authority. */
+    guest: (token: string): Promise<GuestQueueView> =>
+      client.get<GuestQueueView>(`queue/guest/${encodeURIComponent(token)}`),
 
     /**
      * "Let the next person go."

@@ -10,6 +10,7 @@ describe('readClientConfig', () => {
     const config = readClientConfig({});
 
     expect(config.apiUrl).toBe('http://localhost:3000/api/v1');
+    expect(config.mobileAppUrl).toBe('http://localhost:4202');
     expect(config.environment).toBe('development');
     expect(isSupabaseConfigured(config)).toBe(false);
   });
@@ -17,12 +18,14 @@ describe('readClientConfig', () => {
   it('reads the public Supabase values', () => {
     const config = readClientConfig({
       VITE_API_URL: 'https://api.example.test/api/v1',
+      VITE_MOBILE_APP_URL: 'https://mobile.example.test',
       VITE_SUPABASE_URL: 'https://project.supabase.co',
       VITE_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test',
       VITE_APP_ENV: 'production',
     });
 
     expect(config.environment).toBe('production');
+    expect(config.mobileAppUrl).toBe('https://mobile.example.test');
     expect(isSupabaseConfigured(config)).toBe(true);
     expect(config.supabasePublishableKey).toBe('sb_publishable_test');
   });

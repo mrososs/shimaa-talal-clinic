@@ -41,6 +41,11 @@ test('parent request reaches completion, payment and role-safe reports', async (
   });
   const receptionContext = await browser.newContext();
   const doctorContext = await browser.newContext();
+  const guestContext = await browser.newContext({
+    viewport: { width: 412, height: 892 },
+    locale: 'ar-EG',
+    timezoneId: 'Africa/Cairo',
+  });
 
   try {
     const parent = await parentContext.newPage();
@@ -149,6 +154,29 @@ test('parent request reaches completion, payment and role-safe reports', async (
       .filter({ hasText: fixture.childName });
     await expect(waitingRow).toBeVisible();
 
+    await receptionContext.grantPermissions(
+      ['clipboard-read', 'clipboard-write'],
+      { origin: dashboardUrl },
+    );
+    const waitingEntryId = await waitingRow.getAttribute('data-entry-id');
+    if (!waitingEntryId) throw new Error('Checked-in queue entry has no id.');
+    const guestLinkResponse = reception.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        response.url().includes(`/queue/${waitingEntryId}/guest-link`),
+    );
+    await waitingRow.getByRole('button', { name: 'نسخ رابط المتابعة' }).click();
+    const guestLinkPayload = (await (await guestLinkResponse).json()) as {
+      data: { token: string };
+    };
+    const guest = await guestContext.newPage();
+    await guest.goto(`${mobileUrl}/queue/guest/${guestLinkPayload.data.token}`);
+    await expect(guest.getByText('دورك محفوظ')).toBeVisible();
+    await expect(guest.getByText(fixture.childName)).toHaveCount(0);
+    await expect(
+      guest.getByText('هذا الرابط يعرض أرقام الدور فقط'),
+    ).toBeVisible();
+
     await parent.goto(`${mobileUrl}/tabs/queue`);
     await expect(parent.locator('.counter__ring')).toBeVisible();
     await expect(parent.getByText('دورك هو التالي')).toBeVisible();
@@ -160,6 +188,8 @@ test('parent request reaches completion, payment and role-safe reports', async (
     await expect(calledCard).toContainText('تم النداء');
     await parent.reload();
     await expect(parent.getByText('حان دورك الآن!')).toBeVisible();
+    await guest.reload();
+    await expect(guest.getByText('حان دورك الآن!')).toBeVisible();
 
     await calledCard.getByRole('button', { name: 'بدء الكشف' }).click();
     await expect(calledCard).toContainText('في الكشف');
@@ -230,6 +260,7 @@ test('parent request reaches completion, payment and role-safe reports', async (
       parentContext.close(),
       receptionContext.close(),
       doctorContext.close(),
+      guestContext.close(),
     ]);
   }
 });

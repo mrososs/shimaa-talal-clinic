@@ -4,6 +4,7 @@ import type {
   DoctorPresence,
   QueueBoardResponse,
   QueueEntry,
+  QueueGuestLink,
 } from '@clinic/contracts';
 
 export interface WalkInInput {
@@ -94,6 +95,12 @@ export function createQueueApi(client: ApiClient) {
 
     complete: (entryId: string): Promise<QueueEntry> =>
       client.post<QueueEntry>(`clinic/queue/${entryId}/complete`),
+
+    createGuestLink: (entryId: string): Promise<QueueGuestLink> =>
+      client.post<QueueGuestLink>(`clinic/queue/${entryId}/guest-link`),
+
+    revokeGuestLink: (entryId: string): Promise<{ revoked: true }> =>
+      client.delete<{ revoked: true }>(`clinic/queue/${entryId}/guest-link`),
 
     /** `force` skips a grace period that has not run out, and needs a reason. */
     miss: (

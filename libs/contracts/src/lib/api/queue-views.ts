@@ -7,6 +7,9 @@ import type {
   ParentSessionView,
 } from '../domain/clinic-session';
 import type { ParentQueueEntry, QueueBoardEntry } from '../domain/queue-entry';
+import type { ClinicSessionStatus } from '../domain/clinic-session-status';
+import type { DoctorPresence } from '../domain/doctor-presence';
+import type { QueueStatus } from '../domain/queue-status';
 
 /**
  * `GET /clinic/queue` — the staff board.
@@ -79,3 +82,23 @@ export interface ParentQueueView {
 }
 
 export type ParentQueueResponse = ParentQueueView | UnchangedResponse;
+
+/** The one-time secret returned to reception when it creates a guest link. */
+export interface QueueGuestLink {
+  token: string;
+  expiresAt: string;
+}
+
+/** Public, deliberately anonymous facts rendered by a guest queue link. */
+export interface GuestQueueView {
+  ticketNumber: number;
+  status: QueueStatus;
+  aheadCount: number;
+  nowServingTicketNumber: number | null;
+  graceExpiresAt: string | null;
+  sessionStatus: ClinicSessionStatus;
+  doctorPresence: DoctorPresence;
+  delayMinutes: number | null;
+  revision: number;
+  expiresAt: string;
+}

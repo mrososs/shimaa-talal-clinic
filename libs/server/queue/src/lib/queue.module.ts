@@ -3,8 +3,10 @@ import { ServerCoreModule } from '@clinic/server-core';
 import { ClinicModule } from '@clinic/server-clinic';
 import { ClinicQueueController } from './api/clinic-queue.controller';
 import { MyQueueController } from './api/my-queue.controller';
+import { QueueGuestController } from './api/queue-guest.controller';
 import { QueueCommandService } from './queue-command.service';
 import { QueueEntryService } from './queue-entry.service';
+import { QueueGuestLinkService } from './queue-guest-link.service';
 
 /**
  * Queue — who is here, in what order, and who is next.
@@ -16,8 +18,8 @@ import { QueueEntryService } from './queue-entry.service';
  */
 @Module({
   imports: [ServerCoreModule, ClinicModule],
-  controllers: [ClinicQueueController, MyQueueController],
-  providers: [QueueEntryService, QueueCommandService],
-  exports: [QueueEntryService, QueueCommandService],
+  controllers: [ClinicQueueController, MyQueueController, QueueGuestController],
+  providers: [QueueEntryService, QueueCommandService, QueueGuestLinkService],
+  exports: [QueueEntryService, QueueCommandService, QueueGuestLinkService],
 })
 export class QueueModule {}

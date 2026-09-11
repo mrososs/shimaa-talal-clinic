@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { routes } from './index';
 import {
   ROUTE_META_ONBOARDING,
+  ROUTE_META_GUEST,
   ROUTE_META_PASSWORD_RECOVERY,
   ROUTE_META_PUBLIC,
 } from './auth-guard';
@@ -27,6 +28,14 @@ describe('mobile router', () => {
       .map((route) => route.name);
 
     expect(publicNames).toEqual(['sign-in', 'sign-up', 'reset-password']);
+  });
+
+  it('marks only the anonymous queue capability as a guest route', () => {
+    expect(
+      allRoutes
+        .filter((route) => route.meta?.[ROUTE_META_GUEST] === true)
+        .map((route) => route.name),
+    ).toEqual(['guest-queue']);
   });
 
   it('marks every onboarding screen as onboarding', () => {
@@ -68,6 +77,7 @@ describe('mobile router', () => {
       'growth',
       'payments',
       'add-child',
+      'guest-queue',
     ]) {
       expect(named(name), name).toBeDefined();
     }

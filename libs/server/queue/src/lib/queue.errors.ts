@@ -11,6 +11,9 @@
 export const QueueErrorCode = {
   EntryNotFound: 'queue_entry_not_found',
 
+  /** Invalid, expired and revoked guest links intentionally share one answer. */
+  GuestLinkUnavailable: 'queue_guest_link_unavailable',
+
   /**
    * Somebody else moved first.
    *

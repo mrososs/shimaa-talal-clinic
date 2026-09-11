@@ -36,6 +36,7 @@ const STATUS: Record<string, number> = {
 
   // Queue
   queue_entry_not_found: 404,
+  queue_guest_link_unavailable: 404,
   queue_conflict: 409,
   queue_invalid_transition: 409,
   queue_session_not_running: 409,
@@ -68,11 +69,7 @@ const STATUS: Record<string, number> = {
 export class WorkflowsExceptionFilter implements ExceptionFilter {
   catch(
     exception:
-      | BookingError
-      | QueueError
-      | PatientsError
-      | ClinicalError
-      | MessagesError,
+      BookingError | QueueError | PatientsError | ClinicalError | MessagesError,
     host: ArgumentsHost,
   ): void {
     const response = host.switchToHttp().getResponse<JsonResponse>();

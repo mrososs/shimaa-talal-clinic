@@ -22,6 +22,7 @@ interface JsonResponse {
  */
 const STATUS_BY_CODE: Record<QueueErrorCode, number> = {
   [QueueErrorCode.EntryNotFound]: HttpStatus.NOT_FOUND,
+  [QueueErrorCode.GuestLinkUnavailable]: HttpStatus.NOT_FOUND,
 
   // Somebody moved first. The board is stale, not broken — the client re-reads.
   [QueueErrorCode.Conflict]: HttpStatus.CONFLICT,

@@ -16,6 +16,7 @@ import type { MeResponse } from '@clinic/contracts';
  */
 
 export const ROUTE_META_PUBLIC = 'public';
+export const ROUTE_META_GUEST = 'guest';
 export const ROUTE_META_ONBOARDING = 'onboarding';
 export const ROUTE_META_PASSWORD_RECOVERY = 'passwordRecovery';
 
@@ -29,6 +30,10 @@ export function createAuthGuard({ session, ready }: AuthGuardDeps) {
   return async function authGuard(
     to: RouteLocationNormalized,
   ): Promise<RouteLocationRaw | true> {
+    // Capability links are intentionally independent of Supabase Auth. Do not
+    // make a waiting-room guest bootstrap a session before they can see a turn.
+    if (to.meta[ROUTE_META_GUEST] === true) return true;
+
     // The first navigation happens before the stored session has been read.
     // Deciding without waiting would bounce a returning parent to the login
     // screen for a frame and then correct itself, which looks like a bug and

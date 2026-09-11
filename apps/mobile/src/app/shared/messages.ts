@@ -62,6 +62,8 @@ const API_MESSAGES: Record<string, string> = {
   queue_defer_limit_reached: 'استخدمتِ كل مرات تأجيل الدور المتاحة اليوم.',
   queue_invalid_transition: 'تغيّر دورك للتو — حدّثنا الشاشة.',
   queue_entry_not_found: 'لم نعثر على دورك في الطابور.',
+  queue_guest_link_unavailable:
+    'رابط متابعة الدور غير صالح أو انتهت مدته. اطلبي رابطاً جديداً من الاستقبال.',
   queue_session_not_running: 'الطابور متوقف مؤقتاً الآن.',
   queue_conflict: 'تغيّر الطابور للتو — حدّثنا الشاشة.',
 

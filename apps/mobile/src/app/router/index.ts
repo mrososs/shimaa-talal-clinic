@@ -6,6 +6,7 @@ import {
   ROUTE_META_ONBOARDING,
   ROUTE_META_PASSWORD_RECOVERY,
   ROUTE_META_PUBLIC,
+  ROUTE_META_GUEST,
 } from './auth-guard';
 
 /**
@@ -18,6 +19,12 @@ import {
  * focused task routes stay outside it, so they never leak the tab bar.
  */
 export const routes: RouteRecordRaw[] = [
+  {
+    path: '/queue/guest/:token',
+    name: 'guest-queue',
+    component: () => import('../features/queue/pages/GuestQueuePage.vue'),
+    meta: { [ROUTE_META_GUEST]: true },
+  },
   {
     path: '/auth/sign-in',
     name: 'sign-in',

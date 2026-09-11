@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, shallowRef } from 'vue';
 import {
   ClinicMemberRole,
   QueueStatus,
@@ -8,7 +8,12 @@ import {
   type DoctorPresence,
   type QueueBoardEntry,
 } from '@clinic/contracts';
-import { clinicApi, queueApi, session as staffSession } from '../../../runtime';
+import {
+  clinicApi,
+  config,
+  queueApi,
+  session as staffSession,
+} from '../../../runtime';
 import { agoLabel } from '../../../shared/format';
 import { arabicDigits } from '../../../shared/numerals';
 import ConfirmDialog from '../../../shared/components/ConfirmDialog.vue';
@@ -37,6 +42,7 @@ import type { WalkInInput } from '../queue.api';
 
 const state = staffSession.state;
 const board = useQueueBoard();
+const linkNotice = shallowRef<string | null>(null);
 
 const clinic = computed(() => state.identity?.clinic ?? null);
 const timezone = computed(() => clinic.value?.timezone ?? 'Africa/Cairo');
@@ -76,6 +82,16 @@ onMounted(() => {
 onUnmounted(() => {
   if (clock !== null) clearInterval(clock);
 });
+
+async function copyGuestLink(entry: QueueBoardEntry): Promise<void> {
+  linkNotice.value = null;
+  await board.run(`guest-link-${entry.id}`, async () => {
+    const link = await queueApi.createGuestLink(entry.id);
+    const url = new URL(`/queue/guest/${link.token}`, config.mobileAppUrl);
+    await navigator.clipboard.writeText(url.toString());
+    linkNotice.value = 'تم نسخ رابط متابعة الدور. الرابط لا يعرض اسم المريض.';
+  });
+}
 
 // --- reasons ----------------------------------------------------------
 
@@ -249,18 +265,15 @@ async function recordMeasurements(
 
 <template>
   <div class="dstack">
-    <p
-      v-if="board.failure.value"
-      class="dnotice dnotice--error"
-      role="alert"
-    >
+    <p v-if="board.failure.value" class="dnotice dnotice--error" role="alert">
       {{ board.failure.value }}
     </p>
 
-    <div
-      v-if="board.loading.value"
-      class="dcard dcard--pad centre dmuted"
-    >
+    <p v-if="linkNotice" class="dnotice dnotice--ok" role="status">
+      {{ linkNotice }}
+    </p>
+
+    <div v-if="board.loading.value" class="dcard dcard--pad centre dmuted">
       جارٍ التحميل…
     </div>
 
@@ -290,10 +303,7 @@ async function recordMeasurements(
         "
       />
 
-      <div
-        v-if="canManage"
-        class="queue-tools"
-      >
+      <div v-if="canManage" class="queue-tools">
         <button
           class="dbtn dbtn--primary"
           type="button"
@@ -340,6 +350,7 @@ async function recordMeasurements(
           @remove="(entry) => (ask = { kind: 'remove', entry })"
           @move="moveEntry"
           @record-measurements="(entry) => (measuringEntry = entry)"
+          @share="copyGuestLink"
         />
 
         <ExpectedList
@@ -354,14 +365,9 @@ async function recordMeasurements(
 
       <!-- Finished, missed and removed. Kept visible so the desk can see what
            happened, and so a missed patient can be put back. -->
-      <section
-        v-if="!isDoctor && board.settled.value.length > 0"
-        class="dcard"
-      >
+      <section v-if="!isDoctor && board.settled.value.length > 0" class="dcard">
         <header class="dcard__head">
-          <h2 class="dcard__title">
-            انتهى اليوم بالنسبة لهم
-          </h2>
+          <h2 class="dcard__title">انتهى اليوم بالنسبة لهم</h2>
           <span class="dpill">
             {{ arabicDigits(board.settled.value.length) }}
           </span>
@@ -404,14 +410,9 @@ async function recordMeasurements(
         </div>
       </section>
 
-      <p
-        v-if="updated"
-        class="dmuted stamp"
-      >
+      <p v-if="updated" class="dmuted stamp">
         آخر تحديث {{ updated }}
-        <template v-if="!board.polling.active.value">
-          · متوقف
-        </template>
+        <template v-if="!board.polling.active.value"> · متوقف </template>
       </p>
     </template>
 
@@ -448,7 +449,7 @@ async function recordMeasurements(
       :child-name="measuringEntry?.child.fullName"
       :working="
         measuringEntry !== null &&
-          board.working.value === `measurements-${measuringEntry.id}`
+        board.working.value === `measurements-${measuringEntry.id}`
       "
       @close="measuringEntry = null"
       @submit="recordMeasurements"

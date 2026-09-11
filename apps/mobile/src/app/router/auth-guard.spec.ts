@@ -4,6 +4,7 @@ import type { SessionStore } from '@clinic/client-session';
 import type { MeResponse } from '@clinic/contracts';
 import {
   ROUTE_META_ONBOARDING,
+  ROUTE_META_GUEST,
   ROUTE_META_PASSWORD_RECOVERY,
   ROUTE_META_PUBLIC,
   createAuthGuard,
@@ -49,6 +50,7 @@ function route(
 }
 
 const publicRoute = route('sign-in', { [ROUTE_META_PUBLIC]: true });
+const guestRoute = route('guest-queue', { [ROUTE_META_GUEST]: true });
 const onboardingRoute = route('onboarding-guardian', {
   [ROUTE_META_ONBOARDING]: true,
 });
@@ -62,6 +64,17 @@ function guardFor(session: SessionStore<MeResponse>) {
 }
 
 describe('mobile auth guard', () => {
+  it('allows a guest capability without bootstrapping Supabase Auth', async () => {
+    const ready = vi.fn(async () => undefined);
+    const guard = createAuthGuard({
+      session: storeWith({ status: 'anonymous' }),
+      ready,
+    });
+
+    expect(await guard(guestRoute)).toBe(true);
+    expect(ready).not.toHaveBeenCalled();
+  });
+
   it('waits for the session to be resolved before deciding', async () => {
     // Deciding early bounces a returning parent to login for a frame and loses
     // the deep link they arrived on.

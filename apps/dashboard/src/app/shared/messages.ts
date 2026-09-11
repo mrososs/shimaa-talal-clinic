@@ -67,6 +67,7 @@ const API_MESSAGES: Record<string, string> = {
   queue_conflict: 'تغيّر الطابور للتو — حدَّثنا الشاشة.',
   queue_invalid_transition: 'تغيّر وضع هذا المريض للتو — حدَّثنا الشاشة.',
   queue_grace_not_expired: 'ما زالت مهلة الحضور سارية.',
+  queue_guest_link_unavailable: 'رابط متابعة الدور غير متاح أو انتهت مدته.',
   queue_current_patient_still_in_service:
     'يوجد مريض ما زال في الكشف — أنهِ الكشف أولًا.',
   queue_child_not_accessible: 'هذا الطفل غير مسجّل لهذه العيادة أو لهذا الملف.',

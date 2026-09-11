@@ -24,6 +24,7 @@ export {
   type QueueAdvanceResult,
 } from './lib/queue-command.service';
 export { QueueError, QueueErrorCode } from './lib/queue.errors';
+export { QueueGuestLinkService } from './lib/queue-guest-link.service';
 
 // The board is composed a layer up, in @clinic/server-workflows: it mixes this
 // session's entries with the appointments still expected and the names behind
