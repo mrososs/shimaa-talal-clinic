@@ -121,6 +121,23 @@ test('parent request reaches completion, payment and role-safe reports', async (
       ),
     ).toBe(true);
 
+    await parent
+      .getByRole('button', { name: /نقداً في العيادة/ })
+      .click();
+    const cashResponse = parent.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        response.url().endsWith('/api/v1/payments/cash'),
+    );
+    await parent
+      .getByRole('button', { name: 'تأكيد الدفع نقداً' })
+      .click();
+    const cashPayload = (await (await cashResponse).json()) as {
+      data: { id: string; status: string };
+    };
+    expect(cashPayload.data.status).toBe('pending');
+    await expect(parent.getByText('تم تسجيل الدفع نقداً')).toBeVisible();
+
     await parent.goto(`${mobileUrl}/appointments/${appointmentId}`);
     await expect(parent.getByText('قيد المراجعة')).toBeVisible();
 
@@ -141,6 +158,37 @@ test('parent request reaches completion, payment and role-safe reports', async (
     await expect(appointmentRow).toContainText(fixture.childName);
     await appointmentRow.getByRole('button', { name: 'موافقة' }).click();
     await expect(appointmentRow).toContainText('مؤكّد');
+
+    await reception.goto(`${dashboardUrl}/payments`);
+    const pendingPayment = reception.locator('.payment-row', {
+      hasText: fixture.childName,
+    });
+    await expect(pendingPayment).toContainText('بانتظار المراجعة');
+    await pendingPayment.getByRole('button', { name: 'اعتماد' }).click();
+    await expect(pendingPayment).toContainText('مدفوع');
+
+    await parent.goto(`${mobileUrl}/payments?appointmentId=${appointmentId}`);
+    await expect(parent.locator('.history', { hasText: 'نقداً في العيادة' }))
+      .toContainText('تم الدفع');
+
+    await parent.goto(`${mobileUrl}/notifications`);
+    await expect(
+      parent.getByRole('heading', { name: 'الإشعارات' }),
+    ).toBeVisible();
+    await expect(parent.getByText('تم اعتماد الدفع')).toBeVisible();
+    await expect(parent.getByText('تم تأكيد الموعد')).toBeVisible();
+    await parent
+      .getByRole('button', { name: /تم اعتماد الدفع/ })
+      .click();
+    await expect(parent).toHaveURL(
+      new RegExp(`/payments\\?appointmentId=${appointmentId}$`),
+    );
+
+    await parent.goto(`${mobileUrl}/assistant`);
+    await expect(
+      parent.getByRole('heading', { name: 'مساعد العيادة' }),
+    ).toBeVisible();
+    await expect(parent.getByText('كيف أتابع دوري؟')).toBeVisible();
 
     await reception.goto(`${dashboardUrl}/queue`);
     const expectedRow = reception.locator(
@@ -188,6 +236,10 @@ test('parent request reaches completion, payment and role-safe reports', async (
     await expect(calledCard).toContainText('تم النداء');
     await parent.reload();
     await expect(parent.getByText('حان دورك الآن!')).toBeVisible();
+    await parent.goto(`${mobileUrl}/notifications`);
+    await expect(parent.getByText('حان دورك الآن')).toBeVisible();
+    await parent.getByRole('button', { name: /حان دورك الآن/ }).click();
+    await expect(parent).toHaveURL(/\/tabs\/queue$/);
     await guest.reload();
     await expect(guest.getByText('حان دورك الآن!')).toBeVisible();
 
@@ -215,16 +267,6 @@ test('parent request reaches completion, payment and role-safe reports', async (
     await expect(
       doctor.getByRole('button', { name: 'تم إنهاء الزيارة' }),
     ).toBeVisible();
-
-    await reception.goto(`${dashboardUrl}/payments`);
-    await reception.getByRole('button', { name: 'تسجيل دفعة' }).click();
-    await reception.getByLabel('الموعد').selectOption({ value: appointmentId });
-    await reception.getByLabel('المبلغ بالجنيه').fill('350');
-    await reception.getByRole('button', { name: 'حفظ' }).click();
-    const paymentRow = reception.locator('.payment-row', {
-      hasText: fixture.childName,
-    });
-    await expect(paymentRow).toContainText('مدفوع');
 
     await reception.goto(`${dashboardUrl}/reports`);
     await expect(reception.getByText('إجمالي المواعيد')).toBeVisible();
@@ -255,6 +297,8 @@ test('parent request reaches completion, payment and role-safe reports', async (
 
     await parent.goto(`${mobileUrl}/appointments/${appointmentId}`);
     await expect(parent.getByText('تمت الزيارة')).toBeVisible();
+    await parent.goto(`${mobileUrl}/notifications`);
+    await expect(parent.getByText('تم إنهاء الزيارة')).toBeVisible();
   } finally {
     await Promise.all([
       parentContext.close(),

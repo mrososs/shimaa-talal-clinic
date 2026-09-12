@@ -155,6 +155,18 @@ export const routes: RouteRecordRaw[] = [
     name: 'payments',
     component: () => import('../features/payments/pages/PaymentsPage.vue'),
   },
+  {
+    path: '/notifications',
+    name: 'notifications',
+    component: () =>
+      import('../features/notifications/pages/NotificationsPage.vue'),
+  },
+  {
+    path: '/assistant',
+    name: 'assistant',
+    component: () =>
+      import('../features/assistant/pages/FaqAssistantPage.vue'),
+  },
 
   {
     // An unknown deep link is not worth an error screen in a clinic app.

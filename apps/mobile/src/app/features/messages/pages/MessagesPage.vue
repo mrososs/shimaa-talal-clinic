@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef } from 'vue';
+import { useRoute } from 'vue-router';
 import {
   IonButton,
   IonIcon,
@@ -20,6 +21,7 @@ import NewMessageForm from '../components/NewMessageForm.vue';
 import { useParentMessages } from '../composables/useParentMessages';
 
 const inbox = useParentMessages();
+const route = useRoute();
 const showNew = shallowRef(false);
 const replyDraft = shallowRef('');
 const urgentNote = shallowRef('');
@@ -57,7 +59,13 @@ async function raiseUrgent(): Promise<void> {
   if (await inbox.raiseUrgent(note)) urgentNote.value = '';
 }
 
-onIonViewWillEnter(() => void inbox.start());
+onIonViewWillEnter(() => {
+  void (async () => {
+    await inbox.start();
+    const threadId = route.query['threadId'];
+    if (typeof threadId === 'string') await openThread(threadId);
+  })();
+});
 onIonViewDidLeave(() => inbox.stop());
 </script>
 

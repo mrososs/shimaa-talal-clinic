@@ -33,6 +33,7 @@ Conceptual routes, following the existing URI versioning and naming rules:
 | ---------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `GET /me/notifications`            | List guardian notifications                                                                      |
 | `POST /me/notifications/:id/read`  | Mark one notification read                                                                       |
+| `POST /me/notifications/read-all`  | Mark every notification for the authenticated guardian read                                      |
 | `GET /messages`                    | List own threads                                                                                 |
 | `POST /messages`                   | Create own-child thread idempotently                                                             |
 | `GET /messages/:threadId`          | Read own thread                                                                                  |

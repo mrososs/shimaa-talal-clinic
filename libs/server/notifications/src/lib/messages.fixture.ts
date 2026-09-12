@@ -166,6 +166,10 @@ export async function clearThreads(
   clinicIds: string[],
 ): Promise<void> {
   await sql.query(
+    `delete from clinic.guardian_notifications where clinic_id = any($1)`,
+    [clinicIds],
+  );
+  await sql.query(
     `delete from clinic.message_events where clinic_id = any($1)`,
     [clinicIds],
   );

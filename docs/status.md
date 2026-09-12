@@ -7,7 +7,7 @@ exists, and is expected to be edited every time a slice lands.
 Anything not listed as built is not built. If a claim here disagrees with the
 code, the code is right and this file is stale — say so.
 
-_Last updated: 2026-09-11 · 20 migrations · 106 routes._
+_Last updated: 2026-09-12 · 21 migrations · 109 routes._
 
 ---
 
@@ -15,7 +15,7 @@ _Last updated: 2026-09-11 · 20 migrations · 106 routes._
 
 ### Database
 
-Twenty migrations are in source control and applied to the hosted pilot database.
+Twenty-one migrations are in source control and applied to the hosted pilot database.
 Every table lives in the `clinic` schema, which
 is absent from `[api].schemas` in `supabase/config.toml` — so the publishable
 key shipped in both bundles cannot reach any of it. RLS is `ENABLE` + `FORCE`
@@ -44,6 +44,7 @@ public browser roles. This is a second lock under the trusted API. See
 | `queue_guest_links`                 | revocable, end-of-day guest queue capabilities storing only SHA-256 token digests                                       |
 | `missed_visit_payment_policy`       | payment event links for no-show appointments and paid-credit transfers                                               |
 | `requeue_payment_policy`            | explicit cash-payment restoration event for queue requeue                                                           |
+| `parent_in_app_notifications`       | guardian-scoped in-app notifications, event triggers, unread indexes and deep links                                 |
 
 ### The four concurrency guarantees
 
@@ -57,7 +58,7 @@ races rather than by reading the schema:
 | One patient called, one in service             | `queue_one_called_uq`, `queue_one_in_service_uq` | concurrent queue commands leave one called and one in service |
 | One check-in per appointment                   | `queue_appointment_uq`                           | 5 simultaneous check-ins → one entry, five 201s               |
 
-### API — 106 routes
+### API — 109 routes
 
 Auth (guard, `@Roles`, cached verifier, envelope interceptor) · identity
 (parent + staff, claim codes) · clinic sessions (list, open/pause/resume/close,
@@ -116,11 +117,17 @@ a refund; paid visits transfer their credit to a no-show reschedule; and a
 requeue restores the appointment and the failed cash record. Pending InstaPay
 receipts remain under staff review.
 
-### Mobile — 17 screens
+Guardians also have three notification routes for listing, marking one read and
+marking all read. Appointment, Queue, Payment and Message events create the
+corresponding notification atomically and idempotently; all reads are derived
+from the authenticated guardian and clinic context.
+
+### Mobile — 19 screens
 
 Sign in/up · password reset/update · guardian and child onboarding · claim an
 existing family · home · appointments list/detail/reschedule · book a visit ·
-live queue · payments · parent-safe growth · clinic messages and urgent guidance.
+live queue · payments · parent-safe growth · clinic messages and urgent guidance ·
+in-app notifications · doctor-curated FAQ assistant.
 
 The mobile foundation now uses a real router-level Ionic tabs shell for Home,
 Appointments, Queue and Messages. Focused auth, onboarding, booking and detail flows stay
@@ -151,6 +158,11 @@ Booking and Queue now match the supplied warm RTL prototype's
 card hierarchy, horizontal selectors, sticky action, live ring, ETA and pending
 approval treatment while keeping server-owned arrival windows and private
 `aheadCount` semantics.
+The notification center displays unread state without blanking during refresh
+and deep-links to owned appointments, queue, payments and message threads. Home
+shows an accessible unread badge. The FAQ assistant is searchable static clinic
+guidance and explicitly redirects emergencies to urgent care rather than
+inventing clinical advice.
 The public guest queue screen runs outside authentication and Ionic tabs, uses
 the same responsive visual language, polls every fifteen seconds and never
 renders patient identity.
@@ -182,8 +194,9 @@ notification templates, team permissions and the audit trail.
 
 Release hardening adds an isolated Chrome journey that provisions temporary
 Supabase Auth users and clinic data, then proves the complete parent request →
-approval → check-in → queue → consultation → cash payment → role-safe report
-flow. It cleans every marked row and Auth user after success or failure. The
+cash selection → booking and payment approval → notification deep link →
+check-in → queue → consultation → role-safe report flow. It cleans every marked
+row and Auth user after success or failure. The
 same journey runs WCAG 2 A/AA checks and a visual regression snapshot for the
 fixed doctor sidebar. Mobile and Dashboard development URLs are fixed at
 `4202` and `4203` respectively.

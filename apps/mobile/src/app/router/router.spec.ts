@@ -76,6 +76,8 @@ describe('mobile router', () => {
       'appointment-reschedule',
       'growth',
       'payments',
+      'notifications',
+      'assistant',
       'add-child',
       'guest-queue',
     ]) {
@@ -100,6 +102,8 @@ describe('mobile router', () => {
     expect(tabsShell?.children).not.toContain(named('appointment-reschedule'));
     expect(tabsShell?.children).not.toContain(named('growth'));
     expect(tabsShell?.children).not.toContain(named('payments'));
+    expect(tabsShell?.children).not.toContain(named('notifications'));
+    expect(tabsShell?.children).not.toContain(named('assistant'));
     expect(tabsShell?.children).not.toContain(named('add-child'));
   });
 

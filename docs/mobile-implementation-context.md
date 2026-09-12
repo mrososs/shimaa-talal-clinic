@@ -51,8 +51,8 @@ contracts in `libs/contracts`, and Supabase/Postgres for persistence.
 - [x] M5 — Parent messages and urgent triage.
 - [x] M6 — Parent-safe growth reads.
 - [x] M7 — Grace, missed, reschedule and cancellation.
-- [ ] M8 — In-app notifications and deep links.
-- [ ] M9 — Cross-role hardening and release verification.
+- [x] M8 — In-app notifications and deep links.
+- [x] M9 — Cross-role hardening and release verification.
 
 ## Architecture rules
 
@@ -177,8 +177,23 @@ remain reviewable. Grace failures roll back the complete operation.
 Notifications are deduplicated, scoped to the correct guardian, and deep-link
 to the correct appointment, queue, message or payment screen.
 
+Implemented with a guardian-scoped notification read model under forced RLS.
+Appointment, Queue, Payment and Message events create idempotent notifications
+inside the same database transaction. Mobile polls every fifteen seconds,
+preserves the last successful result during refresh, exposes unread counts and
+supports mark-one/mark-all-read. Deep links open the owned appointment, live
+queue, payment or message thread; no guardian or clinic identity is accepted
+from the browser. The first-release assistant is also available as a searchable,
+doctor-curated FAQ and never provides diagnoses or dosing advice.
+
 ### M9 checkpoint
 
 The complete parent → reception → doctor journey passes in Chrome at Mobile
 4202, Dashboard 4203 and API 3000, plus production build and Capacitor web
 smoke checks.
+
+Verified with an isolated Playwright journey that creates temporary Auth and
+clinic data, books from Mobile, chooses cash, approves the booking and payment
+from Reception Dashboard, verifies notification deep links, checks in and calls
+the child, starts and completes the consultation as Doctor, and confirms the
+final parent state. The production Vite build and Capacitor web sync both pass.

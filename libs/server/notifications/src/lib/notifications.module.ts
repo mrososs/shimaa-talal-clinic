@@ -2,7 +2,9 @@ import { Module } from '@nestjs/common';
 import { ServerCoreModule } from '@clinic/server-core';
 import { MessagesController } from './api/messages.controller';
 import { ParentMessagesController } from './api/parent-messages.controller';
+import { ParentNotificationsController } from './api/parent-notifications.controller';
 import { MessagesService } from './messages.service';
+import { ParentNotificationsService } from './parent-notifications.service';
 
 /**
  * Notifications domain boundary.
@@ -18,8 +20,12 @@ import { MessagesService } from './messages.service';
  */
 @Module({
   imports: [ServerCoreModule],
-  controllers: [MessagesController, ParentMessagesController],
-  providers: [MessagesService],
-  exports: [MessagesService],
+  controllers: [
+    MessagesController,
+    ParentMessagesController,
+    ParentNotificationsController,
+  ],
+  providers: [MessagesService, ParentNotificationsService],
+  exports: [MessagesService, ParentNotificationsService],
 })
 export class NotificationsModule {}

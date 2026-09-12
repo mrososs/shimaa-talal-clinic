@@ -18,6 +18,8 @@ import {
   statsChartOutline,
   timeOutline,
   walletOutline,
+  notificationsOutline,
+  helpCircleOutline,
 } from 'ionicons/icons';
 import ScreenShell from '../../../shared/components/ScreenShell.vue';
 import FormNotice from '../../../shared/components/FormNotice.vue';
@@ -25,6 +27,7 @@ import { shortDayLabel, windowLabel } from '../../../shared/format';
 import { arabicDigits } from '../../../shared/numerals';
 import { session } from '../../../runtime';
 import { useAppointments } from '../../appointments/composables/useAppointments';
+import { useParentNotifications } from '../../notifications/composables/useParentNotifications';
 
 /**
  * Home, as the design lays it out: who you are, what is next, what you can do.
@@ -39,6 +42,7 @@ import { useAppointments } from '../../appointments/composables/useAppointments'
 const router = useRouter();
 const state = session.state;
 const appointments = useAppointments();
+const notifications = useParentNotifications();
 const upcoming = computed(() => appointments.items.value);
 const failure = appointments.failure;
 const loading = appointments.loading;
@@ -83,8 +87,14 @@ async function signOut(): Promise<void> {
   }
 }
 
-onIonViewWillEnter(() => void appointments.open());
-onIonViewDidLeave(() => appointments.close());
+onIonViewWillEnter(() => {
+  void appointments.open();
+  void notifications.open();
+});
+onIonViewDidLeave(() => {
+  appointments.close();
+  notifications.close();
+});
 </script>
 
 <template>
@@ -109,6 +119,18 @@ onIonViewDidLeave(() => appointments.close());
             {{ guardian?.fullName ?? 'أهلاً بك' }}
           </p>
         </div>
+        <button
+          type="button"
+          class="greet__notifications"
+          :aria-label="`الإشعارات، ${notifications.unreadCount.value} غير مقروءة`"
+          @click="router.push({ name: 'notifications' })"
+        >
+          <ion-icon :icon="notificationsOutline" />
+          <span
+            v-if="notifications.unreadCount.value > 0"
+            class="greet__badge"
+          >{{ arabicDigits(notifications.unreadCount.value) }}</span>
+        </button>
         <button
           type="button"
           class="greet__out"
@@ -285,6 +307,18 @@ onIonViewDidLeave(() => appointments.close());
             <span class="action__title">الدفع</span>
             <span class="action__hint">نقداً أو InstaPay</span>
           </button>
+
+          <button
+            type="button"
+            class="card action"
+            @click="router.push({ name: 'assistant' })"
+          >
+            <span class="action__ico action__ico--coral">
+              <ion-icon :icon="helpCircleOutline" />
+            </span>
+            <span class="action__title">مساعد العيادة</span>
+            <span class="action__hint">أسئلة عن التطبيق</span>
+          </button>
         </div>
       </section>
 
@@ -373,6 +407,39 @@ onIonViewDidLeave(() => appointments.close());
   font-size: 19px;
   cursor: pointer;
   flex-shrink: 0;
+}
+
+.greet__notifications {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--r-pill);
+  border: none;
+  background: var(--surface);
+  box-shadow: var(--sh-sm);
+  color: var(--ink-2);
+  display: grid;
+  place-items: center;
+  font-size: 19px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.greet__badge {
+  position: absolute;
+  inset-block-start: -4px;
+  inset-inline-end: -4px;
+  min-width: 19px;
+  height: 19px;
+  padding-inline: 5px;
+  border: 2px solid var(--bg);
+  border-radius: var(--r-pill);
+  display: grid;
+  place-items: center;
+  background: var(--coral);
+  color: white;
+  font-size: 10px;
+  font-weight: 800;
 }
 
 .row {

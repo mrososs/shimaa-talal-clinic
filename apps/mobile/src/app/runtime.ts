@@ -24,6 +24,10 @@ import {
   createParentPaymentsApi,
   type ParentPaymentsApi,
 } from './features/payments/payments.api';
+import {
+  createParentNotificationsApi,
+  type ParentNotificationsApi,
+} from './features/notifications/notifications.api';
 
 /**
  * Composition root for everything this app talks to.
@@ -59,6 +63,8 @@ export const queueApi: QueueApi = createQueueApi(apiClient);
 export const growthApi: GrowthApi = createGrowthApi(apiClient);
 export const messagesApi: ParentMessagesApi = createParentMessagesApi(apiClient);
 export const paymentsApi: ParentPaymentsApi = createParentPaymentsApi(apiClient);
+export const notificationsApi: ParentNotificationsApi =
+  createParentNotificationsApi(apiClient);
 
 /**
  * The signed-in session, and who that account is at the clinic.

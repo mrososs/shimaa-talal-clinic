@@ -22,6 +22,7 @@ export * from './lib/api/dashboard';
 export * from './lib/api/health';
 export * from './lib/api/me';
 export * from './lib/api/messages';
+export * from './lib/api/notifications';
 export * from './lib/api/pagination';
 export * from './lib/api/patient-files';
 export * from './lib/api/payments';
