@@ -73,10 +73,19 @@ At Dashboard viewport 1280×820 verify:
 - [x] Failed cross-domain operation rolls back all domains and notifications.
 - [x] Slow polling response cannot overwrite a newer screen state.
 
-## Capacitor smoke
+## Browser-first PWA
 
-- [x] Capacitor sync succeeds after the web build.
-- [ ] Auth redirect/deep links work in the native shell.
-- [ ] Safe-area insets and keyboard behavior are correct.
-- [ ] Native push is not required for this release; in-app polling remains the
-  fallback until a future notification-provider task is approved.
+- [x] Production build emits `manifest.webmanifest` and `sw.js`.
+- [x] Service-worker policy has no API, Auth, REST, or Storage runtime caching.
+- [x] Installation, update prompt, and offline UI have component/composable tests.
+- [x] Production API rejects wildcard or missing CORS origins.
+- [ ] Official 192, 512, maskable 512, and Apple Touch icons are supplied.
+- [ ] Chrome Application installability and Cache Storage checks pass.
+- [ ] Vercel HTTPS deep links and explicit production CORS allow-list pass.
+- [ ] Android Chrome standalone installation and full flow pass.
+- [ ] Physical iPhone Safari Add to Home Screen, safe areas, and full flow pass.
+- [ ] Capacitor dependencies/config/targets/generated projects are removed only
+  after every preceding PWA item passes.
+
+See [parent-pwa-deployment.md](parent-pwa-deployment.md) for the deployment and
+final removal gate.

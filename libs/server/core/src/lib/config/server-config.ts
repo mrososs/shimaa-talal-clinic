@@ -191,17 +191,33 @@ function readPort(env: RawServerEnv): number {
   return port;
 }
 
-function readCorsOrigins(env: RawServerEnv): string[] | '*' {
+function readCorsOrigins(
+  env: RawServerEnv,
+  nodeEnv: NodeEnvironment,
+): string[] | '*' {
   const raw = optionalString(env, 'API_CORS_ORIGINS');
 
   if (raw === null || raw === '*') {
+    if (nodeEnv === 'production') {
+      throw new ServerConfigError(
+        'API_CORS_ORIGINS must be an explicit comma-separated allow-list in production; wildcard and empty values are not allowed.',
+      );
+    }
     return '*';
   }
 
-  return raw
+  const origins = raw
     .split(',')
     .map((origin) => origin.trim())
     .filter((origin) => origin.length > 0);
+
+  if (origins.length === 0) {
+    throw new ServerConfigError(
+      'API_CORS_ORIGINS must contain at least one browser origin.',
+    );
+  }
+
+  return origins;
 }
 
 function readBoolean(
@@ -321,10 +337,12 @@ function readDatabase(env: RawServerEnv): DatabaseConfig {
 export function loadServerConfig(
   env: RawServerEnv = process.env,
 ): ServerConfig {
+  const nodeEnv = readNodeEnv(env);
+
   return {
-    nodeEnv: readNodeEnv(env),
+    nodeEnv,
     port: readPort(env),
-    corsOrigins: readCorsOrigins(env),
+    corsOrigins: readCorsOrigins(env, nodeEnv),
     supabase: readSupabase(env),
     database: readDatabase(env),
     security: readSecurity(env),

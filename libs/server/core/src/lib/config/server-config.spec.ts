@@ -49,6 +49,19 @@ describe('loadServerConfig', () => {
     expect(config.database.ssl).toBe(true);
   });
 
+  it.each([undefined, '*'])(
+    'rejects unsafe production CORS origins (%s)',
+    (corsOrigins) => {
+      expect(() =>
+        loadServerConfig({
+          ...MINIMAL_ENV,
+          NODE_ENV: 'production',
+          API_CORS_ORIGINS: corsOrigins,
+        }),
+      ).toThrow(/API_CORS_ORIGINS.*production/);
+    },
+  );
+
   it('rejects a nonsensical port instead of silently defaulting', () => {
     expect(() =>
       loadServerConfig({ ...MINIMAL_ENV, API_PORT: 'not-a-port' }),
