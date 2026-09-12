@@ -1,6 +1,8 @@
 /// <reference types='vitest' />
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
+import { VitePWA } from 'vite-plugin-pwa';
+import { mobilePwaOptions } from './src/app/pwa/pwa.config.mts';
 
 export default defineConfig(() => ({
   root: import.meta.dirname,
@@ -17,12 +19,12 @@ export default defineConfig(() => ({
     port: 4302,
     host: 'localhost',
   },
-  plugins: [vue()],
+  plugins: [vue(), VitePWA(mobilePwaOptions)],
   // Resolves the `@clinic/*` mappings from tsconfig.base.json.
   // Vite 8 does this natively, so no vite-tsconfig-paths plugin is needed.
   resolve: { tsconfigPaths: true },
   build: {
-    // Capacitor's `webDir` points here - see capacitor.config.ts.
+    // Keep the Nx workspace output stable; Vercel serves this directory.
     outDir: '../../dist/apps/mobile',
     emptyOutDir: true,
     reportCompressedSize: true,

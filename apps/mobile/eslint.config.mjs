@@ -2,6 +2,11 @@ import vue from 'eslint-plugin-vue';
 import baseConfig from '../../eslint.config.mjs';
 
 export default [
+  {
+    // Native projects are generated build artifacts. During the PWA migration
+    // they remain locally for rollback, but they are not application source.
+    ignores: ['android/**', 'ios/**', '.idea/**'],
+  },
   ...baseConfig,
   ...vue.configs['flat/recommended'],
   {
