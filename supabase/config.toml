@@ -51,8 +51,21 @@ file_size_limit = "50MiB"
 enabled = true
 # The URL the browser is redirected back to after an auth flow. The mobile app
 # runs on 4202 and the dashboard on 4203.
+#
+# This file configures the LOCAL stack only. The hosted project keeps its own
+# copy of these two settings, and they must be kept in step: sign-up and
+# password-reset both send the browser's own origin as the redirect target, and
+# Supabase silently ignores a target that is not on this allow-list — falling
+# back to site_url, which is how a deployed app ends up mailing localhost links.
 site_url = "http://localhost:4202"
-additional_redirect_urls = ["http://localhost:4202", "http://localhost:4203"]
+additional_redirect_urls = [
+  "http://localhost:4202",
+  "http://localhost:4203",
+  "https://shimaa-talal-clinic.vercel.app",
+  "https://shimaa-talal-clinic.vercel.app/**",
+  "https://shimaa-talal-dashboard.vercel.app",
+  "https://shimaa-talal-dashboard.vercel.app/**",
+]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
 refresh_token_reuse_interval = 10

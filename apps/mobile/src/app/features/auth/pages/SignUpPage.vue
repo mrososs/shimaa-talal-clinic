@@ -76,10 +76,16 @@ async function submit(): Promise<void> {
   awaitingConfirmation.value = false;
   if (invalid.value) return;
 
-  const signedIn = await session.signUp({
-    email: email.value.trim(),
-    password: password.value,
-  });
+  // This origin, not a configured one: the confirmation link has to come back
+  // to the deployment the parent actually signed up on. Same rule as the
+  // password-reset screen.
+  const signedIn = await session.signUp(
+    {
+      email: email.value.trim(),
+      password: password.value,
+    },
+    `${window.location.origin}/auth/sign-in`,
+  );
 
   if (signedIn) {
     // Carried in the route, not in the store: it is a convenience for the very

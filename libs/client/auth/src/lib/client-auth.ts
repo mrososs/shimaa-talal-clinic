@@ -95,7 +95,18 @@ export interface AuthProvider {
    */
   restoreSession(): Promise<AuthSession | null>;
   signInWithPassword(credentials: AuthCredentials): Promise<AuthSession>;
-  signUp(credentials: AuthCredentials): Promise<SignUpResult>;
+  /**
+   * `redirectTo` is where the confirmation email's link lands, and it is
+   * required for the same reason it is on `requestPasswordReset`: with no value
+   * Supabase falls back to the project's Site URL, which is one fixed origin.
+   * That silently mails every deployment a link to whichever origin the project
+   * was configured with — in practice, localhost. The URL must also appear in
+   * the project's redirect allow-list, or Supabase ignores it and falls back.
+   */
+  signUp(
+    credentials: AuthCredentials,
+    redirectTo: string,
+  ): Promise<SignUpResult>;
   /** Send an SMS challenge. A successful start does not create a session. */
   startPhoneOtp(phone: string): Promise<void>;
   /** Verify the SMS challenge and return the session it establishes. */
@@ -196,10 +207,11 @@ export function createSupabaseAuthProvider(
       return session;
     },
 
-    async signUp(credentials) {
+    async signUp(credentials, redirectTo) {
       const { data, error } = await client.auth.signUp({
         email: credentials.email,
         password: credentials.password,
+        options: { emailRedirectTo: redirectTo },
       });
       if (error) throw toAuthError(error);
 

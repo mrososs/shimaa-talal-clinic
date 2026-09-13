@@ -172,11 +172,28 @@ describe('signInWithPassword', () => {
 });
 
 describe('signUp', () => {
+  const CALLBACK = 'https://parents.example.test/auth/sign-in';
+
+  // Without this the confirmation mail falls back to the project's Site URL,
+  // which is one fixed origin — so every deployment mails the same link, and
+  // in practice that link is localhost.
+  it('sends the caller’s origin as the confirmation link target', async () => {
+    auth.signUp.mockResolvedValue({ data: { session: SESSION }, error: null });
+
+    await provider().signUp({ email: 'a@b.com', password: 'pw' }, CALLBACK);
+
+    expect(auth.signUp).toHaveBeenCalledWith({
+      email: 'a@b.com',
+      password: 'pw',
+      options: { emailRedirectTo: CALLBACK },
+    });
+  });
+
   it('reports a session when the project issues one', async () => {
     auth.signUp.mockResolvedValue({ data: { session: SESSION }, error: null });
 
     await expect(
-      provider().signUp({ email: 'a@b.com', password: 'pw' }),
+      provider().signUp({ email: 'a@b.com', password: 'pw' }, CALLBACK),
     ).resolves.toEqual({
       session: {
         accessToken: 'jwt-token',
@@ -192,7 +209,7 @@ describe('signUp', () => {
     auth.signUp.mockResolvedValue({ data: { session: null }, error: null });
 
     await expect(
-      provider().signUp({ email: 'a@b.com', password: 'pw' }),
+      provider().signUp({ email: 'a@b.com', password: 'pw' }, CALLBACK),
     ).resolves.toEqual({ session: null, needsEmailConfirmation: true });
   });
 
@@ -206,7 +223,7 @@ describe('signUp', () => {
     auth.signUp.mockResolvedValue({ data: { session: null }, error });
 
     await expect(
-      provider().signUp({ email: 'a@b.com', password: 'pw' }),
+      provider().signUp({ email: 'a@b.com', password: 'pw' }, CALLBACK),
     ).rejects.toMatchObject({ code: 'email_taken' });
   });
 
@@ -219,7 +236,7 @@ describe('signUp', () => {
     });
 
     await expect(
-      provider().signUp({ email: 'a@b.com', password: 'x' }),
+      provider().signUp({ email: 'a@b.com', password: 'x' }, CALLBACK),
     ).rejects.toMatchObject({ code: 'weak_password' });
   });
 });

@@ -66,8 +66,11 @@ export interface SessionStore<TIdentity> {
   /**
    * Returns whether the account is usable now. `false` means the project
    * requires email confirmation, so there is no session to route with.
+   *
+   * `redirectTo` is where the confirmation link lands — pass this app's own
+   * origin, so a deployment never mails a link to a different one.
    */
-  signUp(credentials: AuthCredentials): Promise<boolean>;
+  signUp(credentials: AuthCredentials, redirectTo: string): Promise<boolean>;
   /** Send an SMS challenge. No authenticated state exists until verification. */
   startPhoneOtp(phone: string): Promise<boolean>;
   /** Verify an SMS challenge, adopt its session and load the clinic identity. */
@@ -215,11 +218,11 @@ export function createSessionStore<TIdentity>(
       }
     },
 
-    async signUp(credentials) {
+    async signUp(credentials, redirectTo) {
       state.pending = true;
       state.authError = null;
       try {
-        const result = await options.auth.signUp(credentials);
+        const result = await options.auth.signUp(credentials, redirectTo);
         if (result.session === null) {
           // The account may exist, but it cannot act. Routing to a signed-in
           // screen here would show an empty app that 401s on every request.

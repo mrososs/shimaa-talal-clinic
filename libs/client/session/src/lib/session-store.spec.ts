@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+﻿import { describe, expect, it, vi } from 'vitest';
 import { ApiClientError } from '@clinic/api-client';
 import {
   AuthError,
@@ -308,7 +308,7 @@ describe('createSessionStore', () => {
   });
 
   describe('sign in', () => {
-    it('reports the credential failure in the app’s own vocabulary', async () => {
+    it('reports the credential failure in the appâ€™s own vocabulary', async () => {
       const { auth } = stubProvider({
         signInWithPassword: async () => {
           throw new AuthError('invalid_credentials', 'Invalid login');
@@ -377,6 +377,26 @@ describe('createSessionStore', () => {
   });
 
   describe('sign up', () => {
+    const CALLBACK = 'https://parents.example.test/auth/sign-in';
+
+    it('passes the confirmation link target through to the provider', async () => {
+      const signUp = vi
+        .fn()
+        .mockResolvedValue({ session: null, needsEmailConfirmation: true });
+      const { auth } = stubProvider({ signUp });
+      const store = createSessionStore({
+        auth,
+        loadIdentity: async () => identity,
+      });
+
+      await store.signUp({ email: 'a@b.test', password: 'pw' }, CALLBACK);
+
+      expect(signUp).toHaveBeenCalledWith(
+        { email: 'a@b.test', password: 'pw' },
+        CALLBACK,
+      );
+    });
+
     it('routes into the app when a session is issued', async () => {
       const { auth } = stubProvider();
       const store = createSessionStore({
@@ -384,7 +404,7 @@ describe('createSessionStore', () => {
         loadIdentity: async () => identity,
       });
 
-      expect(await store.signUp({ email: 'a@b.test', password: 'pw' })).toBe(
+      expect(await store.signUp({ email: 'a@b.test', password: 'pw' }, CALLBACK)).toBe(
         true,
       );
       expect(store.state.status).toBe('authenticated');
@@ -401,7 +421,7 @@ describe('createSessionStore', () => {
         loadIdentity: async () => identity,
       });
 
-      expect(await store.signUp({ email: 'a@b.test', password: 'pw' })).toBe(
+      expect(await store.signUp({ email: 'a@b.test', password: 'pw' }, CALLBACK)).toBe(
         false,
       );
       expect(store.state.status).toBe('restoring');
@@ -419,7 +439,7 @@ describe('createSessionStore', () => {
         loadIdentity: async () => identity,
       });
 
-      await store.signUp({ email: 'a@b.test', password: 'pw' });
+      await store.signUp({ email: 'a@b.test', password: 'pw' }, CALLBACK);
       expect(store.state.authError).toBe('email_taken');
     });
   });
@@ -552,7 +572,7 @@ describe('createSessionStore', () => {
       expect(store.state.status).toBe('authenticated');
     });
 
-    it('ignores the provider’s initial null while still restoring', async () => {
+    it('ignores the providerâ€™s initial null while still restoring', async () => {
       // supabase-js emits an INITIAL_SESSION event at subscribe time. Acting on
       // it would settle the store as anonymous before bootstrap has looked.
       const { auth, emit } = stubProvider({
