@@ -55,6 +55,9 @@ export const auth: AuthProvider | null = isSupabaseConfigured(config)
 export const apiClient: ApiClient = createApiClient({
   baseUrl: config.apiUrl,
   getAccessToken: () => auth?.getAccessToken() ?? null,
+  // `session` is defined below and only read once a request has failed, which
+  // is long after this module has finished evaluating.
+  onUnauthenticated: () => void session.terminate(),
 });
 
 export const identityApi: IdentityApi = createIdentityApi(apiClient);

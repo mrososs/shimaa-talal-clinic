@@ -29,10 +29,12 @@ export * from './lib/api/payments';
 export * from './lib/api/clinical';
 export * from './lib/api/clinic-settings';
 export * from './lib/api/queue-views';
+export * from './lib/api/appointment-tracking';
 export * from './lib/api/staff-identity';
 export * from './lib/api/staff-family-record';
 
 export * from './lib/domain/appointment';
+export * from './lib/domain/attendance-intent';
 export * from './lib/domain/appointment-status';
 export * from './lib/domain/availability';
 export * from './lib/domain/child';

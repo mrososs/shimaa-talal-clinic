@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import {
   AppointmentService,
   BookingError,
@@ -14,8 +14,9 @@ import { DatabaseService, type SqlExecutor } from '@clinic/server-core';
 import {
   AppointmentStatus,
   PaymentStatus,
-  type Appointment,
+  type RescheduledAppointment,
 } from '@clinic/contracts';
+import { AppointmentTrackingCapabilityService } from './appointment-tracking-capability.service';
 
 type RescheduleActor =
   | { memberId: string; guardianId?: never; authUserId?: never }
@@ -35,13 +36,15 @@ export class RescheduleAppointmentWorkflow {
     private readonly database: DatabaseService,
     private readonly appointments: AppointmentService,
     private readonly payments: PaymentService,
+    @Optional()
+    private readonly capabilities?: AppointmentTrackingCapabilityService,
   ) {}
 
   execute(
     input: RescheduleAppointmentInput,
     db?: SqlExecutor,
-  ): Promise<Appointment> {
-    const run = async (tx: SqlExecutor): Promise<Appointment> => {
+  ): Promise<RescheduledAppointment> {
+    const run = async (tx: SqlExecutor): Promise<RescheduledAppointment> => {
       const original = await this.appointments.findByIdForUpdate(
         input.clinicId,
         input.appointmentId,
@@ -49,13 +52,14 @@ export class RescheduleAppointmentWorkflow {
       );
       if (original === null) {
         // Let Booking preserve its generic not-found contract.
-        return this.appointments.reschedule(
+        const replacement = await this.appointments.reschedule(
           input.clinicId,
           input.appointmentId,
           input.target,
           bookingActor(input.actor),
           tx,
         );
+        return { ...replacement, trackingLinkRotation: null };
       }
       if (
         'guardianId' in input.actor &&
@@ -72,7 +76,9 @@ export class RescheduleAppointmentWorkflow {
         input.appointmentId,
         tx,
       );
-      if (existing !== null) return existing;
+      if (existing !== null) {
+        return { ...existing, trackingLinkRotation: null };
+      }
 
       const payment = await this.payments.findActiveForTransfer(
         input.clinicId,
@@ -107,7 +113,15 @@ export class RescheduleAppointmentWorkflow {
           tx,
         );
       }
-      return replacement;
+      const trackingLinkRotation = this.capabilities
+        ? await this.capabilities.transferForReschedule(
+          input.clinicId,
+          original.id,
+          replacement.id,
+          tx,
+        )
+        : null;
+      return { ...replacement, trackingLinkRotation };
     };
 
     return db === undefined ? this.database.transaction(run) : run(db);

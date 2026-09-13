@@ -24,8 +24,10 @@ const props = defineProps<{
   canComplete: boolean;
   /** Clinical notes are doctor/admin only even though reception can complete. */
   canOpenClinical?: boolean;
-  /** All staff may capture vitals; only doctor/admin may read their history. */
+  /** Vitals are a clinical reading: doctor/admin only. */
   canRecordMeasurements?: boolean;
+  /** Summoning the next patient is the desk's decision, not the doctor's. */
+  canCallNext?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -51,7 +53,7 @@ const graceLapsed = computed(() => {
     <header class="now__head">
       <h2 class="dcard__title">الآن</h2>
       <button
-        v-if="!inService"
+        v-if="!inService && canCallNext"
         class="dbtn dbtn--primary"
         :disabled="
           busy ||
@@ -114,6 +116,7 @@ const graceLapsed = computed(() => {
           إنهاء الكشف
         </button>
         <button
+          v-if="canCallNext"
           class="dbtn dbtn--primary dbtn--sm"
           :disabled="busy || !running || waitingCount === 0"
           @click="emit('completeAndCallNext')"

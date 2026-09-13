@@ -60,6 +60,11 @@ export interface QueueEntry {
   startedAt: IsoInstant | null;
   completedAt: IsoInstant | null;
 
+  /** Early override may wait on the board without being callable yet. */
+  serviceEligibleAt: IsoInstant | null;
+  fairnessAnchorAt: IsoInstant | null;
+  orderOverrideAt: IsoInstant | null;
+
   /** How many times the parent has deferred their own turn today. */
   deferCount: number;
 }

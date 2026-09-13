@@ -20,6 +20,9 @@ interface SessionRow extends QueryResultRow {
   session_kind: string;
   planned_start: Date;
   planned_end: Date;
+  expected_start_at: Date | null;
+  doctor_arrived_at: Date | null;
+  expected_resume_at: Date | null;
   window_minutes: number;
   capacity_per_window: number;
   status: string;
@@ -28,6 +31,7 @@ interface SessionRow extends QueryResultRow {
   delay_note: string | null;
   avg_consult_minutes: number;
   revision: string;
+  booking_revision: string;
 }
 
 /**
@@ -42,8 +46,10 @@ const SESSION_COLUMNS = `
   id, clinic_id, doctor_member_id,
   session_date::text as session_date, session_kind,
   planned_start, planned_end, window_minutes, capacity_per_window,
+  expected_start_at, doctor_arrived_at, expected_resume_at,
   status, doctor_presence, delay_minutes, delay_note,
-  avg_consult_minutes, revision::text as revision
+  avg_consult_minutes, revision::text as revision,
+  booking_revision::text as booking_revision
 `;
 
 /**
@@ -323,6 +329,11 @@ export class ClinicSessionService {
                                 else $5::text
                               end,
               presence_updated_at = now(),
+              doctor_arrived_at = case
+                                    when $3 = 'arrived'
+                                      then coalesce(doctor_arrived_at, now())
+                                    else doctor_arrived_at
+                                  end,
               -- Same reason as every other session write: this is the one
               -- field a waiting family checks most, and a poll that was told
               -- "unchanged" would never show it.
@@ -359,6 +370,29 @@ export class ClinicSessionService {
     );
     const row = result.rows[0];
     if (row === undefined) throw sessionNotFound();
+    return toSession(row);
+  }
+
+  async setExpectedTiming(
+    clinicId: string,
+    sessionId: string,
+    input: { expectedStartAt: string | null; expectedResumeAt: string | null },
+    db: SqlExecutor = this.database,
+  ): Promise<ClinicSession> {
+    const result = await db.query<SessionRow>(
+      `update clinic.clinic_sessions
+          set expected_start_at=$3::timestamptz,
+              expected_resume_at=$4::timestamptz,
+              delay_minutes=case when $3::timestamptz is null then null
+                else greatest(0,ceil(extract(epoch from
+                  ($3::timestamptz-planned_start))/60))::integer end,
+              presence_updated_at=now(),revision=revision+1
+        where id=$1 and clinic_id=$2 and status<>'closed'
+        returning ${SESSION_COLUMNS}`,
+      [sessionId, clinicId, input.expectedStartAt, input.expectedResumeAt],
+    );
+    const row = result.rows[0];
+    if (!row) throw sessionNotFound();
     return toSession(row);
   }
 
@@ -456,6 +490,9 @@ function toSession(row: SessionRow): ClinicSession {
     sessionKind: row.session_kind as ClinicSessionKind,
     plannedStart: row.planned_start.toISOString(),
     plannedEnd: row.planned_end.toISOString(),
+    expectedStartAt: row.expected_start_at?.toISOString() ?? null,
+    doctorArrivedAt: row.doctor_arrived_at?.toISOString() ?? null,
+    expectedResumeAt: row.expected_resume_at?.toISOString() ?? null,
     windowMinutes: row.window_minutes,
     capacityPerWindow: row.capacity_per_window,
     status: row.status as ClinicSessionStatus,
@@ -465,5 +502,6 @@ function toSession(row: SessionRow): ClinicSession {
     avgConsultMinutes: row.avg_consult_minutes,
     // bigint arrives as a string; the board compares it as a number.
     revision: Number(row.revision),
+    bookingRevision: Number(row.booking_revision),
   };
 }

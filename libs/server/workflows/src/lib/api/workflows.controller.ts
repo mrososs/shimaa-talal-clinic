@@ -22,7 +22,12 @@ import {
   BookingError,
   BookingErrorCode,
 } from '@clinic/server-booking';
-import { UserRole, type Appointment, type QueueEntry } from '@clinic/contracts';
+import {
+  UserRole,
+  type Appointment,
+  type QueueEntry,
+  type RescheduledAppointment,
+} from '@clinic/contracts';
 import { CancelAppointmentWorkflow } from '../cancel-appointment.workflow';
 import { CheckInAppointmentWorkflow } from '../check-in-appointment.workflow';
 import { CompleteQueueEntryWorkflow } from '../complete-queue-entry.workflow';
@@ -31,12 +36,14 @@ import { CompleteAndCallNextWorkflow } from '../complete-and-call-next.workflow'
 import { NoShowAppointmentWorkflow } from '../no-show-appointment.workflow';
 import { RescheduleAppointmentWorkflow } from '../reschedule-appointment.workflow';
 import { MissQueueEntryWorkflow } from '../miss-queue-entry.workflow';
+import { RemoveQueueEntryWorkflow } from '../remove-queue-entry.workflow';
 import { RequeueEntryWorkflow } from '../requeue-entry.workflow';
 import {
   CancelReasonDto,
   MissQueueEntryDto,
   RescheduleAppointmentDto,
   SessionQueueCommandDto,
+  CheckInAppointmentDto,
 } from './workflows.dto';
 import { WorkflowsExceptionFilter } from './workflows-exception.filter';
 
@@ -66,6 +73,7 @@ export class WorkflowsController {
     private readonly rescheduling: RescheduleAppointmentWorkflow,
     private readonly noShow: NoShowAppointmentWorkflow,
     private readonly missEntry: MissQueueEntryWorkflow,
+    private readonly removal: RemoveQueueEntryWorkflow,
     private readonly requeueEntry: RequeueEntryWorkflow,
     private readonly appointments: AppointmentService,
   ) {}
@@ -83,11 +91,14 @@ export class WorkflowsController {
   checkInAppointment(
     @CurrentMember() member: ClinicMemberContext,
     @Param('appointmentId', new ParseUUIDPipe()) appointmentId: string,
+    @Body() body: CheckInAppointmentDto,
   ): Promise<QueueEntry> {
     return this.checkIn.execute({
       clinicId: member.clinicId,
       appointmentId,
       memberId: member.id,
+      forceEarly: body.forceEarly ?? false,
+      earlyReason: body.earlyReason ?? null,
     });
   }
 
@@ -111,8 +122,14 @@ export class WorkflowsController {
     });
   }
 
-  /** Call the next patient; an active consultation must be ended explicitly. */
-  @Roles(UserRole.Reception, UserRole.Admin, UserRole.Doctor)
+  /**
+   * Call the next patient; an active consultation must be ended explicitly.
+   *
+   * The desk owns the order of the room. The doctor ends her own consultation
+   * and reads her vitals; deciding who walks in next is reception's, so this is
+   * refused to her at the boundary rather than merely hidden on her board.
+   */
+  @Roles(UserRole.Reception, UserRole.Admin)
   @Post('clinic/queue/call-next')
   @HttpCode(HttpStatus.OK)
   callNext(
@@ -126,8 +143,14 @@ export class WorkflowsController {
     });
   }
 
-  /** End the active consultation and call the next patient atomically. */
-  @Roles(UserRole.Reception, UserRole.Admin, UserRole.Doctor)
+  /**
+   * End the active consultation and call the next patient atomically.
+   *
+   * Carries a call, so it carries the call's authority: reception only. The
+   * doctor's way to finish is `complete`, which ends her consultation without
+   * deciding who is summoned after it.
+   */
+  @Roles(UserRole.Reception, UserRole.Admin)
   @Post('clinic/queue/complete-and-call-next')
   @HttpCode(HttpStatus.OK)
   completeAndCallNext(
@@ -138,6 +161,29 @@ export class WorkflowsController {
       clinicId: member.clinicId,
       sessionId: body.sessionId,
       memberId: member.id,
+    });
+  }
+
+  /**
+   * The patient is leaving without being seen.
+   *
+   * Cancels the queue entry and the booking it belongs to together. They did
+   * arrive, so this is a cancellation and never a no-show; the events keep both
+   * facts. A walk-in has no booking and only leaves the board.
+   */
+  @Roles(UserRole.Reception, UserRole.Admin)
+  @Post('clinic/queue/:entryId/cancel')
+  @HttpCode(HttpStatus.OK)
+  removeEntry(
+    @CurrentMember() member: ClinicMemberContext,
+    @Param('entryId', new ParseUUIDPipe()) entryId: string,
+    @Body() body: CancelReasonDto,
+  ): Promise<QueueEntry> {
+    return this.removal.execute({
+      clinicId: member.clinicId,
+      entryId,
+      memberId: member.id,
+      reason: body.reason ?? null,
     });
   }
 
@@ -199,7 +245,7 @@ export class WorkflowsController {
     @CurrentMember() member: ClinicMemberContext,
     @Param('appointmentId', new ParseUUIDPipe()) appointmentId: string,
     @Body() body: RescheduleAppointmentDto,
-  ): Promise<Appointment> {
+  ): Promise<RescheduledAppointment> {
     return this.rescheduling.execute({
       clinicId: member.clinicId,
       appointmentId,

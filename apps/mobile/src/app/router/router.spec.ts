@@ -30,12 +30,12 @@ describe('mobile router', () => {
     expect(publicNames).toEqual(['sign-in', 'sign-up', 'reset-password']);
   });
 
-  it('marks only the anonymous queue capability as a guest route', () => {
+  it('marks only anonymous tracking capabilities as guest routes', () => {
     expect(
       allRoutes
         .filter((route) => route.meta?.[ROUTE_META_GUEST] === true)
         .map((route) => route.name),
-    ).toEqual(['guest-queue']);
+    ).toEqual(['guest-appointment-tracking', 'guest-queue']);
   });
 
   it('marks every onboarding screen as onboarding', () => {

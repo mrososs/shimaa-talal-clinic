@@ -8,6 +8,7 @@ import {
   type DoctorPresence,
   type QueueBoardEntry,
 } from '@clinic/contracts';
+import { ApiClientError } from '@clinic/api-client';
 import {
   clinicApi,
   config,
@@ -19,6 +20,11 @@ import { arabicDigits } from '../../../shared/numerals';
 import ConfirmDialog from '../../../shared/components/ConfirmDialog.vue';
 import ReasonDialog from '../../../shared/components/ReasonDialog.vue';
 import { useQueueBoard } from '../composables/useQueueBoard';
+import {
+  canCallNext as canCallNextFor,
+  canManageQueue,
+  canRecordMeasurements as canRecordMeasurementsFor,
+} from '../queue-permissions';
 import ExpectedList from '../components/ExpectedList.vue';
 import NowServingPanel from '../components/NowServingPanel.vue';
 import QueueList from '../components/QueueList.vue';
@@ -49,11 +55,7 @@ const timezone = computed(() => clinic.value?.timezone ?? 'Africa/Cairo');
 const role = computed(() => state.identity?.member.role ?? null);
 
 /** Reception's desk decisions: admitting, removing, reordering, skipping. */
-const canManage = computed(
-  () =>
-    role.value === ClinicMemberRole.Reception ||
-    role.value === ClinicMemberRole.Admin,
-);
+const canManage = computed(() => canManageQueue(role.value));
 
 const canComplete = computed(
   () =>
@@ -67,6 +69,11 @@ const canOpenClinical = computed(
     role.value === ClinicMemberRole.Doctor ||
     role.value === ClinicMemberRole.Admin,
 );
+
+const canRecordMeasurements = computed(() =>
+  canRecordMeasurementsFor(role.value),
+);
+const canCallNext = computed(() => canCallNextFor(role.value));
 
 const now = ref(Date.now());
 let clock: ReturnType<typeof setInterval> | null = null;
@@ -98,7 +105,8 @@ async function copyGuestLink(entry: QueueBoardEntry): Promise<void> {
 type Ask =
   | { kind: 'emergency'; entry: QueueBoardEntry }
   | { kind: 'miss'; entry: QueueBoardEntry }
-  | { kind: 'remove'; entry: QueueBoardEntry };
+  | { kind: 'remove'; entry: QueueBoardEntry }
+  | { kind: 'early'; appointment: AppointmentListItem; earliest: string };
 
 const ask = ref<Ask | null>(null);
 
@@ -110,22 +118,63 @@ const askTitle = computed(() => {
       return 'تخطّي المريض قبل انتهاء المهلة';
     case 'remove':
       return 'إزالة من الطابور';
+    case 'early':
+      return 'تسجيل وصول مبكر';
     default:
       return '';
   }
 });
 
-const askConfirm = computed(() =>
-  ask.value?.kind === 'remove' ? 'إزالة' : 'تأكيد',
-);
+const askConfirm = computed(() => {
+  switch (ask.value?.kind) {
+    case 'remove':
+      return 'إزالة';
+    case 'early':
+      return 'تسجيل الوصول';
+    default:
+      return 'تأكيد';
+  }
+});
 
-/** Only the emergency reason is mandatory — it is the one nobody may skip. */
+/**
+ * The name of whoever the question is about, so the dialog never asks about a
+ * patient it has not named.
+ */
+const askSubject = computed(() => {
+  const pending = ask.value;
+  if (pending === null) return '';
+  return pending.kind === 'early'
+    ? pending.appointment.child.fullName
+    : pending.entry.child.fullName;
+});
+
+/** Says when the patient could have come in without anyone overriding. */
+const askNote = computed(() => {
+  const pending = ask.value;
+  if (pending?.kind !== 'early') return null;
+  const time = new Intl.DateTimeFormat('ar-EG', {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: timezone.value,
+  }).format(new Date(pending.earliest));
+  return `موعد تسجيل الوصول المسموح به هو ${time}. سجّلي سبب السماح بالدخول مبكراً.`;
+});
+
+/** Removal is the only reason that may be left blank. */
 const askRequired = computed(() => ask.value?.kind !== 'remove');
 
 function resolveAsk(reason: string): void {
   const pending = ask.value;
   ask.value = null;
   if (pending === null) return;
+
+  if (pending.kind === 'early') {
+    const id = pending.appointment.id;
+    void board.run(id, () =>
+      queueApi.checkIn(id, { forceEarly: true, earlyReason: reason }),
+    );
+    return;
+  }
 
   const entry = pending.entry;
   switch (pending.kind) {
@@ -197,8 +246,42 @@ function moveEntry(entry: QueueBoardEntry, direction: -1 | 1): void {
   void board.run(entry.id, () => queueApi.move(entry.id, between));
 }
 
+/**
+ * Read the earliest check-in time out of a refusal, if that is what it was.
+ *
+ * Keyed on the detail rather than the error code: the boundary is the only
+ * refusal that can say when the patient may come in, and the presence of that
+ * answer is what makes an override the sensible next question.
+ */
+function earliestAllowedAt(error: unknown): string | null {
+  const details =
+    error instanceof ApiClientError
+      ? (error.error.details as { earliestAllowedAt?: unknown } | undefined)
+      : undefined;
+  return typeof details?.earliestAllowedAt === 'string'
+    ? details.earliestAllowedAt
+    : null;
+}
+
+/**
+ * Admit a patient who has arrived.
+ *
+ * A patient who is simply too early is not an error the desk can do nothing
+ * about — families turn up early constantly, and the clinic decides. So the
+ * refusal becomes a question: it names the time they may come in and asks why
+ * they are being let in now. Answering is the override, and it is audited.
+ */
 function checkIn(appointment: AppointmentListItem): void {
-  void board.run(appointment.id, () => queueApi.checkIn(appointment.id));
+  void board.run(appointment.id, async () => {
+    try {
+      return await queueApi.checkIn(appointment.id);
+    } catch (error) {
+      const earliest = earliestAllowedAt(error);
+      if (earliest === null) throw error;
+      ask.value = { kind: 'early', appointment, earliest };
+      return null;
+    }
+  });
 }
 
 function sessionCommand(
@@ -323,7 +406,8 @@ async function recordMeasurements(
         :can-miss="canManage"
         :can-complete="canComplete"
         :can-open-clinical="canOpenClinical"
-        :can-record-measurements="canComplete"
+        :can-record-measurements="canRecordMeasurements"
+        :can-call-next="canCallNext"
         @call-next="callNext"
         @complete-and-call-next="completeAndCallNext"
         @start="(id) => board.run(id, () => queueApi.start(id))"
@@ -332,15 +416,15 @@ async function recordMeasurements(
         @record-measurements="(entry) => (measuringEntry = entry)"
       />
 
-      <div class="lists">
+      <!-- The doctor's board is the room she is in: who is with her now, and
+           who has been called to come in. The line itself is the desk's. -->
+      <div v-if="!isDoctor" class="lists">
         <QueueList
-          :entries="
-            isDoctor ? board.waiting.value.slice(0, 4) : board.waiting.value
-          "
+          :entries="board.waiting.value"
           :can-manage="canManage"
-          :can-call="!isDoctor"
+          :can-call="true"
           :working="board.working.value"
-          :can-record-measurements="canComplete"
+          :can-record-measurements="canRecordMeasurements"
           @call="(entry) => board.run(entry.id, () => queueApi.call(entry.id))"
           @emergency="(entry) => (ask = { kind: 'emergency', entry })"
           @clear-emergency="
@@ -354,7 +438,6 @@ async function recordMeasurements(
         />
 
         <ExpectedList
-          v-if="!isDoctor"
           :items="board.notArrived.value"
           :timezone="timezone"
           :can-check-in="canManage"
@@ -429,7 +512,8 @@ async function recordMeasurements(
     <ReasonDialog
       :open="ask !== null"
       :title="askTitle"
-      :subject="ask?.entry.child.fullName"
+      :subject="askSubject"
+      :message="askNote"
       :confirm-label="askConfirm"
       :required="askRequired"
       placeholder="سبب مختصر يظهر في سجل العيادة"

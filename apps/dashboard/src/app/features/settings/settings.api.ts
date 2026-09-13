@@ -9,6 +9,8 @@ export function createSettingsApi(client: ApiClient) {
       client.patch('clinic/settings/profile', v),
     policies: (v: unknown): Promise<ClinicSettings> =>
       client.patch('clinic/settings/policies', v),
+    tracking: (v: unknown): Promise<ClinicSettings> =>
+      client.patch('clinic/settings/tracking', v),
     price: (key: string, v: unknown): Promise<ClinicSettings> =>
       client.put(`clinic/settings/prices/${key}`, v),
     template: (key: string, v: unknown): Promise<ClinicSettings> =>

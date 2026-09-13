@@ -29,6 +29,9 @@ interface EntryRow extends QueryResultRow {
   started_at: Date | null;
   completed_at: Date | null;
   defer_count: number;
+  service_eligible_at: Date | null;
+  fairness_anchor_at: Date | null;
+  order_override_at: Date | null;
 }
 
 interface SessionEntryRow extends EntryRow {
@@ -47,6 +50,7 @@ const COLUMNS = `
   source, ticket_number, status, priority, visit_reason,
   checked_in_at, called_at, grace_expires_at, started_at, completed_at,
   defer_count
+  , service_eligible_at, fairness_anchor_at, order_override_at
 `;
 
 /** Statuses that still occupy a place in the running queue. */
@@ -91,6 +95,8 @@ export interface CreateEntryInput {
   appointmentId?: string | null;
   visitReason?: string | null;
   createdByMemberId?: string | null;
+  serviceEligibleAt?: string | null;
+  fairnessAnchorAt?: string | null;
 }
 
 /**
@@ -266,13 +272,20 @@ export class QueueEntryService {
       );
     }
 
-    const sortKey = await this.tailSortKey(input.sessionId, tx);
+    const sortKey = input.fairnessAnchorAt
+      ? await this.fairnessSortKey(
+          input.sessionId,
+          input.fairnessAnchorAt,
+          tx,
+        )
+      : await this.tailSortKey(input.sessionId, tx);
 
     const result = await tx.query<EntryRow>(
       `insert into clinic.queue_entries
          (clinic_id, session_id, appointment_id, child_id, guardian_id,
-          source, ticket_number, sort_key, visit_reason, created_by_member_id)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          source, ticket_number, sort_key, visit_reason, created_by_member_id,
+          service_eligible_at, fairness_anchor_at)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        returning ${COLUMNS}`,
       [
         input.clinicId,
@@ -285,6 +298,8 @@ export class QueueEntryService {
         sortKey,
         input.visitReason ?? null,
         input.createdByMemberId ?? null,
+        input.serviceEligibleAt ?? null,
+        input.fairnessAnchorAt ?? null,
       ],
     );
 
@@ -327,9 +342,11 @@ export class QueueEntryService {
     const result = await db.query<EntryRow>(
       `select ${COLUMNS} from clinic.queue_entries
         where session_id = $1 and status = 'waiting'
+          and (priority < $2 or service_eligible_at is null
+               or service_eligible_at <= now())
         order by priority, sort_key
         limit 1`,
-      [sessionId],
+      [sessionId, NORMAL_PRIORITY],
     );
     return result.rows[0] ? toEntry(result.rows[0]) : null;
   }
@@ -362,6 +379,47 @@ export class QueueEntryService {
       [sessionId, SORT_KEY_GAP],
     );
     return result.rows[0].next;
+  }
+
+  /**
+   * Place a booked patient by the protected booking cohort rather than by the
+   * moment they reached the desk. Already-called/in-service rows remain ahead;
+   * within the waiting line, equal anchors keep check-in order.
+   */
+  async fairnessSortKey(
+    sessionId: string,
+    fairnessAnchorAt: string,
+    db: SqlExecutor,
+  ): Promise<string> {
+    const result = await db.query<{ lower_key: string | null; upper_key: string | null }>(
+      `select
+         greatest(
+           (select max(sort_key) from clinic.queue_entries
+             where session_id=$1 and status in ('called','in_service')),
+           (select max(sort_key) from clinic.queue_entries
+             where session_id=$1 and status='waiting' and priority=$3
+               and coalesce(fairness_anchor_at, checked_in_at) <= $2::timestamptz)
+         )::text lower_key,
+         (select min(sort_key)::text from clinic.queue_entries
+           where session_id=$1 and status='waiting' and priority=$3
+             and coalesce(fairness_anchor_at, checked_in_at) > $2::timestamptz) upper_key`,
+      [sessionId, fairnessAnchorAt, NORMAL_PRIORITY],
+    );
+    const lower = result.rows[0]?.lower_key === null ||
+      result.rows[0]?.lower_key === undefined
+      ? null
+      : Number(result.rows[0].lower_key);
+    const upper = result.rows[0]?.upper_key === null ||
+      result.rows[0]?.upper_key === undefined
+      ? null
+      : Number(result.rows[0].upper_key);
+
+    if (lower !== null && upper !== null && lower < upper) {
+      return ((lower + upper) / 2).toString();
+    }
+    if (upper !== null && lower === null) return (upper / 2).toString();
+    if (lower !== null) return (lower + SORT_KEY_GAP).toString();
+    return SORT_KEY_GAP.toString();
   }
 
   /**
@@ -489,5 +547,8 @@ function toEntry(row: EntryRow): QueueEntry {
     startedAt: row.started_at?.toISOString() ?? null,
     completedAt: row.completed_at?.toISOString() ?? null,
     deferCount: row.defer_count,
+    serviceEligibleAt: row.service_eligible_at?.toISOString() ?? null,
+    fairnessAnchorAt: row.fairness_anchor_at?.toISOString() ?? null,
+    orderOverrideAt: row.order_override_at?.toISOString() ?? null,
   };
 }

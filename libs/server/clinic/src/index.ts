@@ -8,7 +8,10 @@
  * state Queue writes.
  */
 export * from './lib/clinic.module';
-export { ClinicService } from './lib/clinic.service';
+export {
+  ClinicService,
+  type ClinicTrackingPolicy,
+} from './lib/clinic.service';
 export { ClinicMemberService } from './lib/clinic-member.service';
 export { ClinicScheduleService } from './lib/clinic-schedule.service';
 export { ClinicSessionService } from './lib/clinic-session.service';

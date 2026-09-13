@@ -2,10 +2,10 @@
 import { computed, shallowRef, watch } from 'vue';
 import { ClinicDialog } from '@clinic/client-ui';
 import type {
-  Appointment,
   AppointmentListItem,
   AvailabilityDay,
   AvailabilityWindow,
+  RescheduledAppointment,
 } from '@clinic/contracts';
 import { clinicApi } from '../../../runtime';
 import { apiMessage } from '../../../shared/messages';
@@ -20,7 +20,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: [];
-  rescheduled: [appointment: Appointment];
+  rescheduled: [appointment: RescheduledAppointment];
 }>();
 
 const days = shallowRef<AvailabilityDay[]>([]);

@@ -94,8 +94,12 @@ export class ClinicAppointmentsController {
    * Confirmed immediately, because the person who would approve it is the
    * person booking it. The whole point of this endpoint is that it works for a
    * family with no app and no account.
+   *
+   * Taking the booking is desk work — it happens at the counter or on the
+   * phone — so the doctor is refused it. Deciding a request she is asked about
+   * is different, and lives with approve/reject.
    */
-  @Roles(UserRole.Reception, UserRole.Admin, UserRole.Doctor)
+  @Roles(UserRole.Reception, UserRole.Admin)
   @Post('appointments')
   async create(
     @CurrentMember() member: ClinicMemberContext,

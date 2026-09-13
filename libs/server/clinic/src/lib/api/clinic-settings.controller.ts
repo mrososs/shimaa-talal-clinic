@@ -74,6 +74,23 @@ class PriceDto {
   @Type(() => Number) @IsInt() @Min(0) amountMinor!: number;
   @IsBoolean() active!: boolean;
 }
+class TrackingDto {
+  @IsBoolean() estimatorEnabled!: boolean;
+  @IsBoolean() receptionVisible!: boolean;
+  @IsBoolean() parentVisible!: boolean;
+  @IsBoolean() guestEnabled!: boolean;
+  @IsBoolean() attendanceEnabled!: boolean;
+  @IsBoolean() fairnessEnabled!: boolean;
+  @Type(() => Number) @IsInt() @Min(0) @Max(120) arrivalBufferMinutes!: number;
+  @Type(() => Number) @IsInt() @Min(0) @Max(240) earlyCheckInMinutes!: number;
+  @Type(() => Number) @IsInt() @Min(0) @Max(240) minimumTravelLeadMinutes!: number;
+  @Type(() => Number) @IsInt() @Min(1) @Max(120) publicationThresholdMinutes!: number;
+  @Type(() => Number) @IsInt() @Min(1) @Max(120) maxEarlierShiftMinutes!: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(2) @Max(120)
+  configuredBaselineMinutes?: number;
+  @IsOptional() @IsBoolean() validateBaseline?: boolean;
+  @IsOptional() @IsBoolean() approveParentEstimate?: boolean;
+}
 class TemplateDto {
   @IsString() @Length(1, 2000) body!: string;
   @IsBoolean() active!: boolean;
@@ -120,6 +137,13 @@ export class ClinicSettingsController {
     @Body() b: PoliciesDto,
   ) {
     await this.settings.policies(m.clinicId, m.id, b);
+    return this.settings.read(m.clinicId);
+  }
+  @Patch('tracking') async tracking(
+    @CurrentMember() m: ClinicMemberContext,
+    @Body() b: TrackingDto,
+  ) {
+    await this.settings.tracking(m.clinicId, m.id, b);
     return this.settings.read(m.clinicId);
   }
   @Put('prices/:visitType') async price(

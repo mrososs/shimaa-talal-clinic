@@ -10,7 +10,8 @@ export interface Polling {
 }
 
 export interface PollingOptions {
-  intervalMs: number;
+  /** A getter lets a live view slow down while distant and speed up near turn. */
+  intervalMs: number | (() => number);
   /**
    * Called when the screen comes back after being hidden.
    *
@@ -50,15 +51,29 @@ export function usePolling(
   options: PollingOptions,
 ): Polling {
   const active = ref(false);
-  let timer: ReturnType<typeof setInterval> | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
   let running = false;
   let listening = false;
 
+  const interval = (): number => {
+    const value = typeof options.intervalMs === 'function'
+      ? options.intervalMs()
+      : options.intervalMs;
+    return Math.max(1_000, value);
+  };
+
+  const schedule = (): void => {
+    if (!active.value || timer !== null) return;
+    timer = setTimeout(beat, interval());
+  };
+
   const beat = (): void => {
+    timer = null;
     if (running) return;
     running = true;
     void tick().finally(() => {
       running = false;
+      schedule();
     });
   };
 
@@ -72,7 +87,7 @@ export function usePolling(
    */
   function pause(): void {
     if (timer !== null) {
-      clearInterval(timer);
+      clearTimeout(timer);
       timer = null;
     }
     active.value = false;
@@ -99,9 +114,9 @@ export function usePolling(
   function start(): void {
     // Already running. Starting again would orphan the first timer and double
     // the request rate for as long as the view stays open.
-    if (timer !== null) return;
+    if (active.value) return;
     active.value = true;
-    timer = setInterval(beat, options.intervalMs);
+    schedule();
     if (!listening && typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', onVisibility);
       listening = true;

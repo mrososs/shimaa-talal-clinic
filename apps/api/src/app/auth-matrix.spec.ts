@@ -141,6 +141,35 @@ suite('auth matrix (HTTP)', () => {
     };
   }
 
+  /**
+   * Guards run before pipes, so a role refusal answers 403 rather than
+   * complaining about the body — which is what makes these assertions about
+   * authorisation and not about validation.
+   */
+  async function post(
+    path: string,
+    token?: string,
+    body: unknown = {},
+  ): Promise<{ status: number; body: Record<string, unknown> }> {
+    const response = await fetch(`${base}${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token === undefined ? {} : { Authorization: `Bearer ${token}` }),
+      },
+      body: JSON.stringify(body),
+    });
+    return {
+      status: response.status,
+      body: (await response.json().catch(() => ({}))) as Record<
+        string,
+        unknown
+      >,
+    };
+  }
+
+  const SOME_UUID = '00000000-0000-4000-8000-000000000000';
+
   beforeAll(async () => {
     db = createTestDatabase(url as string);
     admin = createClient(supabaseUrl as string, secretKey as string, {
@@ -376,6 +405,137 @@ suite('auth matrix (HTTP)', () => {
   it('12. a garbage token is refused without reaching a handler', async () => {
     const response = await get('/probe/authenticated', 'not-a-real-token');
     expect(response.status).toBe(401);
+  });
+
+  /**
+   * The production routes, not the probe.
+   *
+   * The probe above proves the stack resolves roles. These prove the roles each
+   * real endpoint declares, which is the part that drifts: a class-level
+   * `@Roles` quietly handed reception the clinic's revenue, and the doctor held
+   * every front-desk queue command. Hiding a link changed neither.
+   */
+  describe('14. staff boundaries on the real routes', () => {
+    describe('reception is the desk, and not the books', () => {
+      it.each([
+        ['/clinic/reports'],
+        ['/clinic/reports/export'],
+        ['/clinic/payments'],
+      ])('refuses %s', async (path) => {
+        expect((await get(path, tokens['reception'])).status).toBe(403);
+      });
+
+      it('still does the work the desk actually needs', async () => {
+        // The permission change must not cost reception their own job: if any
+        // of these regressed, booking and check-in would stop at the counter.
+        expect((await get('/clinic/me', tokens['reception'])).status).toBe(200);
+        expect(
+          (await get('/clinic/appointments', tokens['reception'])).status,
+        ).toBe(200);
+        expect(
+          (await get('/clinic/guardians?phone=01000000000', tokens['reception']))
+            .status,
+        ).toBe(200);
+        expect(
+          (await get('/clinic/sessions', tokens['reception'])).status,
+        ).toBe(200);
+        expect(
+          (await get('/clinic/dashboard/summary', tokens['reception'])).status,
+        ).toBe(200);
+      });
+    });
+
+    describe('the doctor has the room, not the line', () => {
+      it.each([
+        ['/clinic/queue/call-next'],
+        ['/clinic/queue/complete-and-call-next'],
+        [`/clinic/queue/${SOME_UUID}/call`],
+        [`/clinic/queue/${SOME_UUID}/emergency`],
+        [`/clinic/queue/${SOME_UUID}/cancel`],
+        [`/clinic/queue/${SOME_UUID}/move`],
+        [`/clinic/queue/${SOME_UUID}/miss`],
+        [`/clinic/queue/${SOME_UUID}/requeue`],
+        ['/clinic/queue/walk-in'],
+        [`/clinic/appointments/${SOME_UUID}/check-in`],
+        ['/clinic/appointments'],
+        [`/clinic/sessions/${SOME_UUID}/open`],
+        [`/clinic/sessions/${SOME_UUID}/pause`],
+        [`/clinic/sessions/${SOME_UUID}/resume`],
+        [`/clinic/sessions/${SOME_UUID}/close`],
+      ])('refuses %s', async (path) => {
+        expect((await post(path, tokens['doctor'])).status).toBe(403);
+      });
+
+      it('keeps what the consultation needs', async () => {
+        // Reading the board and the day, and ending her own consultation, are
+        // hers. `complete` is refused on state here, not on role — a 403 would
+        // mean the boundary moved too far.
+        expect((await get('/clinic/sessions', tokens['doctor'])).status).toBe(
+          200,
+        );
+        expect(
+          (await get('/clinic/appointments', tokens['doctor'])).status,
+        ).toBe(200);
+        expect(
+          (await post(`/clinic/queue/${SOME_UUID}/complete`, tokens['doctor']))
+            .status,
+        ).not.toBe(403);
+        expect(
+          (await post(`/clinic/queue/${SOME_UUID}/start`, tokens['doctor']))
+            .status,
+        ).not.toBe(403);
+        // Reports stay with the doctor; only reception lost them.
+        expect((await get('/clinic/reports', tokens['doctor'])).status).toBe(
+          200,
+        );
+      });
+    });
+
+    describe('a parent reaches no staff route', () => {
+      it.each([
+        ['/clinic/appointments'],
+        ['/clinic/reports'],
+        ['/clinic/payments'],
+        ['/clinic/guardians'],
+        ['/clinic/sessions'],
+      ])('refuses %s', async (path) => {
+        expect((await get(path, tokens['parent'])).status).toBe(403);
+      });
+
+      it('refuses staff commands too', async () => {
+        expect((await post('/clinic/queue/call-next', tokens['parent'])).status)
+          .toBe(403);
+        expect(
+          (await post(`/clinic/appointments/${SOME_UUID}/check-in`, tokens['parent']))
+            .status,
+        ).toBe(403);
+      });
+    });
+
+    describe('a suspended member is denied reads and writes alike', () => {
+      it('refuses a read', async () => {
+        expect(
+          (await get('/clinic/appointments', tokens['suspended'])).status,
+        ).toBe(403);
+      });
+
+      it('refuses a write', async () => {
+        // A valid JWT is not the question; the membership behind it is.
+        expect(
+          (await post('/clinic/queue/call-next', tokens['suspended'])).status,
+        ).toBe(403);
+      });
+    });
+
+    it('never takes the clinic from the request body', async () => {
+      // `forbidNonWhitelisted` rejects the field outright rather than silently
+      // ignoring it, so a caller cannot even express the idea.
+      const injected = await post('/clinic/queue/call-next', tokens['reception'], {
+        sessionId: SOME_UUID,
+        clinicId: otherClinicId,
+      });
+      expect(injected.status).toBe(400);
+    });
   });
 
   it('13. the real staff accounts hold the roles the bootstrap gave them', async () => {

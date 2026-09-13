@@ -3,7 +3,7 @@ import { onMounted, reactive, ref, shallowRef } from 'vue';
 import type { ClinicAuditEvent, ClinicSettings } from '@clinic/contracts';
 import { settingsApi } from '../../../runtime';
 import { apiMessage } from '../../../shared/messages';
-type Tab = 'clinic' | 'schedule' | 'notifications' | 'team' | 'audit';
+type Tab = 'clinic' | 'tracking' | 'schedule' | 'notifications' | 'team' | 'audit';
 const tab = ref<Tab>('clinic'),
   data = shallowRef<ClinicSettings | null>(null),
   audit = shallowRef<ClinicAuditEvent[]>([]),
@@ -23,6 +23,22 @@ const profile = reactive({
     minLeadMinutes: 0,
     cancellationCutoffMinutes: 120,
     autoConfirmParentBookings: false,
+  }),
+  tracking = reactive({
+    estimatorEnabled: false,
+    receptionVisible: false,
+    parentVisible: false,
+    guestEnabled: false,
+    attendanceEnabled: false,
+    fairnessEnabled: false,
+    arrivalBufferMinutes: 15,
+    earlyCheckInMinutes: 30,
+    minimumTravelLeadMinutes: 30,
+    publicationThresholdMinutes: 10,
+    maxEarlierShiftMinutes: 15,
+    configuredBaselineMinutes: null as number | null,
+    validateBaseline: false,
+    approveParentEstimate: false,
   });
 const schedule = reactive({
     doctorMemberId: '',
@@ -37,6 +53,7 @@ const schedule = reactive({
   closure = reactive({ startsAt: '', endsAt: '', reason: '' });
 const tabs: [Tab, string][] = [
   ['clinic', 'العيادة والسياسات'],
+  ['tracking', 'تقدير الحضور'],
   ['schedule', 'الجداول والإجازات'],
   ['notifications', 'الإشعارات'],
   ['team', 'الفريق والصلاحيات'],
@@ -58,6 +75,10 @@ function sync(v: ClinicSettings) {
     instapayHandle: v.profile.instapayHandle ?? '',
   });
   Object.assign(policies, v.policies);
+  Object.assign(tracking, v.tracking, {
+    validateBaseline: false,
+    approveParentEstimate: false,
+  });
   schedule.doctorMemberId = v.team.find((m) => m.role === 'doctor')?.id ?? '';
 }
 async function load() {
@@ -292,6 +313,39 @@ onMounted(load);
           </div>
         </article>
       </section>
+      <section v-else-if="tab === 'tracking'" class="settings-grid">
+        <form
+          class="dcard dcard--pad dstack settings-wide"
+          @submit.prevent="run(() => settingsApi.tracking(tracking))"
+        >
+          <h2>التقدير التجريبي ووقت الحضور</h2>
+          <p class="dmuted">
+            ابدئي بوضع الظل والاستقبال فقط. عرض التقدير للأسرة محمي من الخادم
+            ولا يعمل قبل اعتماد خط الأساس وبوابة التجربة.
+          </p>
+          <div class="tracking-flags">
+            <label class="check"><input v-model="tracking.estimatorEnabled" type="checkbox" />تشغيل المحرك في وضع الظل</label>
+            <label class="check"><input v-model="tracking.receptionVisible" type="checkbox" />إظهار التشخيص للاستقبال</label>
+            <label class="check"><input v-model="tracking.parentVisible" type="checkbox" />إظهار التقدير للأسرة</label>
+            <label class="check"><input v-model="tracking.guestEnabled" type="checkbox" />روابط متابعة الضيوف</label>
+            <label class="check"><input v-model="tracking.attendanceEnabled" type="checkbox" />تفعيل قادم/غير قادم</label>
+            <label class="check"><input v-model="tracking.fairnessEnabled" type="checkbox" />تطبيق قواعد الوصول العادل</label>
+          </div>
+          <div class="tracking-values">
+            <label>خط الأساس بالدقائق<input v-model.number="tracking.configuredBaselineMinutes" type="number" min="2" max="120" /></label>
+            <label>هامش الوصول<input v-model.number="tracking.arrivalBufferMinutes" type="number" min="0" max="120" /></label>
+            <label>السماح بالحضور المبكر<input v-model.number="tracking.earlyCheckInMinutes" type="number" min="0" max="240" /></label>
+            <label>مهلة السفر<input v-model.number="tracking.minimumTravelLeadMinutes" type="number" min="0" max="240" /></label>
+            <label>حد النشر<input v-model.number="tracking.publicationThresholdMinutes" type="number" min="1" max="120" /></label>
+            <label>أقصى تقديم للنشر<input v-model.number="tracking.maxEarlierShiftMinutes" type="number" min="1" max="120" /></label>
+          </div>
+          <label class="check"><input v-model="tracking.validateBaseline" type="checkbox" />اعتماد خط الأساس الحالي</label>
+          <label class="check"><input v-model="tracking.approveParentEstimate" type="checkbox" />تسجيل اجتياز بوابة الظل</label>
+          <p v-if="data.tracking.baselineValidatedAt" class="dnotice">تم اعتماد خط الأساس.</p>
+          <p v-if="data.tracking.parentEstimateApprovedAt" class="dnotice">تم تسجيل اعتماد عرض الأسرة.</p>
+          <button class="dbtn dbtn--primary" :disabled="working">حفظ إعدادات التقدير</button>
+        </form>
+      </section>
       <section
         v-else-if="tab === 'notifications'"
         class="dcard dcard--pad dstack"
@@ -373,6 +427,12 @@ onMounted(load);
   display: grid;
   gap: 6px;
   font-weight: 700;
+}
+.tracking-flags,
+.tracking-values {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 .dstack input,
 .dstack select,

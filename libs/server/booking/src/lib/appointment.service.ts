@@ -34,13 +34,16 @@ interface AppointmentRow extends QueryResultRow {
   cancellation_reason: string | null;
   rescheduled_from_appointment_id: string | null;
   created_at: Date;
+  attendance_intent: string;
+  attendance_intent_set_at: Date | null;
 }
 
 const COLUMNS = `
   id, clinic_id, session_id, child_id, guardian_id,
   window_start, window_end, visit_type, status, notes,
   created_by_member_id, cancelled_at, cancelled_by, cancellation_reason,
-  rescheduled_from_appointment_id, created_at
+  rescheduled_from_appointment_id, created_at,
+  attendance_intent, attendance_intent_set_at
 `;
 
 /** Statuses that hold a seat. Anything else has released it. */
@@ -161,8 +164,11 @@ export class AppointmentService {
    */
   async create(
     input: CreateAppointmentInput,
-    db: SqlExecutor = this.database,
+    db?: SqlExecutor,
   ): Promise<Appointment> {
+    if (db === undefined) {
+      return this.database.transaction((tx) => this.create(input, tx));
+    }
     const window = await this.requireBookableWindow(
       input.clinicId,
       input.sessionId,
@@ -185,6 +191,7 @@ export class AppointmentService {
       }
 
       try {
+        await db.query('savepoint appointment_seat_attempt');
         const result = await db.query<AppointmentRow>(
           `insert into clinic.appointments
              (clinic_id, session_id, child_id, guardian_id,
@@ -218,8 +225,12 @@ export class AppointmentService {
           },
           db,
         );
+        await this.bumpBookingRevision(created.sessionId, db);
+        await db.query('release savepoint appointment_seat_attempt');
         return created;
       } catch (error) {
+        await db.query('rollback to savepoint appointment_seat_attempt');
+        await db.query('release savepoint appointment_seat_attempt');
         if (isUniqueViolation(error, 'appointments_child_session_uq')) {
           // The same child, already booked into this session. A double-tap,
           // not a failure — hand back what already exists.
@@ -253,8 +264,13 @@ export class AppointmentService {
     appointmentId: string,
     to: AppointmentStatus,
     actor: TransitionActor = {},
-    db: SqlExecutor = this.database,
+    db?: SqlExecutor,
   ): Promise<Appointment> {
+    if (db === undefined) {
+      return this.database.transaction((tx) =>
+        this.transition(clinicId, appointmentId, to, actor, tx),
+      );
+    }
     const current = await this.findById(clinicId, appointmentId, db);
     if (current === null) throw appointmentNotFound();
 
@@ -305,6 +321,7 @@ export class AppointmentService {
 
     const updated = toAppointment(row);
     await this.recordEvent(updated.id, to, current.status, to, actor, db);
+    await this.bumpBookingRevision(updated.sessionId, db);
     return updated;
   }
 
@@ -319,8 +336,13 @@ export class AppointmentService {
     clinicId: string,
     appointmentId: string,
     actor: TransitionActor,
-    db: SqlExecutor = this.database,
+    db?: SqlExecutor,
   ): Promise<Appointment> {
+    if (db === undefined) {
+      return this.database.transaction((tx) =>
+        this.cancelAsParent(clinicId, appointmentId, actor, tx),
+      );
+    }
     const appointment = await this.findById(clinicId, appointmentId, db);
     if (appointment === null) throw appointmentNotFound();
 
@@ -816,6 +838,18 @@ export class AppointmentService {
       ],
     );
   }
+
+  private async bumpBookingRevision(
+    sessionId: string,
+    db: SqlExecutor,
+  ): Promise<void> {
+    await db.query(
+      `update clinic.clinic_sessions
+          set booking_revision = booking_revision + 1
+        where id = $1`,
+      [sessionId],
+    );
+  }
 }
 
 function cancelledBy(actor: TransitionActor): AppointmentCancelledBy {
@@ -854,5 +888,8 @@ function toAppointment(row: AppointmentRow): Appointment {
     cancellationReason: row.cancellation_reason,
     rescheduledFromAppointmentId: row.rescheduled_from_appointment_id,
     createdAt: row.created_at.toISOString(),
+    attendanceIntent: row.attendance_intent as Appointment['attendanceIntent'],
+    attendanceIntentSetAt:
+      row.attendance_intent_set_at?.toISOString() ?? null,
   };
 }

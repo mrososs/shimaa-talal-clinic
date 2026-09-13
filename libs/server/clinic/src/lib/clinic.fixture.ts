@@ -182,6 +182,9 @@ async function removeClinics(
   sql: SqlExecutor,
   clinicIds: string[],
 ): Promise<void> {
+  await sql.query(`delete from clinic.audit_events where clinic_id = any($1)`, [
+    clinicIds,
+  ]);
   await sql.query(
     `delete from clinic.clinic_sessions where clinic_id = any($1)`,
     [clinicIds],

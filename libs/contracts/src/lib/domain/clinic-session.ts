@@ -23,6 +23,9 @@ export interface ClinicSession {
 
   plannedStart: IsoInstant;
   plannedEnd: IsoInstant;
+  expectedStartAt: IsoInstant | null;
+  doctorArrivedAt: IsoInstant | null;
+  expectedResumeAt: IsoInstant | null;
 
   /** Length of one arrival window, in minutes. */
   windowMinutes: number;
@@ -47,6 +50,7 @@ export interface ClinicSession {
    * "nothing changed" instead of re-fetching the board.
    */
   revision: number;
+  bookingRevision: number;
 }
 
 /** The subset a parent may see. Carries nothing about other patients. */

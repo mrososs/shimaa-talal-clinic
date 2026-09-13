@@ -10,6 +10,14 @@ export * from './lib/workflows.module';
 export * from './lib/urgent-case.workflow';
 export * from './lib/payments-report.workflow';
 export {
+  AppointmentTrackingWorkflow,
+  calculateEstimate,
+  type CalculateEstimateInput,
+  type EstimateCalculation,
+  type RawEstimate,
+} from './lib/appointment-tracking.workflow';
+export { AppointmentTrackingCapabilityService } from './lib/appointment-tracking-capability.service';
+export {
   CheckInAppointmentWorkflow,
   type CheckInInput,
 } from './lib/check-in-appointment.workflow';
@@ -26,6 +34,10 @@ export {
   CancelAppointmentWorkflow,
   type CancelInput,
 } from './lib/cancel-appointment.workflow';
+export {
+  RemoveQueueEntryWorkflow,
+  type RemoveQueueEntryInput,
+} from './lib/remove-queue-entry.workflow';
 export { ClinicQueueBoardWorkflow } from './lib/clinic-queue-board.workflow';
 export {
   StaffAppointmentsWorkflow,

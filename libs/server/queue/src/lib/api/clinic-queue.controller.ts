@@ -19,12 +19,7 @@ import {
 import { UserRole, type QueueEntry } from '@clinic/contracts';
 import { QueueCommandService } from '../queue-command.service';
 import { QueueError, QueueErrorCode } from '../queue.errors';
-import {
-  CancelEntryDto,
-  EmergencyDto,
-  MoveEntryDto,
-  WalkInDto,
-} from './queue.dto';
+import { EmergencyDto, MoveEntryDto, WalkInDto } from './queue.dto';
 import { QueueExceptionFilter } from './queue-exception.filter';
 
 /**
@@ -100,8 +95,13 @@ export class ClinicQueueController {
     );
   }
 
-  /** Call one specific patient, out of turn if staff decide to. */
-  @Roles(UserRole.Reception, UserRole.Admin, UserRole.Doctor)
+  /**
+   * Call one specific patient, out of turn if the desk decides to.
+   *
+   * Summoning is front-desk work — it moves the room, not the consultation —
+   * so the doctor is refused here as she is on `call-next`.
+   */
+  @Roles(UserRole.Reception, UserRole.Admin)
   @Post(':entryId/call')
   @HttpCode(HttpStatus.OK)
   call(
@@ -125,19 +125,10 @@ export class ClinicQueueController {
     });
   }
 
-  @Roles(UserRole.Reception, UserRole.Admin)
-  @Post(':entryId/cancel')
-  @HttpCode(HttpStatus.OK)
-  cancel(
-    @CurrentMember() member: ClinicMemberContext,
-    @Param('entryId', new ParseUUIDPipe()) entryId: string,
-    @Body() body: CancelEntryDto,
-  ): Promise<QueueEntry> {
-    return this.commands.cancel(member.clinicId, entryId, {
-      memberId: member.id,
-      reason: body.reason ?? null,
-    });
-  }
+  // Removing a patient is not a Queue-only command: a booked visit has to be
+  // called off in the same commit, or the board and the booking disagree. It
+  // therefore lives in `@clinic/server-workflows` beside check-in and miss,
+  // and is deliberately absent here — Queue may not see Booking.
 
   /**
    * Mark or clear an emergency.
@@ -145,8 +136,11 @@ export class ClinicQueueController {
    * A reason is required to mark one and recorded against the member who did
    * it. Reversible, because staff mis-tap and an emergency that cannot be
    * undone would quietly distort the rest of the day.
+   *
+   * Reordering the waiting line is the desk's, so this sits with `move` rather
+   * than with the clinical commands.
    */
-  @Roles(UserRole.Reception, UserRole.Admin, UserRole.Doctor)
+  @Roles(UserRole.Reception, UserRole.Admin)
   @Post(':entryId/emergency')
   @HttpCode(HttpStatus.OK)
   emergency(

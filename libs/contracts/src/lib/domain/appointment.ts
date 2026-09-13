@@ -3,6 +3,7 @@ import type { ChildSummary } from './child';
 import type { GuardianSummary } from './guardian';
 import type { IsoInstant } from './temporal';
 import type { VisitType } from './visit-type';
+import type { AttendanceIntent } from './attendance-intent';
 
 /** Who called the visit off. Distinguishes a clinic rejection from a parent cancelling. */
 export const AppointmentCancelledBy = {
@@ -50,6 +51,10 @@ export interface Appointment {
   rescheduledFromAppointmentId: string | null;
 
   createdAt: IsoInstant;
+
+  /** Explicit pre-arrival intent; it never creates a QueueEntry. */
+  attendanceIntent: AttendanceIntent;
+  attendanceIntentSetAt: IsoInstant | null;
 }
 
 /** An appointment with the names a staff list has to show. */

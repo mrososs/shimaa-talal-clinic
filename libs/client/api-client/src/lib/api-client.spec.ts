@@ -9,6 +9,68 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe('ApiClient', () => {
+  /**
+   * The client is the only place every request passes through, so it is the
+   * only place that can notice the token has stopped working. Features used to
+   * each catch their own error and, separately, decide to carry on polling.
+   */
+  describe('onUnauthenticated', () => {
+    const failing = (status: number) =>
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(
+          jsonResponse(
+            { success: false, error: { code: 'denied', message: 'no' } },
+            status,
+          ),
+        );
+
+    it('reports a 401', async () => {
+      const onUnauthenticated = vi.fn();
+      const client = new ApiClient({
+        baseUrl: 'https://api.example.test/api/v1',
+        fetchImpl: failing(401),
+        onUnauthenticated,
+      });
+
+      await expect(client.get('/things')).rejects.toBeInstanceOf(
+        ApiClientError,
+      );
+      expect(onUnauthenticated).toHaveBeenCalledTimes(1);
+    });
+
+    it('stays quiet on a 403', async () => {
+      // Authenticated, and simply not allowed. Ending the session here would
+      // sign a doctor out for opening a reception-only screen.
+      const onUnauthenticated = vi.fn();
+      const client = new ApiClient({
+        baseUrl: 'https://api.example.test/api/v1',
+        fetchImpl: failing(403),
+        onUnauthenticated,
+      });
+
+      await expect(client.get('/things')).rejects.toBeInstanceOf(
+        ApiClientError,
+      );
+      expect(onUnauthenticated).not.toHaveBeenCalled();
+    });
+
+    it('stays quiet on every other failure', async () => {
+      const onUnauthenticated = vi.fn();
+      for (const status of [400, 404, 409, 500]) {
+        const client = new ApiClient({
+          baseUrl: 'https://api.example.test/api/v1',
+          fetchImpl: failing(status),
+          onUnauthenticated,
+        });
+        await expect(client.get('/things')).rejects.toBeInstanceOf(
+          ApiClientError,
+        );
+      }
+      expect(onUnauthenticated).not.toHaveBeenCalled();
+    });
+  });
+
   it('unwraps the shared ApiResponse envelope and attaches the bearer token', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()

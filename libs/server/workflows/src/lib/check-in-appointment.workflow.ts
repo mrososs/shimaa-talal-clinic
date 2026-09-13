@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService, type SqlExecutor } from '@clinic/server-core';
+import { ClinicService } from '@clinic/server-clinic';
 import { AppointmentService } from '@clinic/server-booking';
+import { BookingError, BookingErrorCode } from '@clinic/server-booking';
 import { QueueCommandService, QueueEntryService } from '@clinic/server-queue';
 import {
   AppointmentStatus,
@@ -12,6 +14,8 @@ export interface CheckInInput {
   clinicId: string;
   appointmentId: string;
   memberId: string;
+  forceEarly?: boolean;
+  earlyReason?: string | null;
 }
 
 /**
@@ -39,6 +43,7 @@ export class CheckInAppointmentWorkflow {
     private readonly appointments: AppointmentService,
     private readonly queue: QueueCommandService,
     private readonly entries: QueueEntryService,
+    private readonly clinics: ClinicService,
   ) {}
 
   async execute(input: CheckInInput, db?: SqlExecutor): Promise<QueueEntry> {
@@ -58,6 +63,12 @@ export class CheckInAppointmentWorkflow {
       const appointment = await this.eligible(input, tx);
       if (isEntry(appointment)) return appointment;
 
+      // Two separate questions, asked in order: may they come in yet, and
+      // where do they stand once they are in. The first is asked of every
+      // check-in; only the second depends on how the queue is ordered.
+      const arrival = await this.arrival(input, appointment, tx);
+      const placement = this.placement(arrival, appointment);
+
       const entry = await this.queue.admit(
         {
           clinicId: input.clinicId,
@@ -66,8 +77,10 @@ export class CheckInAppointmentWorkflow {
           guardianId: appointment.guardianId,
           appointmentId: appointment.id,
           visitReason: appointment.notes,
+          serviceEligibleAt: placement.serviceEligibleAt,
+          fairnessAnchorAt: placement.fairnessAnchorAt,
         },
-        { memberId: input.memberId },
+        { memberId: input.memberId, reason: input.earlyReason ?? null },
         tx,
       );
 
@@ -85,6 +98,101 @@ export class CheckInAppointmentWorkflow {
     // One transaction, or the two halves can disagree. A caller that already
     // holds one passes it in rather than nesting a second.
     return db === undefined ? this.database.transaction(run) : run(db);
+  }
+
+  /**
+   * May this patient come in yet?
+   *
+   * "Have they arrived too early" and "where does an early arrival stand in the
+   * line" are different questions, and the clinic answers the first one whether
+   * or not fairness placement is switched on. They were once folded into the
+   * same branch, and with fairness off a 15:00 appointment could check in at
+   * 10:27 — the configured boundary was never consulted. The boundary is the
+   * clinic's rule; fairness is only an ordering strategy.
+   *
+   * The booked window is the floor every appointment has, so the answer never
+   * depends on the estimator being switched on. A published recommendation is
+   * consulted only when the estimator actually produced one, and can only move
+   * the door later, never earlier.
+   */
+  private async arrival(
+    input: CheckInInput,
+    appointment: Appointment,
+    tx: SqlExecutor,
+  ): Promise<ArrivalDecision> {
+    const policy = await this.clinics.findTrackingPolicy(input.clinicId, tx);
+    const now = Date.now();
+    const graceMs = (policy?.earlyCheckInMinutes ?? 0) * 60_000;
+
+    let earliestAllowed = Date.parse(appointment.windowStart) - graceMs;
+    if (policy?.estimatorEnabled) {
+      const snapshot = await tx.query<{
+        published_recommended_arrival: Date | null;
+      }>(
+        `select published_recommended_arrival
+           from clinic.appointment_tracking_state where appointment_id=$1`,
+        [appointment.id],
+      );
+      const recommended = snapshot.rows[0]?.published_recommended_arrival;
+      if (recommended) {
+        earliestAllowed = Math.max(
+          earliestAllowed,
+          recommended.getTime() - graceMs,
+        );
+      }
+    }
+
+    const early = now < earliestAllowed;
+    if (early && !input.forceEarly) {
+      throw new BookingError(
+        BookingErrorCode.InvalidTransition,
+        'This patient has arrived before the allowed check-in time.',
+        undefined,
+        { earliestAllowedAt: new Date(earliestAllowed).toISOString() },
+      );
+    }
+    if (early && !input.earlyReason?.trim()) {
+      throw new BookingError(
+        BookingErrorCode.InvalidTransition,
+        'An early check-in override requires a reason.',
+      );
+    }
+
+    return {
+      early,
+      earliestAllowed,
+      late: now > Date.parse(appointment.windowEnd),
+      fairnessEnabled: policy?.fairnessEnabled ?? false,
+      now,
+    };
+  }
+
+  /**
+   * Where the entry stands once it has been let in.
+   *
+   * Under fairness an overridden early arrival is held until the moment they
+   * would ordinarily have been admitted, so jumping the door never buys a turn.
+   * Without fairness the queue is plain arrival order, which is what the clinic
+   * ran before any of this existed.
+   */
+  private placement(
+    decision: ArrivalDecision,
+    appointment: Appointment,
+  ): { serviceEligibleAt: string | null; fairnessAnchorAt: string } {
+    if (!decision.fairnessEnabled) {
+      return {
+        serviceEligibleAt: null,
+        fairnessAnchorAt: new Date(decision.now).toISOString(),
+      };
+    }
+    return {
+      serviceEligibleAt: decision.early
+        ? new Date(decision.earliestAllowed).toISOString()
+        : null,
+      fairnessAnchorAt: decision.late
+        ? new Date(decision.now).toISOString()
+        : appointment.windowStart,
+    };
   }
 
   /**
@@ -120,6 +228,16 @@ export class CheckInAppointmentWorkflow {
       throw error;
     }
   }
+}
+
+/** What the arrival check decided, and what placement needs to know from it. */
+interface ArrivalDecision {
+  /** Before the boundary, and therefore only here on an audited override. */
+  early: boolean;
+  earliestAllowed: number;
+  late: boolean;
+  fairnessEnabled: boolean;
+  now: number;
 }
 
 /** Distinguishes the two things `eligible` can hand back. */

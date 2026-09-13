@@ -17,6 +17,7 @@ import { ClinicalController } from './api/clinical.controller';
 import { ParentClinicalController } from './api/parent-clinical.controller';
 import { UrgentCaseController } from './api/urgent-case.controller';
 import { PaymentsReportController } from './api/payments-report.controller';
+import { AppointmentTrackingController } from './api/appointment-tracking.controller';
 import { ClinicQueueBoardWorkflow } from './clinic-queue-board.workflow';
 import { ParentQueueViewWorkflow } from './parent-queue-view.workflow';
 import { CancelAppointmentWorkflow } from './cancel-appointment.workflow';
@@ -33,7 +34,10 @@ import { PaymentsReportWorkflow } from './payments-report.workflow';
 import { RescheduleAppointmentWorkflow } from './reschedule-appointment.workflow';
 import { NoShowAppointmentWorkflow } from './no-show-appointment.workflow';
 import { MissQueueEntryWorkflow } from './miss-queue-entry.workflow';
+import { RemoveQueueEntryWorkflow } from './remove-queue-entry.workflow';
 import { RequeueEntryWorkflow } from './requeue-entry.workflow';
+import { AppointmentTrackingWorkflow } from './appointment-tracking.workflow';
+import { AppointmentTrackingCapabilityService } from './appointment-tracking-capability.service';
 
 /**
  * Cross-domain orchestration.
@@ -89,6 +93,7 @@ import { RequeueEntryWorkflow } from './requeue-entry.workflow';
     ParentClinicalController,
     UrgentCaseController,
     PaymentsReportController,
+    AppointmentTrackingController,
   ],
   providers: [
     CheckInAppointmentWorkflow,
@@ -107,7 +112,10 @@ import { RequeueEntryWorkflow } from './requeue-entry.workflow';
     RescheduleAppointmentWorkflow,
     NoShowAppointmentWorkflow,
     MissQueueEntryWorkflow,
+    RemoveQueueEntryWorkflow,
     RequeueEntryWorkflow,
+    AppointmentTrackingWorkflow,
+    AppointmentTrackingCapabilityService,
   ],
   exports: [
     CheckInAppointmentWorkflow,
@@ -126,7 +134,10 @@ import { RequeueEntryWorkflow } from './requeue-entry.workflow';
     RescheduleAppointmentWorkflow,
     NoShowAppointmentWorkflow,
     MissQueueEntryWorkflow,
+    RemoveQueueEntryWorkflow,
     RequeueEntryWorkflow,
+    AppointmentTrackingWorkflow,
+    AppointmentTrackingCapabilityService,
   ],
 })
 export class WorkflowsModule {}

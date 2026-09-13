@@ -3,6 +3,9 @@ import type {
   Appointment,
   AvailabilityDay,
   VisitType,
+  RescheduledAppointment,
+  AppointmentTrackingView,
+  AttendanceIntent,
 } from '@clinic/contracts';
 
 /**
@@ -46,14 +49,39 @@ export function createBookingApi(client: ApiClient) {
     detail: (id: string): Promise<Appointment> =>
       client.get<Appointment>(`appointments/${id}`),
 
+    tracking: (id: string): Promise<AppointmentTrackingView> =>
+      client.get<AppointmentTrackingView>(`appointments/${id}/tracking`),
+
+    attendance: (
+      id: string,
+      intent: typeof AttendanceIntent.Coming | typeof AttendanceIntent.NotComing,
+    ): Promise<AppointmentTrackingView> =>
+      client.post<AppointmentTrackingView>(`appointments/${id}/attendance`, {
+        intent,
+      }),
+
+    guestTracking: (token: string): Promise<AppointmentTrackingView> =>
+      client.get<AppointmentTrackingView>('tracking/guest', {
+        headers: { 'x-tracking-token': token },
+      }),
+
+    guestAttendance: (
+      token: string,
+      intent: typeof AttendanceIntent.Coming | typeof AttendanceIntent.NotComing,
+    ): Promise<AppointmentTrackingView> =>
+      client.post<AppointmentTrackingView>('tracking/guest/attendance',
+        { intent },
+        { headers: { 'x-tracking-token': token } },
+      ),
+
     cancel: (id: string, reason?: string): Promise<Appointment> =>
       client.post<Appointment>(`appointments/${id}/cancel`, { reason }),
 
     reschedule: (
       id: string,
       target: { sessionId: string; windowStart: string },
-    ): Promise<Appointment> =>
-      client.post<Appointment>(`appointments/${id}/reschedule`, target),
+    ): Promise<RescheduledAppointment> =>
+      client.post<RescheduledAppointment>(`appointments/${id}/reschedule`, target),
   };
 }
 

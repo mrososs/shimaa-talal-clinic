@@ -41,7 +41,9 @@ describe('dashboard navigation', () => {
     const reception = navigationSectionsFor(ClinicMemberRole.Reception);
     const doctor = navigationSectionsFor(ClinicMemberRole.Doctor);
 
-    expect(reception).toHaveLength(2);
+    // Reception works the desk only, so the records group is empty for them and
+    // the section disappears rather than rendering an empty heading.
+    expect(reception.map((section) => section.id)).toEqual(['daily']);
     expect(reception[0]?.label).toBe('العمليات اليومية');
     expect(reception[0]?.links.map((link) => link.name)).toContain(
       'reception-booking',
@@ -51,8 +53,22 @@ describe('dashboard navigation', () => {
     );
     expect(doctor[1]?.links.map((link) => link.name)).toContain('patients');
     expect(doctor[1]?.links.map((link) => link.name)).toContain('settings');
-    expect(reception[1]?.links.map((link) => link.name)).not.toContain(
-      'settings',
+  });
+
+  it('keeps the clinic records out of reception entirely', () => {
+    const reception = navigationFor(ClinicMemberRole.Reception).map(
+      (link) => link.name,
     );
+
+    expect(reception).toEqual([
+      'overview',
+      'appointments',
+      'queue',
+      'messages',
+      'reception-booking',
+    ]);
+    for (const name of ['patients', 'payments', 'reports', 'settings']) {
+      expect(reception).not.toContain(name);
+    }
   });
 });

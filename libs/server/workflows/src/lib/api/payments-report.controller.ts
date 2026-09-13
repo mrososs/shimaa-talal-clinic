@@ -27,8 +27,18 @@ class ReportQueryDto {
   @IsOptional() @IsString() @Matches(ISO_DATE) to?: string;
 }
 
+/**
+ * The clinic's money and its performance, which are not front-desk questions.
+ *
+ * Reception runs the day — booking, arrivals, the queue — and none of that
+ * needs revenue, collection history or period reporting. They were once here
+ * with the financial projection stripped per role, but "return it and filter"
+ * is a weaker rule than "do not answer", and the desk has no screen for it.
+ * Removing the role is what actually closes the route: typing the URL now
+ * returns 403 rather than a redacted body.
+ */
 @Controller({ path: 'clinic', version: '1' })
-@Roles(UserRole.Reception, UserRole.Admin, UserRole.Doctor)
+@Roles(UserRole.Doctor, UserRole.Admin)
 @UseFilters(WorkflowsExceptionFilter)
 export class PaymentsReportController {
   constructor(

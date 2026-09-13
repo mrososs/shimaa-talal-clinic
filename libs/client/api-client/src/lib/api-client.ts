@@ -25,6 +25,19 @@ export interface ApiClientOptions {
   /** Injected for tests; defaults to the platform `fetch`. */
   fetchImpl?: typeof fetch;
   defaultHeaders?: Record<string, string>;
+  /**
+   * The token this client is sending is no longer accepted.
+   *
+   * Only 401 reaches here, and deliberately not 403: one says nobody is signed
+   * in, the other says this person may not do that. A screen that showed
+   * "your session ended" but kept polling with the dead token was the symptom
+   * of having nowhere to report the difference — every feature caught its own
+   * error and each one decided, separately, to carry on.
+   *
+   * Raised for every failing request, including the several a poll may have in
+   * flight at once, so whoever listens must be idempotent.
+   */
+  onUnauthenticated?: () => void;
 }
 
 export interface RequestOptions {
@@ -105,6 +118,9 @@ export class ApiClient {
     const payload = await this.readBody<T>(response);
 
     if (!response.ok) {
+      if (response.status === 401) {
+        this.options.onUnauthenticated?.();
+      }
       throw new ApiClientError(
         response.status,
         payload && !isApiSuccess(payload) ? payload.error : UNKNOWN_ERROR,

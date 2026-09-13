@@ -71,14 +71,23 @@ export const NAVIGATION: readonly NavigationLink[] = [
     // can still approve, cancel and reschedule from the appointments screen.
     roles: [ClinicMemberRole.Reception, ClinicMemberRole.Admin],
   },
+  // The clinic's records are the doctor's. Reception works the desk: the day's
+  // appointments, a new booking, the queue and the family's messages.
   {
     name: 'patients',
     label: 'المرضى والعائلات',
     icon: 'patients',
     group: 'records',
+    roles: [ClinicMemberRole.Doctor, ClinicMemberRole.Admin],
   },
-  { name: 'payments', label: 'المدفوعات', icon: 'payments', group: 'records' },
-  { name: 'reports', label: 'التقارير', icon: 'reports', group: 'records' },
+  {
+    name: 'payments', label: 'المدفوعات', icon: 'payments', group: 'records',
+    roles: [ClinicMemberRole.Doctor, ClinicMemberRole.Admin],
+  },
+  {
+    name: 'reports', label: 'التقارير', icon: 'reports', group: 'records',
+    roles: [ClinicMemberRole.Doctor, ClinicMemberRole.Admin],
+  },
   {
     name: 'settings', label: 'الإعدادات والفريق', icon: 'settings', group: 'records',
     roles: [ClinicMemberRole.Doctor, ClinicMemberRole.Admin],

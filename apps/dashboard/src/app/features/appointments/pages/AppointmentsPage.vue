@@ -6,12 +6,16 @@ import {
   ClinicMemberRole,
   type Appointment,
   type AppointmentListItem,
+  type RescheduledAppointment,
+  type StaffEstimateDiagnostic,
 } from '@clinic/contracts';
 import { apiMessage } from '../../../shared/messages';
 import { arabicDigits } from '../../../shared/numerals';
-import { clinicApi, session } from '../../../runtime';
+import { clinicApi, config, session } from '../../../runtime';
+import { useStaffAppointments } from '../composables/useStaffAppointments';
 import AppointmentIdentity from '../components/AppointmentIdentity.vue';
 import RescheduleAppointmentDialog from '../components/RescheduleAppointmentDialog.vue';
+import AppointmentEstimateDiagnostic from '../components/AppointmentEstimateDiagnostic.vue';
 
 /**
  * The clinic's day: who is coming, and what still needs deciding.
@@ -28,11 +32,10 @@ import RescheduleAppointmentDialog from '../components/RescheduleAppointmentDial
 const state = session.state;
 
 const date = ref('');
-const items = ref<AppointmentListItem[]>([]);
-const loading = ref(true);
-const failure = ref<string | null>(null);
 const working = ref<string | null>(null);
 const rescheduling = ref<AppointmentListItem | null>(null);
+const diagnostic = shallowRef<StaffEstimateDiagnostic | null>(null);
+const trackingLink = shallowRef<string | null>(null);
 const query = shallowRef('');
 const statusFilter = shallowRef<string>('all');
 const viewMode = shallowRef<'day' | 'week' | 'month'>('day');
@@ -129,18 +132,8 @@ function windowLabel(appointment: Appointment): string {
   return `${day} · ${time}`;
 }
 
-async function load(): Promise<void> {
-  loading.value = true;
-  failure.value = null;
-  try {
-    const range = calendarRange(date.value, viewMode.value);
-    items.value = await clinicApi.appointments(range.from, range.to);
-  } catch (error) {
-    failure.value = apiMessage(error);
-  } finally {
-    loading.value = false;
-  }
-}
+const { items, loading, failure, load, refresh, polling } =
+  useStaffAppointments(() => calendarRange(date.value, viewMode.value));
 
 /** Fold command state into the read model without dropping its identity data. */
 async function run(
@@ -156,6 +149,9 @@ async function run(
         ? { ...appointment, ...updated }
         : appointment,
     );
+    // The row is already right; this catches what the command changed around
+    // it — a freed seat, a request that is no longer pending.
+    void refresh();
   } catch (error) {
     failure.value = apiMessage(error);
     // The row moved underneath us — re-read rather than leave a stale table.
@@ -165,10 +161,41 @@ async function run(
   }
 }
 
-function acceptReschedule(updated: Appointment): void {
+function trackingUrl(token: string): string {
+  return `${config.mobileAppUrl.replace(/\/$/, '')}/track#${token}`;
+}
+
+async function copyTrackingLink(link: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(link);
+  } catch {
+    // The visible readonly field remains the fallback on browsers that deny
+    // clipboard access (for example, a non-secure local origin).
+  }
+}
+
+async function issueTrackingLink(id: string): Promise<void> {
+  working.value = id;
+  failure.value = null;
+  try {
+    const capability = await clinicApi.createTrackingLink(id);
+    trackingLink.value = trackingUrl(capability.token);
+    await copyTrackingLink(trackingLink.value);
+  } catch (error) {
+    failure.value = apiMessage(error);
+  } finally {
+    working.value = null;
+  }
+}
+
+function acceptReschedule(updated: RescheduledAppointment): void {
   const original = rescheduling.value;
   rescheduling.value = null;
   if (original === null) return;
+  if (updated.trackingLinkRotation) {
+    trackingLink.value = trackingUrl(updated.trackingLinkRotation.token);
+    void copyTrackingLink(trackingLink.value);
+  }
   items.value = items.value.map((appointment) =>
     appointment.id === original.id
       ? {
@@ -182,9 +209,22 @@ function acceptReschedule(updated: Appointment): void {
   );
 }
 
+async function inspectEstimate(id: string): Promise<void> {
+  working.value = id;
+  try {
+    diagnostic.value = await clinicApi.trackingDiagnostic(id);
+    failure.value = null;
+  } catch (error) {
+    failure.value = apiMessage(error);
+  } finally {
+    working.value = null;
+  }
+}
+
 watch([date, viewMode], load);
 onMounted(() => {
   date.value = clinic.value?.today ?? '';
+  polling.start();
 });
 
 function calendarRange(
@@ -266,9 +306,29 @@ function calendarRange(
       {{ failure }}
     </p>
 
+    <section v-if="trackingLink" class="dnotice tracking-link" role="status">
+      <div>
+        <strong>رابط متابعة الأسرة جاهز</strong>
+        <p>انسخي الرابط وأرسليه للأسرة. الرابط القديم يُلغى تلقائيًا عند تدويره.</p>
+      </div>
+      <input class="dinput" :value="trackingLink" readonly dir="ltr" />
+      <button class="dbtn dbtn--soft dbtn--sm" @click="copyTrackingLink(trackingLink)">
+        نسخ الرابط
+      </button>
+      <button class="dbtn dbtn--ghost dbtn--sm" @click="trackingLink = null">
+        إغلاق
+      </button>
+    </section>
+
     <div v-if="loading" class="dcard dcard--pad centre">جارٍ التحميل…</div>
 
     <template v-else>
+      <AppointmentEstimateDiagnostic
+        v-if="diagnostic"
+        :diagnostic="diagnostic"
+        :timezone="timezone"
+        @close="diagnostic = null"
+      />
       <!-- The only rows that need a decision. -->
       <section v-if="pending.length > 0" class="dcard">
         <header class="dcard__head">
@@ -294,6 +354,11 @@ function calendarRange(
               {{ VISIT_LABEL[appointment.visitType] ?? appointment.visitType }}
             </span>
             <div class="row__actions">
+              <button
+                class="dbtn dbtn--ghost dbtn--sm"
+                :disabled="working === appointment.id"
+                @click="inspectEstimate(appointment.id)"
+              >التقدير</button>
               <button
                 v-if="
                   appointment.status === 'requested' ||
@@ -374,6 +439,18 @@ function calendarRange(
             <div class="row__actions">
               <button
                 v-if="appointment.status === 'confirmed'"
+                class="dbtn dbtn--soft dbtn--sm"
+                :disabled="working === appointment.id"
+                @click="inspectEstimate(appointment.id)"
+              >التقدير</button>
+              <button
+                v-if="canBook && appointment.status === 'confirmed'"
+                class="dbtn dbtn--soft dbtn--sm"
+                :disabled="working === appointment.id"
+                @click="issueTrackingLink(appointment.id)"
+              >رابط المتابعة</button>
+              <button
+                v-if="appointment.status === 'confirmed'"
                 class="dbtn dbtn--ghost dbtn--sm"
                 :disabled="working === appointment.id"
                 @click="run(appointment.id, clinicApi.markNoShow)"
@@ -414,6 +491,19 @@ function calendarRange(
   grid-template-columns: auto auto minmax(220px, 1fr) auto;
   align-items: end;
   gap: 12px;
+}
+
+.tracking-link {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(260px, 2fr) auto auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.tracking-link p { margin: 4px 0 0; }
+
+@media (max-width: 900px) {
+  .tracking-link { grid-template-columns: 1fr; }
 }
 
 .toolbar__modes {

@@ -1,3 +1,4 @@
+import { watch } from 'vue';
 import { createRouter, createWebHistory } from '@ionic/vue-router';
 import type { RouteRecordRaw } from 'vue-router';
 import { session } from '../runtime';
@@ -19,6 +20,13 @@ import {
  * focused task routes stay outside it, so they never leak the tab bar.
  */
 export const routes: RouteRecordRaw[] = [
+  {
+    path: '/track',
+    name: 'guest-appointment-tracking',
+    component: () =>
+      import('../features/appointments/pages/GuestAppointmentTrackingPage.vue'),
+    meta: { [ROUTE_META_GUEST]: true },
+  },
   {
     path: '/queue/guest/:token',
     name: 'guest-queue',
@@ -195,3 +203,20 @@ export function startSession(): Promise<void> {
 }
 
 router.beforeEach(createAuthGuard({ session, ready: startSession }));
+
+/**
+ * An ended session does not leave a parent on a live-queue screen that is
+ * quietly failing.
+ *
+ * The guard only runs on navigation, and somebody watching their turn is not
+ * navigating. Leaving the route unmounts the screen, which disposes its polling
+ * scope, so the loop stops because nothing is left running it.
+ */
+watch(
+  () => session.state.status,
+  (status) => {
+    if (status !== 'anonymous') return;
+    if (router.currentRoute.value.meta[ROUTE_META_PUBLIC] === true) return;
+    void router.replace({ name: 'sign-in' });
+  },
+);

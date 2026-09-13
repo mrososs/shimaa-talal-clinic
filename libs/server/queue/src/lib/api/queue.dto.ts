@@ -38,13 +38,9 @@ export class WalkInDto {
   visitReason?: string;
 }
 
-export class CancelEntryDto {
-  @IsOptional()
-  @IsString()
-  @Transform(trim)
-  @Length(1, 280)
-  reason?: string;
-}
+// Removing a patient moved to `@clinic/server-workflows`, which carries its own
+// reason DTO: the same request now has to cancel the booking as well, and Queue
+// may not see Booking.
 
 /**
  * Marking or clearing an emergency.

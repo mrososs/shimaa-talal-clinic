@@ -3,9 +3,10 @@ import type {
   Appointment,
   AvailabilityDay,
   AvailabilityWindow,
+  RescheduledAppointment,
 } from '@clinic/contracts';
 import { apiMessage } from '../../../shared/messages';
-import { bookingApi } from '../../../runtime';
+import { bookingApi, config } from '../../../runtime';
 
 export function useRescheduleAppointment(appointmentId: () => string) {
   const appointment = shallowRef<Appointment | null>(null);
@@ -15,6 +16,8 @@ export function useRescheduleAppointment(appointmentId: () => string) {
   const loading = shallowRef(true);
   const submitting = shallowRef(false);
   const failure = shallowRef<string | null>(null);
+  const replacement = shallowRef<RescheduledAppointment | null>(null);
+  const rotatedTrackingLink = shallowRef<string | null>(null);
 
   const windowsForDay = computed(() => {
     const current = appointment.value;
@@ -61,17 +64,22 @@ export function useRescheduleAppointment(appointmentId: () => string) {
     selectedWindow.value = null;
   }
 
-  async function submit(): Promise<Appointment | null> {
+  async function submit(): Promise<RescheduledAppointment | null> {
     const current = appointment.value;
     const target = selectedWindow.value;
     if (current === null || target === null || submitting.value) return null;
     submitting.value = true;
     failure.value = null;
     try {
-      return await bookingApi.reschedule(current.id, {
+      const result = await bookingApi.reschedule(current.id, {
         sessionId: target.sessionId,
         windowStart: target.windowStart,
       });
+      replacement.value = result;
+      rotatedTrackingLink.value = result.trackingLinkRotation
+        ? `${config.mobileAppUrl.replace(/\/$/, '')}/track#${result.trackingLinkRotation.token}`
+        : null;
+      return result;
     } catch (error) {
       const message = apiMessage(error);
       selectedWindow.value = null;
@@ -91,6 +99,8 @@ export function useRescheduleAppointment(appointmentId: () => string) {
     loading,
     submitting,
     failure,
+    replacement,
+    rotatedTrackingLink,
     windowsForDay,
     canSubmit,
     load,

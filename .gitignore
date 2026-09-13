@@ -9,7 +9,9 @@ out-tsc
 node_modules
 
 # IDEs and editors
-/.idea
+# Not anchored: Capacitor's `cap open android` writes apps/mobile/.idea as well,
+# and those files describe one machine's SDK paths rather than the project.
+.idea/
 .project
 .classpath
 .c9/

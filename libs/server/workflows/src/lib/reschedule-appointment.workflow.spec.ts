@@ -52,7 +52,10 @@ describe('RescheduleAppointmentWorkflow', () => {
     };
     payments.findActiveForTransfer.mockResolvedValue(payment);
 
-    await expect(workflow.execute(input)).resolves.toBe(replacement);
+    await expect(workflow.execute(input)).resolves.toEqual({
+      ...replacement,
+      trackingLinkRotation: null,
+    });
 
     expect(appointments.reschedule).toHaveBeenCalledWith(
       'clinic-1',
@@ -90,7 +93,10 @@ describe('RescheduleAppointmentWorkflow', () => {
     const { workflow, appointments, payments } = setup();
     appointments.findLiveRescheduledFrom.mockResolvedValue(replacement);
 
-    await expect(workflow.execute(input)).resolves.toBe(replacement);
+    await expect(workflow.execute(input)).resolves.toEqual({
+      ...replacement,
+      trackingLinkRotation: null,
+    });
     expect(payments.findActiveForTransfer).not.toHaveBeenCalled();
     expect(appointments.reschedule).not.toHaveBeenCalled();
   });

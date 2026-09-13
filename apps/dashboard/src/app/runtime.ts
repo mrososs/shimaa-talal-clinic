@@ -44,6 +44,10 @@ export const auth: AuthProvider | null = isSupabaseConfigured(config)
 export const apiClient: ApiClient = createApiClient({
   baseUrl: config.apiUrl,
   getAccessToken: () => auth?.getAccessToken() ?? null,
+  // A board left open all day is the likeliest thing to still be holding a dead
+  // token. `session` is defined below and only read when a request actually
+  // fails, which is long after this module has finished evaluating.
+  onUnauthenticated: () => void session.terminate(),
 });
 
 export const clinicApi: ClinicApi = createClinicApi(apiClient);

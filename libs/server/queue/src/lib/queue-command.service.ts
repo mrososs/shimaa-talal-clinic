@@ -70,6 +70,8 @@ export class QueueCommandService {
       guardianId?: string | null;
       appointmentId?: string | null;
       visitReason?: string | null;
+      serviceEligibleAt?: string | null;
+      fairnessAnchorAt?: string | null;
     },
     actor: QueueActor,
     db?: SqlExecutor,
@@ -448,7 +450,8 @@ export class QueueCommandService {
       );
 
       await tx.query(
-        `update clinic.queue_entries set sort_key = $2 where id = $1`,
+        `update clinic.queue_entries
+            set sort_key = $2, order_override_at = now() where id = $1`,
         [entryId, sortKey],
       );
 
@@ -558,6 +561,19 @@ export class QueueCommandService {
     tx: SqlExecutor,
     bumpRevision = true,
   ): Promise<QueueEntry> {
+    const current = await this.requireEntry(clinicId, entryId, tx);
+    if (
+      !current.isEmergency &&
+      current.serviceEligibleAt !== null &&
+      Date.parse(current.serviceEligibleAt) > Date.now()
+    ) {
+      throw new QueueError(
+        QueueErrorCode.InvalidTransition,
+        'This early arrival is not eligible to be called yet.',
+        undefined,
+        { serviceEligibleAt: current.serviceEligibleAt },
+      );
+    }
     const policy = await this.clinics.findPolicy(clinicId, tx);
     const graceMinutes = policy?.gracePeriodMinutes ?? 10;
 

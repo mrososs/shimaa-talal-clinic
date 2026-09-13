@@ -427,6 +427,29 @@ const configured =
       ).toBeNull();
     });
 
+    it('exposes a pending-only tracking view without inventing an estimate', async () => {
+      const session = await makeSession(clinicId, doctorMemberId);
+      const booked = await bookAs(tokens.parent, session);
+      const appointment = data<{ id: string }>(booked.body);
+
+      const response = await call(
+        'GET',
+        `/appointments/${appointment.id}/tracking`,
+        { token: tokens.parent },
+      );
+
+      expect(response.status).toBe(200);
+      expect(data(response.body)).toMatchObject({
+        appointmentId: appointment.id,
+        appointmentStatus: 'requested',
+        estimate: null,
+        unavailableReason: null,
+        attendanceIntent: 'unknown',
+        attendanceEnabled: false,
+        queue: null,
+      });
+    });
+
     it('cannot book for a child that is not theirs', async () => {
       // The child exists, at the same clinic. 404 rather than 403: the
       // difference between those answers is information about another family.

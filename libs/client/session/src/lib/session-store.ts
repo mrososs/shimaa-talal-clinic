@@ -83,6 +83,18 @@ export interface SessionStore<TIdentity> {
    * yet is told their password is wrong. Each auth screen clears it on entry.
    */
   clearAuthError(): void;
+  /**
+   * End a session the API has stopped accepting.
+   *
+   * Called when a request comes back 401 — which can be several requests at
+   * once, since a screen may have a poll and a command in flight together — so
+   * it is idempotent: the first caller clears the session, the rest are a
+   * no-op. Without that, each failing request would start its own sign-out.
+   *
+   * Distinct from `signOut`, which is a person choosing to leave and may
+   * legitimately run from an already-anonymous state.
+   */
+  terminate(): Promise<void>;
   /** Re-read the identity — after onboarding, or after claiming a family. */
   refreshIdentity(): Promise<void>;
   /** Stop listening to the auth provider. */
@@ -134,6 +146,15 @@ export function createSessionStore<TIdentity>(
     state.status = 'anonymous';
     await options.auth.signOut();
   }
+
+  /**
+   * Guards the one-shot property of `terminate`.
+   *
+   * The state alone cannot do it: several 401s land in the same tick, before
+   * the first `await` inside `clearSession` has set the status, so all of them
+   * would see `authenticated` and each start a sign-out.
+   */
+  let terminating: Promise<void> | null = null;
 
   async function adopt(session: AuthSession): Promise<void> {
     state.session = session;
@@ -281,6 +302,14 @@ export function createSessionStore<TIdentity>(
 
     clearAuthError() {
       state.authError = null;
+    },
+
+    terminate() {
+      if (state.status === 'anonymous') return Promise.resolve();
+      terminating ??= clearSession().finally(() => {
+        terminating = null;
+      });
+      return terminating;
     },
 
     async refreshIdentity() {

@@ -60,6 +60,120 @@ function stubProvider(overrides: Partial<AuthProvider> = {}): {
 }
 
 describe('createSessionStore', () => {
+  /**
+   * A 401 says nobody is signed in; a 403 says this person may not do that.
+   * Collapsing them either strands somebody on a board that quietly fails, or
+   * bounces a signed-in parent to a login screen that lets them straight back
+   * in. Both happened, so both are pinned here.
+   */
+  describe('terminate', () => {
+    it('ends the session and signs out of the provider', async () => {
+      const signOut = vi.fn(async () => undefined);
+      const { auth } = stubProvider({
+        restoreSession: async () => session,
+        signOut,
+      });
+      const store = createSessionStore({
+        auth,
+        loadIdentity: async () => identity,
+      });
+      await store.bootstrap();
+      expect(store.state.status).toBe('authenticated');
+
+      await store.terminate();
+
+      expect(store.state.status).toBe('anonymous');
+      expect(store.state.session).toBeNull();
+      expect(store.state.identity).toBeNull();
+      expect(signOut).toHaveBeenCalledTimes(1);
+    });
+
+    it('signs out once however many requests fail together', async () => {
+      // A screen can have a poll and a command in flight at the same instant;
+      // each gets its own 401 before the first has finished clearing anything.
+      const signOut = vi.fn(async () => undefined);
+      const { auth } = stubProvider({
+        restoreSession: async () => session,
+        signOut,
+      });
+      const store = createSessionStore({
+        auth,
+        loadIdentity: async () => identity,
+      });
+      await store.bootstrap();
+
+      await Promise.all([
+        store.terminate(),
+        store.terminate(),
+        store.terminate(),
+      ]);
+
+      expect(signOut).toHaveBeenCalledTimes(1);
+      expect(store.state.status).toBe('anonymous');
+    });
+
+    it('does nothing when there is no session to end', async () => {
+      const signOut = vi.fn(async () => undefined);
+      const { auth } = stubProvider({ signOut });
+      const store = createSessionStore({
+        auth,
+        loadIdentity: async () => identity,
+      });
+      await store.bootstrap();
+
+      await store.terminate();
+
+      expect(signOut).not.toHaveBeenCalled();
+    });
+
+    it('keeps a 403 signed in', async () => {
+      // A parent account on the dashboard is authenticated and simply has no
+      // membership. Signing them out produces a login loop.
+      const signOut = vi.fn(async () => undefined);
+      const { auth } = stubProvider({
+        restoreSession: async () => session,
+        signOut,
+      });
+      const store = createSessionStore({
+        auth,
+        loadIdentity: async () => {
+          throw new ApiClientError(403, {
+            code: 'forbidden',
+            message: 'no access',
+          });
+        },
+      });
+
+      await store.bootstrap();
+
+      expect(store.state.status).toBe('authenticated');
+      expect(store.state.identityError).toBe('forbidden');
+      expect(signOut).not.toHaveBeenCalled();
+    });
+
+    it('ends the session on a 401 from the identity read', async () => {
+      const signOut = vi.fn(async () => undefined);
+      const { auth } = stubProvider({
+        restoreSession: async () => session,
+        signOut,
+      });
+      const store = createSessionStore({
+        auth,
+        loadIdentity: async () => {
+          throw new ApiClientError(401, {
+            code: 'unauthorized',
+            message: 'expired',
+          });
+        },
+      });
+
+      await store.bootstrap();
+
+      expect(store.state.status).toBe('anonymous');
+      expect(signOut).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('bootstrap', () => {
     it('settles on anonymous when nothing is stored', async () => {
       const { auth } = stubProvider();

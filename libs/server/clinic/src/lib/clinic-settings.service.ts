@@ -13,7 +13,18 @@ export class ClinicSettingsService {
     const [clinic, prices, templates, schedules, closures, team] =
       await Promise.all([
         this.database.query<any>(
-          `select name,phone_e164,address,instapay_handle,timezone,grace_period_minutes,default_avg_consult_minutes,max_self_defers,min_lead_minutes,cancellation_cutoff_minutes,auto_confirm_parent_bookings from clinic.clinics where id=$1`,
+          `select name,phone_e164,address,instapay_handle,timezone,
+                  grace_period_minutes,default_avg_consult_minutes,
+                  max_self_defers,min_lead_minutes,cancellation_cutoff_minutes,
+                  auto_confirm_parent_bookings,tracking_estimator_enabled,
+                  reception_estimate_visible,parent_estimate_visible,
+                  guest_tracking_enabled,attendance_intent_enabled,
+                  fairness_placement_enabled,arrival_buffer_minutes,
+                  early_check_in_minutes,minimum_travel_lead_minutes,
+                  estimate_publication_threshold_minutes,
+                  max_earlier_shift_minutes,configured_baseline_minutes,
+                  baseline_validated_at,parent_estimate_approved_at
+             from clinic.clinics where id=$1`,
           [clinicId],
         ),
         this.database.query<any>(
@@ -54,6 +65,24 @@ export class ClinicSettingsService {
         minLeadMinutes: c.min_lead_minutes,
         cancellationCutoffMinutes: c.cancellation_cutoff_minutes,
         autoConfirmParentBookings: c.auto_confirm_parent_bookings,
+      },
+      tracking: {
+        estimatorEnabled: c.tracking_estimator_enabled,
+        receptionVisible: c.reception_estimate_visible,
+        parentVisible: c.parent_estimate_visible,
+        guestEnabled: c.guest_tracking_enabled,
+        attendanceEnabled: c.attendance_intent_enabled,
+        fairnessEnabled: c.fairness_placement_enabled,
+        arrivalBufferMinutes: c.arrival_buffer_minutes,
+        earlyCheckInMinutes: c.early_check_in_minutes,
+        minimumTravelLeadMinutes: c.minimum_travel_lead_minutes,
+        publicationThresholdMinutes:
+          c.estimate_publication_threshold_minutes,
+        maxEarlierShiftMinutes: c.max_earlier_shift_minutes,
+        configuredBaselineMinutes: c.configured_baseline_minutes,
+        baselineValidatedAt: c.baseline_validated_at?.toISOString() ?? null,
+        parentEstimateApprovedAt:
+          c.parent_estimate_approved_at?.toISOString() ?? null,
       },
       prices: prices.rows.map((r: any) => ({
         visitType: r.visit_type,
@@ -156,6 +185,91 @@ export class ClinicSettingsService {
             input.cancellationCutoffMinutes,
             input.autoConfirmParentBookings,
           ],
+        );
+        return { before, after, result: undefined };
+      },
+    );
+  }
+  tracking(clinicId: string, actor: string, input: any) {
+    return this.mutate(
+      clinicId,
+      actor,
+      'clinic.tracking_updated',
+      'clinic',
+      clinicId,
+      async (tx) => {
+        const columns = `tracking_estimator_enabled,reception_estimate_visible,
+          parent_estimate_visible,guest_tracking_enabled,
+          attendance_intent_enabled,fairness_placement_enabled,
+          arrival_buffer_minutes,early_check_in_minutes,
+          minimum_travel_lead_minutes,estimate_publication_threshold_minutes,
+          max_earlier_shift_minutes,configured_baseline_minutes,
+          baseline_validated_at,parent_estimate_approved_at`;
+        const before = await one(
+          tx,
+          `select ${columns} from clinic.clinics where id=$1 for update`,
+          [clinicId],
+        );
+        const baselineChanged =
+          before.configured_baseline_minutes !== input.configuredBaselineMinutes;
+        const approve = input.approveParentEstimate === true;
+        if (input.validateBaseline === true && input.configuredBaselineMinutes == null) {
+          throw new BadRequestException(
+            'A configured baseline is required before validation.',
+          );
+        }
+        if (
+          approve &&
+          before.baseline_validated_at == null &&
+          input.validateBaseline !== true
+        ) {
+          throw new BadRequestException(
+            'The consultation baseline must be validated before shadow approval.',
+          );
+        }
+        if (approve) await this.requireShadowReleaseGate(clinicId, tx);
+        if (
+          input.parentVisible === true &&
+          !approve &&
+          before.parent_estimate_approved_at == null
+        ) {
+          throw new BadRequestException(
+            'Parent estimates cannot be enabled before shadow approval.',
+          );
+        }
+        const after = await one(
+          tx,
+          `update clinic.clinics set
+             tracking_estimator_enabled=$3,reception_estimate_visible=$4,
+             parent_estimate_visible=$5,guest_tracking_enabled=$6,
+             attendance_intent_enabled=$7,fairness_placement_enabled=$8,
+             arrival_buffer_minutes=$9,early_check_in_minutes=$10,
+             minimum_travel_lead_minutes=$11,
+             estimate_publication_threshold_minutes=$12,
+             max_earlier_shift_minutes=$13,configured_baseline_minutes=$14,
+             baseline_source=case when $14::integer is null then null
+                                  else 'clinic_configured' end,
+             baseline_validated_at=case when $15 then now()
+                                        when $16 then null
+                                        else baseline_validated_at end,
+             baseline_validated_by=case when $15 then $2::uuid
+                                        when $16 then null
+                                        else baseline_validated_by end,
+             estimator_shadow_started_at=case when $3 and not tracking_estimator_enabled
+                                              then now()
+                                              else estimator_shadow_started_at end,
+             parent_estimate_approved_at=case when $17 then now()
+                                              else parent_estimate_approved_at end,
+             parent_estimate_approved_by=case when $17 then $2::uuid
+                                              else parent_estimate_approved_by end
+           where id=$1 returning ${columns}`,
+          [clinicId, actor, input.estimatorEnabled, input.receptionVisible,
+            input.parentVisible, input.guestEnabled, input.attendanceEnabled,
+            input.fairnessEnabled, input.arrivalBufferMinutes,
+            input.earlyCheckInMinutes, input.minimumTravelLeadMinutes,
+            input.publicationThresholdMinutes, input.maxEarlierShiftMinutes,
+            input.configuredBaselineMinutes, input.validateBaseline === true,
+            baselineChanged, approve],
         );
         return { before, after, result: undefined };
       },
@@ -328,6 +442,51 @@ export class ClinicSettingsService {
       entityId: x.entity_id,
       createdAt: x.created_at.toISOString(),
     }));
+  }
+  private async requireShadowReleaseGate(
+    clinicId: string,
+    tx: SqlExecutor,
+  ): Promise<void> {
+    const result = await tx.query<any>(
+      `with latest as (
+         select distinct on (e.appointment_id)
+           e.appointment_id,e.metadata
+         from clinic.appointment_tracking_events e
+         where e.clinic_id=$1
+           and e.event_type in ('shadow_published','parent_published')
+           and e.metadata->>'consultationFrom' is not null
+         order by e.appointment_id,e.created_at desc
+       ), samples as (
+         select q.session_id,q.started_at,
+                (latest.metadata->>'consultationFrom')::timestamptz estimate_from,
+                (latest.metadata->>'consultationTo')::timestamptz estimate_to
+         from latest
+         join clinic.queue_entries q
+           on q.appointment_id=latest.appointment_id and q.clinic_id=$1
+         where q.started_at is not null
+       )
+       select count(*)::integer sample_count,
+              count(distinct session_id)::integer session_count,
+              coalesce(avg((started_at between estimate_from-interval '10 minutes'
+                                      and estimate_to+interval '10 minutes')::int),0)::float8 coverage,
+              coalesce(percentile_cont(.5) within group (order by
+                abs(extract(epoch from (started_at-
+                  (estimate_from+(estimate_to-estimate_from)/2))))/60),999)::float8 median_error,
+              coalesce(avg((started_at < estimate_from-interval '10 minutes')::int),0)::float8 unsafe_early
+         from samples`,
+      [clinicId],
+    );
+    const gate = result.rows[0];
+    if (
+      !gate || gate.sample_count < 30 || gate.session_count < 5 ||
+      gate.coverage < 0.7 || gate.median_error > 15 || gate.unsafe_early > 0.1
+    ) {
+      throw new BadRequestException({
+        code: 'estimator_shadow_gate_not_ready',
+        message: 'Shadow estimator quality gate has not passed yet.',
+        metrics: gate ?? null,
+      });
+    }
   }
   private async mutate<T>(
     clinicId: string,

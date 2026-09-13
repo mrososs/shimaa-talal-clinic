@@ -98,6 +98,49 @@ export class ClinicService {
         }
       : null;
   }
+
+  /** Estimator and staged-release configuration, owned by the clinic tenant. */
+  async findTrackingPolicy(
+    clinicId: string,
+    db: SqlExecutor = this.database,
+  ): Promise<ClinicTrackingPolicy | null> {
+    const result = await db.query<TrackingPolicyRow>(
+      `select tracking_estimator_enabled, reception_estimate_visible,
+              parent_estimate_visible, guest_tracking_enabled,
+              attendance_intent_enabled, fairness_placement_enabled,
+              arrival_buffer_minutes, early_check_in_minutes,
+              minimum_travel_lead_minutes,
+              estimate_publication_threshold_minutes,
+              max_earlier_shift_minutes, configured_baseline_minutes,
+              baseline_source, baseline_validated_at,
+              parent_estimate_approved_at
+         from clinic.clinics where id=$1 and active`,
+      [clinicId],
+    );
+    const row = result.rows[0];
+    return row
+      ? {
+          estimatorEnabled: row.tracking_estimator_enabled,
+          receptionVisible: row.reception_estimate_visible,
+          parentVisible: row.parent_estimate_visible,
+          guestEnabled: row.guest_tracking_enabled,
+          attendanceEnabled: row.attendance_intent_enabled,
+          fairnessEnabled: row.fairness_placement_enabled,
+          arrivalBufferMinutes: row.arrival_buffer_minutes,
+          earlyCheckInMinutes: row.early_check_in_minutes,
+          minimumTravelLeadMinutes: row.minimum_travel_lead_minutes,
+          publicationThresholdMinutes:
+            row.estimate_publication_threshold_minutes,
+          maxEarlierShiftMinutes: row.max_earlier_shift_minutes,
+          configuredBaselineMinutes: row.configured_baseline_minutes,
+          baselineSource: row.baseline_source,
+          baselineValidatedAt:
+            row.baseline_validated_at?.toISOString() ?? null,
+          parentEstimateApprovedAt:
+            row.parent_estimate_approved_at?.toISOString() ?? null,
+        }
+      : null;
+  }
 }
 
 /** Clinic rules the domains apply. Deliberately not part of any API contract. */
@@ -117,6 +160,42 @@ interface PolicyRow extends QueryResultRow {
   cancellation_cutoff_minutes: number;
   grace_period_minutes: number;
   max_self_defers: number;
+}
+
+export interface ClinicTrackingPolicy {
+  estimatorEnabled: boolean;
+  receptionVisible: boolean;
+  parentVisible: boolean;
+  guestEnabled: boolean;
+  attendanceEnabled: boolean;
+  fairnessEnabled: boolean;
+  arrivalBufferMinutes: number;
+  earlyCheckInMinutes: number;
+  minimumTravelLeadMinutes: number;
+  publicationThresholdMinutes: number;
+  maxEarlierShiftMinutes: number;
+  configuredBaselineMinutes: number | null;
+  baselineSource: 'clinic_configured' | 'historical' | null;
+  baselineValidatedAt: string | null;
+  parentEstimateApprovedAt: string | null;
+}
+
+interface TrackingPolicyRow extends QueryResultRow {
+  tracking_estimator_enabled: boolean;
+  reception_estimate_visible: boolean;
+  parent_estimate_visible: boolean;
+  guest_tracking_enabled: boolean;
+  attendance_intent_enabled: boolean;
+  fairness_placement_enabled: boolean;
+  arrival_buffer_minutes: number;
+  early_check_in_minutes: number;
+  minimum_travel_lead_minutes: number;
+  estimate_publication_threshold_minutes: number;
+  max_earlier_shift_minutes: number;
+  configured_baseline_minutes: number | null;
+  baseline_source: 'clinic_configured' | 'historical' | null;
+  baseline_validated_at: Date | null;
+  parent_estimate_approved_at: Date | null;
 }
 
 function toClinic(row: ClinicRow): Clinic {

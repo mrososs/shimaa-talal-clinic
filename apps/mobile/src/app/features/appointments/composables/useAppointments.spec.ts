@@ -1,10 +1,15 @@
 import { effectScope } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Appointment } from '@clinic/contracts';
+import {
+  AttendanceIntent,
+  type Appointment,
+  type AppointmentTrackingView,
+} from '@clinic/contracts';
 
 const api = {
   list: vi.fn(),
   detail: vi.fn(),
+  tracking: vi.fn(),
   cancel: vi.fn(),
 };
 vi.mock('../../../runtime', () => ({ bookingApi: api }));
@@ -27,6 +32,8 @@ function appointment(
     windowEnd: '2026-09-12T11:00:00.000Z',
     visitType: 'new_visit',
     status,
+    attendanceIntent: AttendanceIntent.Unknown,
+    attendanceIntentSetAt: null,
     notes: null,
     createdByMemberId: null,
     cancelledAt: null,
@@ -34,6 +41,20 @@ function appointment(
     cancellationReason: null,
     rescheduledFromAppointmentId: null,
     createdAt: '2026-09-10T10:00:00.000Z',
+  };
+}
+
+function tracking(status: Appointment['status'] = 'requested'): AppointmentTrackingView {
+  return {
+    appointmentId: 'appointment-1',
+    appointmentStatus: status,
+    windowStart: '2026-09-12T10:00:00.000Z',
+    windowEnd: '2026-09-12T11:00:00.000Z',
+    estimate: null,
+    unavailableReason: null,
+    attendanceIntent: AttendanceIntent.Unknown,
+    attendanceEnabled: false,
+    queue: null,
   };
 }
 
@@ -135,6 +156,7 @@ describe('useAppointmentDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     api.detail.mockResolvedValue(appointment());
+    api.tracking.mockResolvedValue(tracking());
     api.cancel.mockResolvedValue({
       ...appointment('cancelled'),
       cancelledBy: 'parent',
@@ -154,6 +176,7 @@ describe('useAppointmentDetail', () => {
     const { state, dispose } = mountDetail();
     await state.open();
     api.detail.mockResolvedValueOnce(appointment('confirmed'));
+    api.tracking.mockResolvedValueOnce(tracking('confirmed'));
 
     await state.refresh();
 

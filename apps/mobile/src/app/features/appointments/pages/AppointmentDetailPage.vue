@@ -15,6 +15,7 @@ import { dayLabel, windowLabel } from '../../../shared/format';
 import { session } from '../../../runtime';
 import { useAppointmentDetail } from '../composables/useAppointmentDetail';
 import { useParentPayments } from '../../payments/composables/useParentPayments';
+import AppointmentTrackingCard from '../components/AppointmentTrackingCard.vue';
 
 /**
  * One visit: when, for whom, and what can still be done about it.
@@ -172,6 +173,14 @@ onIonViewDidLeave(() => {
       <p v-if="STATUS[appointment.status]?.note" class="card note">
         {{ STATUS[appointment.status].note }}
       </p>
+
+      <AppointmentTrackingCard
+        v-if="detail.tracking.value"
+        :view="detail.tracking.value"
+        :timezone="timezone"
+        :working="detail.working.value"
+        @attendance="detail.setAttendance"
+      />
 
       <form-notice :message="detail.failure.value" />
 

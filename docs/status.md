@@ -7,7 +7,7 @@ exists, and is expected to be edited every time a slice lands.
 Anything not listed as built is not built. If a claim here disagrees with the
 code, the code is right and this file is stale — say so.
 
-_Last updated: 2026-09-12 · 21 migrations · 109 routes._
+_Last updated: 2026-09-13 · 23 migrations · 118 routes._
 
 ---
 
@@ -15,7 +15,7 @@ _Last updated: 2026-09-12 · 21 migrations · 109 routes._
 
 ### Database
 
-Twenty-one migrations are in source control and applied to the hosted pilot database.
+Twenty-three migrations are in source control and applied to the hosted pilot database.
 Every table lives in the `clinic` schema, which
 is absent from `[api].schemas` in `supabase/config.toml` — so the publishable
 key shipped in both bundles cannot reach any of it. RLS is `ENABLE` + `FORCE`
@@ -45,6 +45,8 @@ public browser roles. This is a second lock under the trusted API. See
 | `missed_visit_payment_policy`       | payment event links for no-show appointments and paid-credit transfers                                               |
 | `requeue_payment_policy`            | explicit cash-payment restoration event for queue requeue                                                           |
 | `parent_in_app_notifications`       | guardian-scoped in-app notifications, event triggers, unread indexes and deep links                                 |
+| `booking_tracking_foundation`       | estimator flags/timing facts, published snapshots, attendance intent, bounded guest capabilities and queue fairness facts |
+| `tracking_baseline_constraint_fix`  | permits a deliberately configured baseline to remain unvalidated while the estimator runs in Shadow Mode              |
 
 ### The four concurrency guarantees
 
@@ -58,7 +60,7 @@ races rather than by reading the schema:
 | One patient called, one in service             | `queue_one_called_uq`, `queue_one_in_service_uq` | concurrent queue commands leave one called and one in service |
 | One check-in per appointment                   | `queue_appointment_uq`                           | 5 simultaneous check-ins → one entry, five 201s               |
 
-### API — 109 routes
+### API — 118 routes
 
 Auth (guard, `@Roles`, cached verifier, envelope interceptor) · identity
 (parent + staff, claim codes) · clinic sessions (list, open/pause/resume/close,
@@ -96,6 +98,21 @@ templates, effective-dated schedules, closures, team status/roles and audit
 reads. Reception is rejected by the API. Every setting mutation writes its
 audit event in the same transaction.
 
+Appointment tracking now separates confirmed operational workload from pending
+requests, raw staff diagnostics from stable parent publications, and Booking
+appointments from Queue entries. The deterministic estimator supports doctor
+ETA/arrival and pause/resume timing, a recommendation before the booking window
+within the configured early-arrival boundary, deterministic confidence tiers,
+and a database-enforced Shadow release gate. Parent and guest attendance intent
+records a fact only; it never creates a Queue entry.
+
+Guest appointment capabilities store SHA-256 digests only, use URL fragments,
+expire no later than 90 days after issuance and transfer across ordinary
+reschedules. A reschedule crossing the absolute boundary rotates and revokes
+the old token atomically. Check-in fairness stores a protected cohort and a
+service-eligibility time; Call Next skips held early arrivals while an audited
+Emergency remains able to advance.
+
 `Complete`, `Call Next`, and `Complete & Call Next` are separate API commands.
 `Call Next` never ends an active consultation; paused sessions reject every
 queue mutation without an event or revision bump.
@@ -122,7 +139,7 @@ marking all read. Appointment, Queue, Payment and Message events create the
 corresponding notification atomically and idempotently; all reads are derived
 from the authenticated guardian and clinic context.
 
-### Mobile — 19 screens
+### Mobile — 20 screens
 
 Sign in/up · password reset/update · guardian and child onboarding · claim an
 existing family · home · appointments list/detail/reschedule · book a visit ·
@@ -166,6 +183,11 @@ inventing clinical advice.
 The public guest queue screen runs outside authentication and Ionic tabs, uses
 the same responsive visual language, polls every fifteen seconds and never
 renders patient identity.
+The public appointment-tracking screen follows the same capability model and
+can progress from booking estimate to the live queue without login. Authenticated
+appointment detail shows only the stable published estimate. Attendance actions
+remain server-flagged and refuse offline success; a rotated reschedule link is
+shown once instead of being discarded during navigation.
 
 ### Dashboard — 12 screens
 
@@ -189,8 +211,10 @@ Payments shows collection KPIs, cash registration, receipt review and guarded
 refund actions. Reports supports bounded date ranges, operational aggregates,
 role-specific financial visibility and CSV export. The desktop sidebar remains
 fixed and non-scrollable with all twelve screens linked.
-Settings adds five doctor/admin tabs for clinic policy, schedules/closures,
-notification templates, team permissions and the audit trail.
+Settings adds six doctor/admin tabs for clinic policy, tracking/Shadow controls,
+schedules/closures, notification templates, team permissions and the audit
+trail. Appointments can inspect the raw-versus-published diagnostic and Reception
+can issue/copy a guest link; rotation is surfaced immediately after reschedule.
 
 Release hardening adds an isolated Chrome journey that provisions temporary
 Supabase Auth users and clinic data, then proves the complete parent request →
@@ -204,9 +228,11 @@ fixed doctor sidebar. Mobile and Dashboard development URLs are fixed at
 ### Live updating
 
 One polling lifecycle in `@clinic/client-ui`, used by both apps: dashboard 5 s,
-mobile 15 s, one loop per view, paused while the screen is hidden, immediate
-full read on return, immediate refresh after the user's own action, and a
-sequence guard so a slow response cannot overwrite a newer one.
+ordinary mobile lists 15 s, and appointment tracking adapts from 60 s while
+pending to 30 s when confirmed and 5 s after entering Live Queue. Every view
+still has one loop, pauses while hidden, performs an immediate full read on
+return, refreshes after the user's own action, and uses a sequence guard so a
+slow response cannot overwrite a newer one.
 
 Verified with three clients open at once — reception, doctor, parent — where
 the parent's phone moved waiting → next → your turn → completed driven entirely
@@ -221,6 +247,7 @@ by changes made elsewhere, with nobody pressing refresh.
 | **H3 — local JWT verification**  | Still one Supabase round trip per uncached token. The `TokenVerifier` seam exists for the swap. |
 | **CI**                           | `pnpm lint && pnpm test` is run by hand                                                         |
 | **Outbound notification worker** | `notification_outbox` is durable, but no scheduler/provider drains it yet.                      |
+| **Parent estimator release**     | Code and flags are live, but parent visibility remains gated until real Shadow metrics and Doctor/Admin approval pass. |
 
 Deliberately out of Phase 2 entirely: phone login/OTP, SMS/WhatsApp delivery, push,
 prescriptions, AI assistant, insurance, lab, pharmacy, and offline-first.

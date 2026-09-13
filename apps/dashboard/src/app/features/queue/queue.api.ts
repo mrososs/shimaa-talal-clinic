@@ -73,8 +73,19 @@ export function createQueueApi(client: ApiClient) {
 
     // --- commands -------------------------------------------------------
 
-    checkIn: (appointmentId: string): Promise<QueueEntry> =>
-      client.post<QueueEntry>(`clinic/appointments/${appointmentId}/check-in`),
+    /**
+     * `override` is how an arrival before the clinic's earliest check-in time
+     * is admitted anyway. The server requires a reason with it and records one
+     * against the member who gave it, so there is no silent early check-in.
+     */
+    checkIn: (
+      appointmentId: string,
+      override?: { forceEarly: true; earlyReason: string },
+    ): Promise<QueueEntry> =>
+      client.post<QueueEntry>(
+        `clinic/appointments/${appointmentId}/check-in`,
+        override,
+      ),
 
     walkIn: (input: WalkInInput & { sessionId: string }): Promise<QueueEntry> =>
       client.post<QueueEntry>('clinic/queue/walk-in', input),

@@ -53,3 +53,15 @@ export class MissQueueEntryDto {
   @Length(1, 280)
   reason?: string;
 }
+
+export class CheckInAppointmentDto {
+  @IsOptional()
+  @IsBoolean()
+  forceEarly?: boolean;
+
+  @ValidateIf((dto: CheckInAppointmentDto) => dto.forceEarly === true)
+  @IsString()
+  @Transform(trim)
+  @Length(1, 280)
+  earlyReason?: string;
+}

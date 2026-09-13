@@ -16,6 +16,22 @@ export interface ClinicSettings {
     cancellationCutoffMinutes: number;
     autoConfirmParentBookings: boolean;
   };
+  tracking: {
+    estimatorEnabled: boolean;
+    receptionVisible: boolean;
+    parentVisible: boolean;
+    guestEnabled: boolean;
+    attendanceEnabled: boolean;
+    fairnessEnabled: boolean;
+    arrivalBufferMinutes: number;
+    earlyCheckInMinutes: number;
+    minimumTravelLeadMinutes: number;
+    publicationThresholdMinutes: number;
+    maxEarlierShiftMinutes: number;
+    configuredBaselineMinutes: number | null;
+    baselineValidatedAt: string | null;
+    parentEstimateApprovedAt: string | null;
+  };
   prices: Array<{
     visitType: string;
     amountMinor: number;

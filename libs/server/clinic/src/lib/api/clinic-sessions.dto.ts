@@ -8,6 +8,7 @@ import {
   Max,
   Min,
   ValidateIf,
+  IsISO8601,
 } from 'class-validator';
 import { DoctorPresence } from '@clinic/contracts';
 
@@ -74,4 +75,14 @@ export class PaceDto {
   @Min(1)
   @Max(240)
   avgConsultMinutes!: number;
+}
+
+export class SessionTimingDto {
+  @ValidateIf((_dto, value) => value !== null)
+  @IsISO8601({ strict: true })
+  expectedStartAt!: string | null;
+
+  @ValidateIf((_dto, value) => value !== null)
+  @IsISO8601({ strict: true })
+  expectedResumeAt!: string | null;
 }

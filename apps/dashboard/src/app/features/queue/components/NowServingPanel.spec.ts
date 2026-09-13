@@ -51,6 +51,7 @@ describe('NowServingPanel', () => {
         canMiss: true,
         canComplete: true,
         canRecordMeasurements: true,
+        canCallNext: true,
       },
     });
 
@@ -85,6 +86,7 @@ describe('NowServingPanel', () => {
         working: null,
         canMiss: true,
         canComplete: true,
+        canCallNext: true,
       },
     });
     const buttons = wrapper.findAll('button');
@@ -111,9 +113,47 @@ describe('NowServingPanel', () => {
         working: null,
         canMiss: true,
         canComplete: true,
+        canCallNext: true,
       },
     });
     expect(labels(wrapper)).toContain('استدعاء التالي');
     expect(labels(wrapper)).not.toContain('إنهاء الكشف');
+  });
+
+  it('offers the doctor no way to summon the next patient', () => {
+    // She ends her own consultation; the desk decides who comes in after it.
+    const idle = mount(NowServingPanel, {
+      global: { stubs: { RouterLink: true } },
+      props: {
+        inService: null,
+        called: null,
+        waitingCount: 3,
+        running: true,
+        working: null,
+        canMiss: false,
+        canComplete: true,
+        canCallNext: false,
+      },
+    });
+    expect(labels(idle)).not.toContain('استدعاء التالي');
+
+    const serving = mount(NowServingPanel, {
+      global: { stubs: { RouterLink: true } },
+      props: {
+        inService: entry(),
+        called: null,
+        waitingCount: 3,
+        running: true,
+        working: null,
+        canMiss: false,
+        canComplete: true,
+        canRecordMeasurements: true,
+        canCallNext: false,
+      },
+    });
+    expect(labels(serving)).not.toContain('إنهاء واستدعاء التالي');
+    // What she keeps: the reading and the end of her own consultation.
+    expect(labels(serving)).toContain('تسجيل القياسات');
+    expect(labels(serving)).toContain('إنهاء الكشف');
   });
 });

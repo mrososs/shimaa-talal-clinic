@@ -140,6 +140,91 @@ describeWithDatabase('queue', (fx) => {
     });
   });
 
+  describe('fairness placement', () => {
+    it('keeps an earlier booking cohort ahead even when it checks in later', async () => {
+      const service = commands();
+      const later = await service.admit(
+        {
+          clinicId: fx.clinicId,
+          sessionId,
+          childId: await child(),
+          guardianId: fx.guardianId,
+          fairnessAnchorAt: '2026-09-13T14:00:00.000Z',
+        },
+        { memberId: fx.doctorMemberId },
+      );
+      const earlier = await service.admit(
+        {
+          clinicId: fx.clinicId,
+          sessionId,
+          childId: await child(),
+          guardianId: fx.guardianId,
+          fairnessAnchorAt: '2026-09-13T13:00:00.000Z',
+        },
+        { memberId: fx.doctorMemberId },
+      );
+
+      expect((await entries().listActive(sessionId)).map((entry) => entry.id))
+        .toEqual([earlier.id, later.id]);
+    });
+
+    it('does not call an early override before its service eligibility', async () => {
+      const service = commands();
+      const held = await service.admit(
+        {
+          clinicId: fx.clinicId,
+          sessionId,
+          childId: await child(),
+          guardianId: fx.guardianId,
+          fairnessAnchorAt: '2026-09-13T13:00:00.000Z',
+          serviceEligibleAt: '2099-09-13T13:00:00.000Z',
+        },
+        { memberId: fx.doctorMemberId },
+      );
+      const eligible = await service.admit(
+        {
+          clinicId: fx.clinicId,
+          sessionId,
+          childId: await child(),
+          guardianId: fx.guardianId,
+          fairnessAnchorAt: '2026-09-13T14:00:00.000Z',
+        },
+        { memberId: fx.doctorMemberId },
+      );
+
+      expect((await service.callNext(fx.clinicId, sessionId, {
+        memberId: fx.doctorMemberId,
+      })).called?.id).toBe(eligible.id);
+      expect((await entries().findById(fx.clinicId, held.id))?.status)
+        .toBe(QueueStatus.Waiting);
+    });
+
+    it('allows an explicitly audited emergency to bypass service eligibility', async () => {
+      const service = commands();
+      const held = await service.admit(
+        {
+          clinicId: fx.clinicId,
+          sessionId,
+          childId: await child(),
+          guardianId: fx.guardianId,
+          fairnessAnchorAt: '2026-09-13T13:00:00.000Z',
+          serviceEligibleAt: '2099-09-13T13:00:00.000Z',
+        },
+        { memberId: fx.doctorMemberId },
+      );
+      await service.setEmergency(fx.clinicId, held.id, true, {
+        memberId: fx.doctorMemberId,
+        reason: 'حالة عاجلة',
+      });
+
+      await expect(service.callNext(fx.clinicId, sessionId, {
+        memberId: fx.doctorMemberId,
+      })).resolves.toMatchObject({
+        called: { id: held.id, status: QueueStatus.Called },
+      });
+    });
+  });
+
   describe('the ticket race', () => {
     it('gives ten simultaneous arrivals ten distinct numbers', async () => {
       // The session's row lock is what makes this true. Without it, two

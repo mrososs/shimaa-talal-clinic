@@ -30,6 +30,19 @@ const missedCredit = computed(
 async function submit(): Promise<void> {
   const appointment = await form.submit();
   if (appointment === null) return;
+  if (form.rotatedTrackingLink.value) return;
+  await openReplacement();
+}
+
+async function copyRotatedLink(): Promise<void> {
+  const link = form.rotatedTrackingLink.value;
+  if (!link) return;
+  await navigator.clipboard.writeText(link).catch(() => undefined);
+}
+
+async function openReplacement(): Promise<void> {
+  const appointment = form.replacement.value;
+  if (!appointment) return;
   await router.replace({
     name: 'appointment-detail',
     params: { appointmentId: appointment.id },
@@ -50,6 +63,21 @@ onIonViewWillEnter(() => void form.load());
   >
     <div v-if="form.loading.value" class="card reschedule-loading">
       <ion-spinner name="crescent" />
+    </div>
+
+    <div v-else-if="form.rotatedTrackingLink.value" class="stack">
+      <section class="card rotated-link" role="status">
+        <ion-icon :icon="checkmarkCircle" />
+        <h2>تم تغيير الموعد ورابط المتابعة</h2>
+        <p>بسبب امتداد الموعد، أُلغي الرابط القديم. احتفظي بالرابط الجديد أو شاركيه مع الأسرة.</p>
+        <input :value="form.rotatedTrackingLink.value" readonly dir="ltr" />
+        <ion-button expand="block" fill="outline" @click="copyRotatedLink">
+          نسخ الرابط الجديد
+        </ion-button>
+        <ion-button expand="block" @click="openReplacement">
+          متابعة تفاصيل الموعد
+        </ion-button>
+      </section>
     </div>
 
     <div v-else class="stack">
@@ -149,6 +177,17 @@ onIonViewWillEnter(() => void form.load());
   background: var(--sun-soft);
   color: #664813;
 }
+
+.rotated-link {
+  display: grid;
+  gap: 12px;
+  padding: 22px;
+  text-align: center;
+}
+
+.rotated-link ion-icon { margin: auto; color: var(--teal); font-size: 42px; }
+.rotated-link h2, .rotated-link p { margin: 0; }
+.rotated-link input { inline-size: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
 
 .current-visit__label {
   margin: 0 0 3px;

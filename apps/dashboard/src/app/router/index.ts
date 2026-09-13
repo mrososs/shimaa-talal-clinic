@@ -1,3 +1,4 @@
+import { watch } from 'vue';
 import {
   createRouter,
   createWebHistory,
@@ -83,17 +84,24 @@ export const routes: RouteRecordRaw[] = [
         meta: {
           title: 'المرضى والعائلات',
           subtitle: 'بيانات التواصل والأطفال وسجل الزيارات التشغيلي',
+          [ROUTE_META_ROLES]: [ClinicMemberRole.Doctor, ClinicMemberRole.Admin],
         },
       },
       {
         path: 'payments', name: 'payments',
         component: () => import('../features/payments/pages/PaymentsPage.vue'),
-        meta: { title: 'المدفوعات', subtitle: 'التحصيل ومراجعة إيصالات InstaPay' },
+        meta: {
+          title: 'المدفوعات', subtitle: 'التحصيل ومراجعة إيصالات InstaPay',
+          [ROUTE_META_ROLES]: [ClinicMemberRole.Doctor, ClinicMemberRole.Admin],
+        },
       },
       {
         path: 'reports', name: 'reports',
         component: () => import('../features/reports/pages/ReportsPage.vue'),
-        meta: { title: 'التقارير', subtitle: 'نشاط العيادة والأداء خلال الفترة' },
+        meta: {
+          title: 'التقارير', subtitle: 'نشاط العيادة والأداء خلال الفترة',
+          [ROUTE_META_ROLES]: [ClinicMemberRole.Doctor, ClinicMemberRole.Admin],
+        },
       },
       {
         path: 'settings', name: 'settings',
@@ -142,3 +150,23 @@ export function startSession(): Promise<void> {
 }
 
 router.beforeEach(createAuthGuard({ session, ready: startSession }));
+
+/**
+ * An ended session does not leave anybody on a dead board.
+ *
+ * The guard only runs on navigation, and somebody watching the queue is not
+ * navigating: their poll comes back 401, the token is cleared, and without this
+ * the screen would sit there asking again with a token the API has stopped
+ * accepting. Leaving the route also unmounts the screens, which disposes their
+ * polling scopes — the loops stop because nothing is left running them.
+ *
+ * Public routes are skipped so the sign-in page is not replaced with itself.
+ */
+watch(
+  () => session.state.status,
+  (status) => {
+    if (status !== 'anonymous') return;
+    if (router.currentRoute.value.meta[ROUTE_META_PUBLIC] === true) return;
+    void router.replace({ name: 'sign-in' });
+  },
+);

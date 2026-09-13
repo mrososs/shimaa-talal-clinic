@@ -21,6 +21,11 @@ const props = defineProps<{
   title: string;
   /** Shown under the title — who this is about, so nobody types blind. */
   subject?: string;
+  /**
+   * The fact that makes the question worth asking — the clinic's own rule the
+   * reason is about to override, stated before anyone types past it.
+   */
+  message?: string | null;
   confirmLabel: string;
   /** Some reasons are genuinely optional; an emergency's never is. */
   required?: boolean;
@@ -65,6 +70,13 @@ function confirm(): void {
     :subject="subject"
     @close="emit('cancel')"
   >
+    <p
+      v-if="message"
+      class="dnotice"
+    >
+      {{ message }}
+    </p>
+
     <label class="dfield">
       <span class="dfield__label">السبب</span>
       <textarea

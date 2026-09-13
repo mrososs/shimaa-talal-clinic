@@ -20,6 +20,9 @@ import type {
   SaveClinicalEncounterInput,
   StaffFamilyRecord,
   VisitType,
+  RescheduledAppointment,
+  StaffEstimateDiagnostic,
+  AppointmentTrackingCapability,
 } from '@clinic/contracts';
 
 /**
@@ -176,11 +179,17 @@ export function createClinicApi(client: ApiClient) {
     markNoShow: (id: string): Promise<Appointment> =>
       client.post<Appointment>(`clinic/appointments/${id}/no-show`),
 
+    trackingDiagnostic: (id: string): Promise<StaffEstimateDiagnostic> =>
+      client.get<StaffEstimateDiagnostic>(`clinic/appointments/${id}/tracking`),
+
+    createTrackingLink: (id: string): Promise<AppointmentTrackingCapability> =>
+      client.post<AppointmentTrackingCapability>(`clinic/appointments/${id}/guest-link`),
+
     reschedule: (
       id: string,
       target: { sessionId: string; windowStart: string },
-    ): Promise<Appointment> =>
-      client.post<Appointment>(`clinic/appointments/${id}/reschedule`, target),
+    ): Promise<RescheduledAppointment> =>
+      client.post<RescheduledAppointment>(`clinic/appointments/${id}/reschedule`, target),
   };
 }
 

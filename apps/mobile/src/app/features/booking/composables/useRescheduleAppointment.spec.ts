@@ -7,7 +7,10 @@ const api = {
   availability: vi.fn(),
   reschedule: vi.fn(),
 };
-vi.mock('../../../runtime', () => ({ bookingApi: api }));
+vi.mock('../../../runtime', () => ({
+  bookingApi: api,
+  config: { mobileAppUrl: 'https://clinic.example' },
+}));
 
 const { useRescheduleAppointment } =
   await import('./useRescheduleAppointment');
@@ -63,7 +66,30 @@ describe('useRescheduleAppointment', () => {
       id: 'appointment-2',
       windowStart: days[0].windows[1].windowStart,
       windowEnd: days[0].windows[1].windowEnd,
+      trackingLinkRotation: null,
     });
+  });
+
+  it('keeps a rotated guest link visible instead of discarding its one-time token', async () => {
+    const { form, dispose } = mount();
+    await form.load();
+    form.selectedWindow.value = form.windowsForDay.value[0] ?? null;
+    api.reschedule.mockResolvedValueOnce({
+      ...current,
+      id: 'appointment-2',
+      trackingLinkRotation: {
+        rotated: true,
+        token: 'new-private-token',
+        expiresAt: '2026-09-20T12:00:00.000Z',
+      },
+    });
+
+    await form.submit();
+
+    expect(form.rotatedTrackingLink.value).toBe(
+      'https://clinic.example/track#new-private-token',
+    );
+    dispose();
   });
 
   it('never offers the exact current window as a change', async () => {

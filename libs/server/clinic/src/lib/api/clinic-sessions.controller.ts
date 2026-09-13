@@ -25,6 +25,7 @@ import {
   DoctorPresenceDto,
   PaceDto,
   SessionsQueryDto,
+  SessionTimingDto,
 } from './clinic-sessions.dto';
 
 /**
@@ -80,8 +81,14 @@ export class ClinicSessionsController {
     );
   }
 
-  /** Start the day, or pick it up again after a pause. */
-  @Roles(UserRole.Reception, UserRole.Admin, UserRole.Doctor)
+  /**
+   * Start the day, or pick it up again after a pause.
+   *
+   * Opening, pausing and ending the clinic day are desk decisions about the
+   * room, not about a consultation, so the doctor is refused them here. She
+   * still reads the session and still says whether she has arrived.
+   */
+  @Roles(UserRole.Reception, UserRole.Admin)
   @Post(':sessionId/open')
   @HttpCode(HttpStatus.OK)
   open(
@@ -97,7 +104,7 @@ export class ClinicSessionsController {
    * The queue keeps everyone's place; nothing advances until it resumes, and
    * both apps say so rather than leaving families guessing.
    */
-  @Roles(UserRole.Reception, UserRole.Admin, UserRole.Doctor)
+  @Roles(UserRole.Reception, UserRole.Admin)
   @Post(':sessionId/pause')
   @HttpCode(HttpStatus.OK)
   pause(
@@ -107,7 +114,7 @@ export class ClinicSessionsController {
     return this.sessions.pause(member.clinicId, sessionId);
   }
 
-  @Roles(UserRole.Reception, UserRole.Admin, UserRole.Doctor)
+  @Roles(UserRole.Reception, UserRole.Admin)
   @Post(':sessionId/resume')
   @HttpCode(HttpStatus.OK)
   resume(
@@ -118,7 +125,7 @@ export class ClinicSessionsController {
   }
 
   /** End the day. Final — a closed session does not reopen. */
-  @Roles(UserRole.Reception, UserRole.Admin, UserRole.Doctor)
+  @Roles(UserRole.Reception, UserRole.Admin)
   @Post(':sessionId/close')
   @HttpCode(HttpStatus.OK)
   close(
@@ -150,8 +157,19 @@ export class ClinicSessionsController {
     });
   }
 
-  /** How long a consultation is actually taking today. */
+  /** Explicit ETA facts; null deliberately clears an estimate. */
   @Roles(UserRole.Reception, UserRole.Admin, UserRole.Doctor)
+  @Patch(':sessionId/timing')
+  timing(
+    @CurrentMember() member: ClinicMemberContext,
+    @Param('sessionId', new ParseUUIDPipe()) sessionId: string,
+    @Body() body: SessionTimingDto,
+  ): Promise<ClinicSession> {
+    return this.sessions.setExpectedTiming(member.clinicId, sessionId, body);
+  }
+
+  /** How long a consultation is actually taking today. Set from the desk. */
+  @Roles(UserRole.Reception, UserRole.Admin)
   @Patch(':sessionId/pace')
   pace(
     @CurrentMember() member: ClinicMemberContext,

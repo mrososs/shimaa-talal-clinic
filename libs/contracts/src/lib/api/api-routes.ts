@@ -69,6 +69,9 @@ export const ApiCommand = {
   Emergency: 'emergency',
   Move: 'move',
   Defer: 'defer',
+  Attendance: 'attendance',
+  Tracking: 'tracking',
+  GuestLink: 'guest-link',
 
   Open: 'open',
   Pause: 'pause',

@@ -65,6 +65,26 @@ describe('usePolling', () => {
     dispose();
   });
 
+  it('adapts the next beat when the live state changes cadence', async () => {
+    let cadence = 15_000;
+    const tick = vi.fn().mockImplementation(async () => {
+      cadence = 5_000;
+    });
+    const scope = effectScope();
+    const polling = scope.run(() => usePolling(tick, {
+      intervalMs: () => cadence,
+    }));
+    if (polling === undefined) throw new Error('scope did not run');
+    polling.start();
+
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(tick).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(tick).toHaveBeenCalledTimes(2);
+
+    scope.stop();
+  });
+
   it('runs one loop however many times it is started', async () => {
     // A page entered twice — a tab switch, a back-navigation, a re-mount —
     // must never double a clinic's request rate.

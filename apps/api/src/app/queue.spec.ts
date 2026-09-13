@@ -193,14 +193,22 @@ const configured =
     return data<Board>(response.body);
   };
 
-  /** A confirmed appointment in today's session, ready to be checked in. */
+  /**
+   * A confirmed appointment in today's session, ready to be checked in.
+   *
+   * The window is open *now*, which is what "ready to be checked in" means: the
+   * clinic only admits a patient inside their window or shortly before it, and
+   * a fixture an hour in the future is a patient who may not come in yet. These
+   * once sat an hour ahead and passed only because the early-arrival boundary
+   * was never evaluated.
+   */
   async function bookedAppointment(child = childId): Promise<string> {
     const result = await db.database.query<{ id: string }>(
       `insert into clinic.appointments
          (clinic_id, session_id, child_id, guardian_id, window_start,
           window_end, seat_no, visit_type, status)
-       values ($1, $2, $3, $4, now() + interval '1 hour',
-               now() + interval '2 hours',
+       values ($1, $2, $3, $4, now() - interval '5 minutes',
+               now() + interval '55 minutes',
                (select coalesce(max(seat_no), 0) + 1
                   from clinic.appointments where session_id = $2),
                'new_visit', 'confirmed')
@@ -550,8 +558,8 @@ const configured =
         `insert into clinic.appointments
            (clinic_id, session_id, child_id, guardian_id, window_start,
             window_end, seat_no, visit_type, status)
-         values ($1, $2, $3, $4, now() + interval '1 hour',
-                 now() + interval '2 hours', 9, 'new_visit', 'requested')
+         values ($1, $2, $3, $4, now() - interval '5 minutes',
+                 now() + interval '55 minutes', 9, 'new_visit', 'requested')
          returning id`,
         [clinicId, sessionId, siblingId, guardianId],
       );
@@ -579,6 +587,123 @@ const configured =
         { token: tokens.doctor },
       );
       expect(response.status).toBe(403);
+    });
+
+    /**
+     * The clinic's early-arrival rule, over HTTP.
+     *
+     * It once lived inside the fairness branch, so a clinic running without
+     * fairness placement — which is the pilot's configuration — admitted a
+     * patient at any hour. The unit tests pin the calculation; these pin that
+     * the running API actually applies it.
+     */
+    describe('arriving before the window', () => {
+      /** Confirmed, but hours away: nobody may come in for this yet. */
+      async function farFutureAppointment(): Promise<string> {
+        const result = await db.database.query<{ id: string }>(
+          `insert into clinic.appointments
+             (clinic_id, session_id, child_id, guardian_id, window_start,
+              window_end, seat_no, visit_type, status)
+           values ($1, $2, $3, $4, now() + interval '4 hours',
+                   now() + interval '5 hours',
+                   (select coalesce(max(seat_no), 0) + 1
+                      from clinic.appointments where session_id = $2),
+                   'new_visit', 'confirmed')
+           returning id`,
+          [clinicId, sessionId, siblingId, guardianId],
+        );
+        return result.rows[0].id;
+      }
+
+      it('refuses, and says when they may come in', async () => {
+        const appointmentId = await farFutureAppointment();
+
+        const response = await call(
+          'POST',
+          `/clinic/appointments/${appointmentId}/check-in`,
+          { token: tokens.reception },
+        );
+
+        expect(response.status).toBe(409);
+        expect(
+          (response.body as { error?: { details?: Record<string, unknown> } })
+            .error?.details,
+        ).toMatchObject({ earliestAllowedAt: expect.any(String) });
+
+        // And nothing was written: no ticket, and the booking did not move.
+        const entries = await db.database.query<{ count: string }>(
+          `select count(*)::text as count from clinic.queue_entries
+            where appointment_id = $1`,
+          [appointmentId],
+        );
+        expect(entries.rows[0].count).toBe('0');
+        const appointment = await db.database.query<{ status: string }>(
+          `select status from clinic.appointments where id = $1`,
+          [appointmentId],
+        );
+        expect(appointment.rows[0].status).toBe('confirmed');
+      });
+
+      it('refuses an override that carries no reason', async () => {
+        const appointmentId = await farFutureAppointment();
+
+        const response = await call(
+          'POST',
+          `/clinic/appointments/${appointmentId}/check-in`,
+          { token: tokens.reception, body: { forceEarly: true } },
+        );
+
+        // The DTO requires the reason the moment `forceEarly` is set, so this
+        // never reaches the workflow at all.
+        expect(response.status).toBe(400);
+      });
+
+      it('admits them when reception gives a reason, and records it', async () => {
+        const appointmentId = await farFutureAppointment();
+
+        const response = await call(
+          'POST',
+          `/clinic/appointments/${appointmentId}/check-in`,
+          {
+            token: tokens.reception,
+            body: { forceEarly: true, earlyReason: 'الأم مسافرة اليوم' },
+          },
+        );
+
+        expect(response.status).toBe(201);
+        const entry = data<Entry>(response.body);
+
+        // Arriving early buys a place in line, never a place at its head.
+        // Priority never leaves the server, so it is read from the row: an
+        // emergency is 10, and this override must not have produced one.
+        const placement = await db.database.query<{ priority: number }>(
+          `select priority from clinic.queue_entries where id = $1`,
+          [entry.id],
+        );
+        expect(placement.rows[0].priority).toBe(100);
+
+        const events = await db.database.query<{ reason: string | null }>(
+          `select reason from clinic.queue_events
+            where entry_id = $1 and event_type = 'checked_in'`,
+          [entry.id],
+        );
+        expect(events.rows[0]?.reason).toBe('الأم مسافرة اليوم');
+      });
+
+      it('refuses a parent trying to override', async () => {
+        const appointmentId = await farFutureAppointment();
+
+        const response = await call(
+          'POST',
+          `/clinic/appointments/${appointmentId}/check-in`,
+          {
+            token: tokens.parent,
+            body: { forceEarly: true, earlyReason: 'وصلنا مبكراً' },
+          },
+        );
+
+        expect(response.status).toBe(403);
+      });
     });
   });
 
@@ -713,7 +838,7 @@ const configured =
       const response = await call(
         'POST',
         '/clinic/queue/complete-and-call-next',
-        { token: tokens.doctor, body: { sessionId } },
+        { token: tokens.reception, body: { sessionId } },
       );
 
       expect(response.status).toBe(200);
@@ -755,7 +880,7 @@ const configured =
       const response = await call(
         'POST',
         '/clinic/queue/complete-and-call-next',
-        { token: tokens.doctor, body: { sessionId } },
+        { token: tokens.reception, body: { sessionId } },
       );
       expect(response.status).toBe(200);
       expect(data<null>(response.body)).toBeNull();
@@ -884,7 +1009,7 @@ const configured =
       const response = await call(
         'POST',
         '/clinic/queue/complete-and-call-next',
-        { token: tokens.doctor, body: { sessionId } },
+        { token: tokens.reception, body: { sessionId } },
       );
       expect(response.status).toBe(200);
       expect(data<Entry>(response.body).id).toBe(waiting.id);
@@ -947,7 +1072,7 @@ const configured =
       const response = await call(
         'POST',
         '/clinic/queue/complete-and-call-next',
-        { token: tokens.doctor, body: { sessionId } },
+        { token: tokens.reception, body: { sessionId } },
       );
       expect(response.status).toBe(409);
       expect(errorCode(response.body)).toBe('queue_grace_not_expired');
@@ -1011,7 +1136,7 @@ const configured =
     it('shows why somebody was moved ahead', async () => {
       const entry = data<Entry>((await walkIn()).body);
       await call('POST', `/clinic/queue/${entry.id}/emergency`, {
-        token: tokens.doctor,
+        token: tokens.reception,
         body: { emergency: true, reason: 'صعوبة في التنفس' },
       });
 
@@ -1128,7 +1253,7 @@ const configured =
         'PATCH',
         `/clinic/sessions/${sessionId}/pace`,
         {
-          token: tokens.doctor,
+          token: tokens.reception,
           body: { avgConsultMinutes: 12 },
         },
       );
@@ -1140,7 +1265,7 @@ const configured =
         'PATCH',
         `/clinic/sessions/${sessionId}/pace`,
         {
-          token: tokens.doctor,
+          token: tokens.reception,
           body: { avgConsultMinutes: 0 },
         },
       );
@@ -1167,7 +1292,7 @@ const configured =
       expect(present.revision).toBeGreaterThan(paused.revision);
 
       await call('PATCH', `/clinic/sessions/${sessionId}/pace`, {
-        token: tokens.doctor,
+        token: tokens.reception,
         body: { avgConsultMinutes: 9 },
       });
       expect((await board()).revision).toBeGreaterThan(present.revision);
@@ -1194,7 +1319,7 @@ const configured =
         'POST',
         `/clinic/queue/${urgent.id}/emergency`,
         {
-          token: tokens.doctor,
+          token: tokens.reception,
           body: { emergency: true, reason: 'صعوبة في التنفس' },
         },
       );
@@ -1214,7 +1339,7 @@ const configured =
       const response = await call(
         'POST',
         `/clinic/queue/${entry.id}/emergency`,
-        { token: tokens.doctor, body: { emergency: true } },
+        { token: tokens.reception, body: { emergency: true } },
       );
       expect(response.status).toBe(400);
     });
@@ -1291,6 +1416,147 @@ const configured =
     });
   });
 
+  /**
+   * The same cascade in the other direction.
+   *
+   * Removing somebody from the board used to cancel the entry alone, leaving
+   * the booking at `checked_in` — a visit the clinic believed was under way for
+   * a patient who had gone home, counted as an arrival by every report.
+   */
+  describe('removing a patient from the queue', () => {
+    async function checkedIn(): Promise<{ entry: Entry; appointmentId: string }> {
+      const appointmentId = await bookedAppointment();
+      const entry = data<Entry>(
+        (
+          await call('POST', `/clinic/appointments/${appointmentId}/check-in`, {
+            token: tokens.reception,
+          })
+        ).body,
+      );
+      return { entry, appointmentId };
+    }
+
+    const statusOf = async (appointmentId: string): Promise<string> =>
+      (
+        await db.database.query<{ status: string }>(
+          `select status from clinic.appointments where id = $1`,
+          [appointmentId],
+        )
+      ).rows[0].status;
+
+    it('calls the visit off rather than leaving it in progress', async () => {
+      const { entry, appointmentId } = await checkedIn();
+      expect(await statusOf(appointmentId)).toBe('checked_in');
+
+      const response = await call('POST', `/clinic/queue/${entry.id}/cancel`, {
+        token: tokens.reception,
+        body: { reason: 'غادرت الأسرة قبل الكشف' },
+      });
+
+      expect(response.status).toBe(200);
+      expect(data<Entry>(response.body).status).toBe('cancelled');
+
+      // Cancelled, not no_show: the patient did arrive, and recording an
+      // absence for a family who came would be a false statement about them.
+      expect(await statusOf(appointmentId)).toBe('cancelled');
+    });
+
+    it('keeps both halves of the trail', async () => {
+      const { entry, appointmentId } = await checkedIn();
+      await call('POST', `/clinic/queue/${entry.id}/cancel`, {
+        token: tokens.reception,
+        body: { reason: 'غادرت الأسرة' },
+      });
+
+      const queueEvents = await db.database.query<{ event_type: string }>(
+        `select event_type from clinic.queue_events
+          where entry_id = $1 order by created_at`,
+        [entry.id],
+      );
+      // The arrival is still on the record; the removal is added to it.
+      expect(queueEvents.rows.map((r) => r.event_type)).toEqual([
+        'checked_in',
+        'cancelled',
+      ]);
+
+      const bookingEvents = await db.database.query<{ event_type: string }>(
+        `select event_type from clinic.appointment_events
+          where appointment_id = $1 order by created_at`,
+        [appointmentId],
+      );
+      expect(bookingEvents.rows.map((r) => r.event_type)).toContain('cancelled');
+    });
+
+    it('fabricates no appointment for a walk-in', async () => {
+      const entry = data<Entry>((await walkIn()).body);
+
+      const response = await call('POST', `/clinic/queue/${entry.id}/cancel`, {
+        token: tokens.reception,
+        body: { reason: 'انصرف' },
+      });
+
+      expect(response.status).toBe(200);
+      expect(data<Entry>(response.body).appointmentId).toBeNull();
+      const count = await db.database.query<{ count: string }>(
+        `select count(*)::text as count from clinic.appointments
+          where child_id = $1 and session_id = $2`,
+        [childId, sessionId],
+      );
+      expect(count.rows[0].count).toBe('0');
+    });
+
+    it('refuses to remove a patient who has already been seen', async () => {
+      const { entry, appointmentId } = await checkedIn();
+      await call('POST', `/clinic/queue/${entry.id}/call`, {
+        token: tokens.reception,
+      });
+      await call('POST', `/clinic/queue/${entry.id}/start`, {
+        token: tokens.doctor,
+      });
+      await call('POST', `/clinic/queue/${entry.id}/complete`, {
+        token: tokens.doctor,
+      });
+
+      const response = await call('POST', `/clinic/queue/${entry.id}/cancel`, {
+        token: tokens.reception,
+        body: { reason: 'خطأ' },
+      });
+
+      expect(response.status).toBe(409);
+      // The completed visit is untouched by the refusal.
+      expect(await statusOf(appointmentId)).toBe('completed');
+    });
+
+    it('settles two desks removing the same patient at once', async () => {
+      const { entry, appointmentId } = await checkedIn();
+
+      const [first, second] = await Promise.all([
+        call('POST', `/clinic/queue/${entry.id}/cancel`, {
+          token: tokens.reception,
+          body: { reason: 'غادرت' },
+        }),
+        call('POST', `/clinic/queue/${entry.id}/cancel`, {
+          token: tokens.reception,
+          body: { reason: 'غادرت' },
+        }),
+      ]);
+
+      // Whatever order they land in, the pair agree and nothing is left half
+      // done: one is the winner, the other is either idempotent or a clean
+      // conflict, and the booking is cancelled exactly once.
+      expect([first.status, second.status].every((s) => s === 200 || s === 409))
+        .toBe(true);
+      expect(await statusOf(appointmentId)).toBe('cancelled');
+
+      const cancels = await db.database.query<{ count: string }>(
+        `select count(*)::text as count from clinic.queue_events
+          where entry_id = $1 and event_type = 'cancelled'`,
+        [entry.id],
+      );
+      expect(cancels.rows[0].count).toBe('1');
+    });
+  });
+
   describe('what a parent sees', () => {
     it('says nothing is happening when nothing is', async () => {
       const view = await mine();
@@ -1356,7 +1622,7 @@ const configured =
       expect((await mine()).items?.[0].queueEntry?.aheadCount).toBe(0);
 
       await call('POST', `/clinic/queue/${urgent.id}/emergency`, {
-        token: tokens.doctor,
+        token: tokens.reception,
         body: { emergency: true, reason: 'صعوبة في التنفس' },
       });
 
@@ -1680,16 +1946,39 @@ const configured =
     });
 
     it('keeps reception-only commands away from the doctor', async () => {
-      // The doctor runs the queue but does not remove people from it or
-      // reorder it — those are desk decisions.
+      // The doctor has the room, not the line. She starts and ends her own
+      // consultation; admitting, summoning, reordering and removing are the
+      // desk's, and the API refuses her whether or not a button was drawn.
       const entry = data<Entry>((await walkIn()).body);
       for (const path of [
         '/clinic/queue/walk-in',
         `/clinic/queue/${entry.id}/cancel`,
         `/clinic/queue/${entry.id}/move`,
+        '/clinic/queue/call-next',
+        '/clinic/queue/complete-and-call-next',
+        `/clinic/queue/${entry.id}/call`,
+        `/clinic/queue/${entry.id}/emergency`,
+        `/clinic/sessions/${sessionId}/open`,
+        `/clinic/sessions/${sessionId}/close`,
       ]) {
         const response = await call('POST', path, { token: tokens.doctor });
         expect(response.status).toBe(403);
+      }
+    });
+
+    it('still lets the doctor finish the patient in front of her', async () => {
+      // The boundary must not have moved so far that she cannot work: these
+      // are refused on state if at all, never on role.
+      const entry = data<Entry>((await walkIn()).body);
+      await call('POST', `/clinic/queue/${entry.id}/call`, {
+        token: tokens.reception,
+      });
+      for (const path of [
+        `/clinic/queue/${entry.id}/start`,
+        `/clinic/queue/${entry.id}/complete`,
+      ]) {
+        const response = await call('POST', path, { token: tokens.doctor });
+        expect(response.status).not.toBe(403);
       }
     });
 
