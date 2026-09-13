@@ -8,6 +8,7 @@ import {
   ROUTE_META_PASSWORD_RECOVERY,
   ROUTE_META_PUBLIC,
   createAuthGuard,
+  evictsOnSignOut,
 } from './auth-guard';
 
 /**
@@ -62,6 +63,39 @@ const recoveryRoute = route('update-password', {
 function guardFor(session: SessionStore<MeResponse>) {
   return createAuthGuard({ session, ready: async () => undefined });
 }
+
+describe('eviction when a session ends', () => {
+  // The watch in the router applies this to whatever screen the parent is on.
+  // It has to agree with the guard, or a route the guard admits gets closed a
+  // moment later by the watch.
+  it('keeps a guest capability link open', () => {
+    // A waiting-room link never had a session: bootstrap settling on
+    // "anonymous" is its resting state, so evicting on it would close the very
+    // screen the link exists to open.
+    expect(evictsOnSignOut(guestRoute.meta)).toBe(false);
+  });
+
+  it('leaves a signed-out parent on a public screen', () => {
+    expect(evictsOnSignOut(publicRoute.meta)).toBe(false);
+  });
+
+  it.each([
+    ['home', homeRoute],
+    ['onboarding', onboardingRoute],
+    ['password recovery', recoveryRoute],
+  ])('evicts from %s, which needs a session', (_label, target) => {
+    expect(evictsOnSignOut(target.meta)).toBe(true);
+  });
+
+  it('agrees with the guard on every guest route the app declares', async () => {
+    // Whatever the guard admits without a session must survive the watch.
+    const guard = guardFor(storeWith({ status: 'anonymous' }));
+    for (const target of [guestRoute, publicRoute]) {
+      expect(await guard(target)).toBe(true);
+      expect(evictsOnSignOut(target.meta)).toBe(false);
+    }
+  });
+});
 
 describe('mobile auth guard', () => {
   it('allows a guest capability without bootstrapping Supabase Auth', async () => {

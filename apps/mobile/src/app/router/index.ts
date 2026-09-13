@@ -4,6 +4,7 @@ import type { RouteRecordRaw } from 'vue-router';
 import { session } from '../runtime';
 import {
   createAuthGuard,
+  evictsOnSignOut,
   ROUTE_META_ONBOARDING,
   ROUTE_META_PASSWORD_RECOVERY,
   ROUTE_META_PUBLIC,
@@ -216,7 +217,7 @@ watch(
   () => session.state.status,
   (status) => {
     if (status !== 'anonymous') return;
-    if (router.currentRoute.value.meta[ROUTE_META_PUBLIC] === true) return;
+    if (!evictsOnSignOut(router.currentRoute.value.meta)) return;
     void router.replace({ name: 'sign-in' });
   },
 );

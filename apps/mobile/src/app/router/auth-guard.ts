@@ -20,6 +20,21 @@ export const ROUTE_META_GUEST = 'guest';
 export const ROUTE_META_ONBOARDING = 'onboarding';
 export const ROUTE_META_PASSWORD_RECOVERY = 'passwordRecovery';
 
+/**
+ * Whether an ended session should evict someone from this route.
+ *
+ * The guard only runs on navigation, so a separate watch handles a session that
+ * ends while somebody sits on a screen. It needs the same policy the guard
+ * applies, and for the same reasons: a public route is where a signed-out
+ * person belongs, and a guest capability link never had a session to lose —
+ * bootstrap settling on `anonymous` is its normal resting state, not a
+ * sign-out. Redirecting on it would close the waiting-room screen the link
+ * exists to open.
+ */
+export function evictsOnSignOut(meta: RouteLocationNormalized['meta']): boolean {
+  return meta[ROUTE_META_PUBLIC] !== true && meta[ROUTE_META_GUEST] !== true;
+}
+
 export interface AuthGuardDeps {
   session: SessionStore<MeResponse>;
   /** Resolved once; the guard awaits the same promise on every navigation. */
