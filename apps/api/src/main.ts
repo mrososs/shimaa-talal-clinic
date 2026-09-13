@@ -31,10 +31,14 @@ async function bootstrap(): Promise<void> {
   // torn down by process exit rather than closed cleanly.
   app.enableShutdownHooks();
 
+  // No host: Node binds every interface, which is what a container platform
+  // routes to. Naming localhost here would only be true on a developer's
+  // machine, and a deployment log that says it is serving localhost is a
+  // sentence somebody will eventually try to open.
   await app.listen(config.port);
 
   Logger.log(
-    `Clinic API ready on http://localhost:${config.port}/${API_PREFIX}/v${API_VERSION}`,
+    `Clinic API ready on port ${config.port}, serving /${API_PREFIX}/v${API_VERSION}`,
     'Bootstrap',
   );
 }
