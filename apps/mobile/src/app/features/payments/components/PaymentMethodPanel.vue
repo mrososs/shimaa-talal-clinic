@@ -158,10 +158,15 @@ watch(
 </template>
 
 <style scoped>
+/*
+ * No bottom reserve here. This panel is followed by the payment history, so
+ * space reserved for the fixed action would open a gap mid-page and still
+ * leave the last history row underneath the button. The page owns the reserve,
+ * because the page is what scrolls.
+ */
 .payment-methods {
   display: grid;
   gap: 12px;
-  padding-block-end: calc(86px + env(safe-area-inset-bottom));
 }
 .payment-methods__list {
   display: grid;

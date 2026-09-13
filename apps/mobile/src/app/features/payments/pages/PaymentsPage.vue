@@ -35,6 +35,19 @@ const payments = useParentPayments(() => {
 });
 
 const history = computed(() => payments.view.value.items);
+
+/**
+ * Whether the method panel's fixed action button is on screen — the same
+ * condition the template renders it under. The page reserves room for it at the
+ * end of the scroll, so the last payment row is never trapped beneath it; with
+ * nothing to pay there is no button, and reserving the space would only leave a
+ * gap under the history.
+ */
+const showsStickyAction = computed(
+  () =>
+    payments.view.value.payableAppointments.length > 0 &&
+    payments.selected.value !== null,
+);
 const STATUS: Record<string, { label: string; icon: string; tone: string }> = {
   pending: { label: 'قيد المراجعة', icon: hourglassOutline, tone: 'pending' },
   paid: { label: 'تم الدفع', icon: checkmarkCircleOutline, tone: 'paid' },
@@ -74,7 +87,10 @@ onIonViewDidLeave(() => payments.close());
         ><ion-refresher-content
       /></ion-refresher>
     </template>
-    <div class="payments">
+    <div
+      class="payments"
+      :class="{ 'payments--has-sticky-action': showsStickyAction }"
+    >
       <form-notice :message="payments.failure.value" />
       <div v-if="payments.loading.value" class="card loading">
         <ion-spinner name="crescent" />
@@ -150,6 +166,14 @@ onIonViewDidLeave(() => payments.close());
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+/*
+ * Clears the method panel's fixed action button, which overlays the bottom of
+ * the viewport: 56px button + its 28px/14px gradient padding, plus the device
+ * inset. Without it the final payment row cannot be scrolled out from under it.
+ */
+.payments--has-sticky-action {
+  padding-block-end: calc(98px + env(safe-area-inset-bottom));
 }
 .loading {
   min-height: 160px;
