@@ -6,9 +6,19 @@ while the browser supplies installation, lifecycle, and session storage.
 
 ## Vercel project
 
-Create a dedicated Vercel project from the repository root. The tracked
-`vercel.json` builds only `mobile`, serves `dist/apps/mobile`, falls back to
-`index.html` for Vue Router deep links, and applies these cache rules:
+Create a dedicated Vercel project from the repository root, and set its build
+command and output directory in the project settings:
+
+```text
+Build Command:     pnpm exec nx build mobile
+Output Directory:  dist/apps/mobile
+```
+
+Those two live in the project rather than in `vercel.json` because the
+dashboard deploys from the same repository root and would otherwise read the
+same file and build `mobile` twice. What `vercel.json` still carries is
+everything both frontends need identically: the `index.html` fallback for Vue
+Router deep links, and these cache rules:
 
 - `index.html`, `sw.js`, and `manifest.webmanifest`: revalidate on every visit;
 - fingerprinted `/assets/*`: one year, immutable;
@@ -27,6 +37,12 @@ VITE_APP_ENV=production
 ```
 
 Never place the Supabase secret key or a PostgreSQL URL in a `VITE_` variable.
+`assertNoServerSecrets` throws in the browser if one appears, so the mistake
+white-screens the app rather than leaking quietly.
+
+The Dashboard project needs the same five, with the same values —
+`VITE_MOBILE_APP_URL` included, because the queue board and the appointments
+page both build parent-facing links from it.
 
 On the API deployment set `API_CORS_ORIGINS` to an explicit comma-separated
 allow-list. Production startup rejects an empty value and `*`. Include the

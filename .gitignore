@@ -66,6 +66,9 @@ apps/mobile/www
 supabase/.branches
 supabase/.temp
 
+# Vercel link state — one developer's project ids, not the project's.
+.vercel
+
 # Agent skills.
 # `.agents/skills/` and `skills-lock.json` ARE committed - they are the shared,
 # reproducible source of truth (`npx skills experimental_install` restores them).
